@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 
 const CONTRATO_ENDERECO = "0x3b1958ee8e636d69E868CaFCad3e7dB2eE8B4755";
+const BACKEND_URL = "https://silentflow-production.up.railway.app";
 const CONTRATO_ABI = [
   "function enviar(address payable destinatario) external payable",
   "function enviarToken(address token, address destinatario, uint256 valor) external"
@@ -28,6 +29,7 @@ export default function App() {
   const [dest, setDest] = useState("");
   const [valor, setValor] = useState("");
   const [token, setToken] = useState("ETH");
+  const [modo, setModo] = useState("padrao");
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [txHash, setTxHash] = useState(null);
@@ -43,6 +45,49 @@ export default function App() {
     document.body.style.cssText = "margin:0;background:#010408;font-family:'DM Mono',monospace";
   }, []);
 
+  async function enviarPadrao(signer, contrato) {
+    if (token === "ETH") {
+      setStatus("Aguardando confirmacao...");
+      const tx = await contrato.enviar(dest, { value: ethers.parseEther(valor), gasLimit: 60000 });
+      setStatus("Confirmando...");
+      await tx.wait();
+      return tx.hash;
+    } else {
+      const tokenInfo = TOKENS[token];
+      const tokenContract = new ethers.Contract(tokenInfo.address, ERC20_ABI, signer);
+      const valorParsed = ethers.parseUnits(valor, tokenInfo.decimals);
+      setStatus("Aprovando " + token + "...");
+      const approveTx = await tokenContract.approve(CONTRATO_ENDERECO, valorParsed);
+      await approveTx.wait();
+      setStatus("Enviando " + token + "...");
+      const tx = await contrato.enviarToken(tokenInfo.address, dest, valorParsed, { gasLimit: 120000 });
+      setStatus("Confirmando...");
+      await tx.wait();
+      return tx.hash;
+    }
+  }
+
+  async function enviarSilencioso() {
+    setStatus("Agendando transacao com delay...");
+    const tokenInfo = TOKENS[token];
+    const res = await fetch(BACKEND_URL + "/agendar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        destinatario: dest,
+        valor,
+        token,
+        tokenAddress: tokenInfo.address,
+        decimals: tokenInfo.decimals
+      })
+    });
+    const data = await res.json();
+    if (data.sucesso) {
+      return { agendado: true, horas: data.horasRestantes, id: data.id };
+    }
+    throw new Error("Erro ao agendar: " + data.erro);
+  }
+
   async function enviar() {
     try {
       setLoading(true); setOk(false); setTxHash(null);
@@ -57,29 +102,25 @@ export default function App() {
       }
       const signer = await provider.getSigner();
       const contrato = new ethers.Contract(CONTRATO_ENDERECO, CONTRATO_ABI, signer);
-      let tx;
 
-      if (token === "ETH") {
-        setStatus("Aguardando confirmacao...");
-        tx = await contrato.enviar(dest, { value: ethers.parseEther(valor), gasLimit: 60000 });
+      let hash = null;
+      let agendado = false;
+      let horas = null;
+
+      if (modo === "padrao") {
+        hash = await enviarPadrao(signer, contrato);
+        setTxHash(hash); setOk(true);
+        setStatus(token + " enviado com privacidade.");
       } else {
-        const tokenInfo = TOKENS[token];
-        const tokenContract = new ethers.Contract(tokenInfo.address, ERC20_ABI, signer);
-        const valorParsed = ethers.parseUnits(valor, tokenInfo.decimals);
-        setStatus("Aprovando " + token + "...");
-        const approveTx = await tokenContract.approve(CONTRATO_ENDERECO, valorParsed);
-        await approveTx.wait();
-        setStatus("Enviando " + token + "...");
-        tx = await contrato.enviarToken(tokenInfo.address, dest, valorParsed, { gasLimit: 120000 });
+        const result = await enviarSilencioso();
+        agendado = result.agendado;
+        horas = result.horas;
+        setOk(true);
+        setStatus("Transacao agendada! Sera enviada em ~" + horas + "h com delay aleatorio.");
       }
 
-      setStatus("Confirmando...");
-      await tx.wait();
-      setTxHash(tx.hash); setOk(true);
-      setStatus(token + " enviado com privacidade.");
-
       const newEntry = {
-        hash: tx.hash,
+        hash: hash || ("agendado-" + Date.now()),
         token,
         valor,
         dest: dest.slice(0,6) + "..." + dest.slice(-4),
@@ -87,7 +128,8 @@ export default function App() {
         fee: (parseFloat(valor) * 0.002).toFixed(token === "ETH" ? 6 : 2),
         recebe: (parseFloat(valor) * 0.998).toFixed(token === "ETH" ? 6 : 2),
         date: new Date().toLocaleString("pt-BR"),
-        status: "Confirmado"
+        status: agendado ? "Agendado (~" + horas + "h)" : "Confirmado",
+        modo
       };
       const newHistory = [newEntry, ...history];
       setHistory(newHistory);
@@ -123,10 +165,13 @@ export default function App() {
     input: { width:"100%", background:"rgba(30,144,255,0.04)", border:"1px solid rgba(30,144,255,0.1)", borderRadius:"10px", padding:"13px 15px", color:"#d8eeff", fontSize:"13px", fontFamily:"'DM Mono',monospace", outline:"none", boxSizing:"border-box" },
     tokenRow: { display:"flex", gap:"8px", marginBottom:"14px" },
     tokenBtn: (active) => ({ flex:1, padding:"10px", border: active ? "1px solid rgba(30,144,255,0.5)" : "1px solid rgba(30,144,255,0.1)", borderRadius:"10px", background: active ? "rgba(30,144,255,0.12)" : "rgba(30,144,255,0.03)", color: active ? "#1E90FF" : "rgba(100,150,200,0.5)", fontFamily:"'DM Mono',monospace", fontSize:"12px", cursor:"pointer", letterSpacing:"0.1em", transition:"all 0.2s" }),
+    modoRow: { display:"flex", gap:"8px", marginBottom:"14px" },
+    modoBtn: (active, color) => ({ flex:1, padding:"12px 8px", border: active ? "1px solid " + color : "1px solid rgba(30,144,255,0.1)", borderRadius:"10px", background: active ? "rgba(30,144,255,0.08)" : "rgba(30,144,255,0.02)", color: active ? color : "rgba(100,150,200,0.4)", fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:"10px", cursor:"pointer", letterSpacing:"0.1em", textTransform:"uppercase", textAlign:"center" }),
+    modoDesc: { fontSize:"10px", color:"rgba(100,150,200,0.35)", textAlign:"center", marginTop:"4px", letterSpacing:"0.05em" },
     feeBox: { background:"rgba(30,144,255,0.03)", border:"1px solid rgba(30,144,255,0.08)", borderRadius:"10px", padding:"13px 15px", marginBottom:"18px" },
     feeRow: { display:"flex", justifyContent:"space-between", fontSize:"11px", padding:"2px 0" },
     feeSep: { height:"1px", background:"rgba(30,144,255,0.07)", margin:"7px 0" },
-    btn: { width:"100%", padding:"15px", background:"linear-gradient(135deg,#1E90FF,#005FCC)", border:"none", borderRadius:"11px", color:"#fff", fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:"13px", letterSpacing:"0.18em", cursor:"pointer", textTransform:"uppercase" },
+    btn: { width:"100%", padding:"15px", background: modo === "silencioso" ? "linear-gradient(135deg,#0066aa,#003d7a)" : "linear-gradient(135deg,#1E90FF,#005FCC)", border:"none", borderRadius:"11px", color:"#fff", fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:"13px", letterSpacing:"0.18em", cursor:"pointer", textTransform:"uppercase" },
     btnOff: { width:"100%", padding:"15px", background:"rgba(30,144,255,0.12)", border:"none", borderRadius:"11px", color:"rgba(30,144,255,0.35)", fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:"13px", letterSpacing:"0.18em", cursor:"not-allowed", textTransform:"uppercase" },
     statusBox: { marginTop:"14px", padding:"13px 15px", background:"rgba(30,144,255,0.04)", border:"1px solid rgba(30,144,255,0.09)", borderRadius:"10px", fontSize:"11px", color:"rgba(140,190,255,0.6)", textAlign:"center", letterSpacing:"0.06em" },
     statusOk: { marginTop:"14px", padding:"13px 15px", background:"rgba(30,144,255,0.07)", border:"1px solid rgba(30,144,255,0.25)", borderRadius:"10px", fontSize:"11px", color:"#1E90FF", textAlign:"center", letterSpacing:"0.06em" },
@@ -138,7 +183,7 @@ export default function App() {
     histValor: { fontSize:"13px", color:"#d8eeff" },
     histDest: { fontSize:"11px", color:"rgba(100,150,200,0.5)" },
     histDate: { fontSize:"10px", color:"rgba(100,150,200,0.3)" },
-    histBadge: { fontSize:"10px", color:"rgba(30,255,100,0.6)", border:"1px solid rgba(30,255,100,0.2)", padding:"2px 8px", borderRadius:"10px" },
+    histBadge: (s) => ({ fontSize:"10px", color: s === "Confirmado" ? "rgba(30,255,100,0.6)" : "rgba(255,200,30,0.6)", border: "1px solid " + (s === "Confirmado" ? "rgba(30,255,100,0.2)" : "rgba(255,200,30,0.2)"), padding:"2px 8px", borderRadius:"10px" }),
     histLink: { fontSize:"10px", color:"rgba(30,144,255,0.4)", textDecoration:"none", letterSpacing:"0.05em" },
     clearBtn: { width:"100%", padding:"10px", background:"transparent", border:"1px solid rgba(255,50,50,0.15)", borderRadius:"10px", color:"rgba(255,100,100,0.4)", fontFamily:"'DM Mono',monospace", fontSize:"11px", cursor:"pointer", marginTop:"8px", letterSpacing:"0.1em" },
   };
@@ -165,12 +210,30 @@ export default function App() {
         <div style={S.tabs}>
           <button style={S.tab(tab==="send")} onClick={()=>setTab("send")}>Enviar</button>
           <button style={S.tab(tab==="history")} onClick={()=>setTab("history")}>
-            Historico {history.length > 0 && `(${history.length})`}
+            Historico {history.length > 0 && "("+history.length+")"}
           </button>
         </div>
 
         {tab === "send" && (
           <div>
+            <div style={S.fieldWrap}>
+              <label style={S.label}>Modo de privacidade</label>
+              <div style={S.modoRow}>
+                <div>
+                  <button style={S.modoBtn(modo==="padrao","#1E90FF")} onClick={()=>setModo("padrao")}>
+                    Padrao
+                  </button>
+                  <div style={S.modoDesc}>Envia agora</div>
+                </div>
+                <div>
+                  <button style={S.modoBtn(modo==="silencioso","#00BFFF")} onClick={()=>setModo("silencioso")}>
+                    Silencioso
+                  </button>
+                  <div style={S.modoDesc}>Delay 1-6h</div>
+                </div>
+              </div>
+            </div>
+
             <div style={S.fieldWrap}>
               <label style={S.label}>Token</label>
               <div style={S.tokenRow}>
@@ -181,14 +244,17 @@ export default function App() {
                 ))}
               </div>
             </div>
+
             <div style={S.fieldWrap}>
               <label style={S.label}>Destinatario</label>
               <input style={S.input} value={dest} onChange={e=>setDest(e.target.value)} placeholder="0x..."/>
             </div>
+
             <div style={S.fieldWrap}>
               <label style={S.label}>Valor ({token})</label>
               <input style={S.input} value={valor} onChange={e=>setValor(e.target.value)} placeholder={token==="ETH"?"0.01":"10.00"} type="number"/>
             </div>
+
             {fee && (
               <div style={S.feeBox}>
                 <div style={S.feeRow}>
@@ -200,11 +266,19 @@ export default function App() {
                   <span style={{color:"rgba(200,230,255,0.65)"}}>Destinatario recebe</span>
                   <span style={{color:"#1E90FF"}}>{fin} {token}</span>
                 </div>
+                {modo === "silencioso" && (
+                  <div style={{...S.feeRow, marginTop:"8px"}}>
+                    <span style={{color:"rgba(0,191,255,0.5)"}}>Delay aleatorio</span>
+                    <span style={{color:"rgba(0,191,255,0.7)"}}>1 a 6 horas</span>
+                  </div>
+                )}
               </div>
             )}
+
             <button style={loading||!dest||!valor ? S.btnOff : S.btn} onClick={enviar} disabled={loading||!dest||!valor}>
-              {loading ? "Processando..." : "Enviar com privacidade"}
+              {loading ? "Processando..." : modo === "silencioso" ? "Enviar modo silencioso" : "Enviar com privacidade"}
             </button>
+
             {status && <div style={ok?S.statusOk:S.statusBox}>{status}</div>}
             {txHash && (
               <a style={S.txLink} href={"https://sepolia.etherscan.io/tx/"+txHash} target="_blank" rel="noreferrer">
@@ -227,13 +301,13 @@ export default function App() {
                   </div>
                   <div style={S.histRow}>
                     <span style={S.histDest}>Para: {tx.dest}</span>
-                    <span style={S.histBadge}>{tx.status}</span>
+                    <span style={S.histBadge(tx.status)}>{tx.status}</span>
                   </div>
                   <div style={{...S.histRow, marginBottom:0}}>
-                    <span style={S.histDate}>{tx.date}</span>
-                    <a style={S.histLink} href={"https://sepolia.etherscan.io/tx/"+tx.hash} target="_blank" rel="noreferrer">
-                      Ver TX →
-                    </a>
+                    <span style={S.histDate}>{tx.date} · {tx.modo}</span>
+                    {!tx.hash.startsWith("agendado") && (
+                      <a style={S.histLink} href={"https://sepolia.etherscan.io/tx/"+tx.hash} target="_blank" rel="noreferrer">Ver TX →</a>
+                    )}
                   </div>
                 </div>
               ))
