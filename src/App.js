@@ -47,28 +47,28 @@ export default function App() {
 
   async function enviarPadrao(signer, contrato) {
     if (token === "ETH") {
-      setStatus("Aguardando confirmacao...");
+      setStatus("Aguardando confirmacao na MetaMask...");
       const tx = await contrato.enviar(dest, { value: ethers.parseEther(valor), gasLimit: 60000 });
-      setStatus("Confirmando...");
+      setStatus("Confirmando na blockchain...");
       await tx.wait();
       return tx.hash;
     } else {
       const tokenInfo = TOKENS[token];
       const tokenContract = new ethers.Contract(tokenInfo.address, ERC20_ABI, signer);
       const valorParsed = ethers.parseUnits(valor, tokenInfo.decimals);
-      setStatus("Aprovando " + token + "...");
+      setStatus("Passo 1/2 — Aprovando " + token + " no contrato...");
       const approveTx = await tokenContract.approve(CONTRATO_ENDERECO, valorParsed);
       await approveTx.wait();
-      setStatus("Enviando " + token + "...");
+      setStatus("Passo 2/2 — Enviando " + token + "...");
       const tx = await contrato.enviarToken(tokenInfo.address, dest, valorParsed, { gasLimit: 120000 });
-      setStatus("Confirmando...");
+      setStatus("Confirmando na blockchain...");
       await tx.wait();
       return tx.hash;
     }
   }
 
   async function enviarSilencioso() {
-    setStatus("Agendando transacao com delay...");
+    setStatus("Preparando pipeline de privacidade...");
     const tokenInfo = TOKENS[token];
     const res = await fetch(BACKEND_URL + "/agendar", {
       method: "POST",
@@ -83,9 +83,9 @@ export default function App() {
     });
     const data = await res.json();
     if (data.sucesso) {
-      return { agendado: true, horas: data.horasRestantes, id: data.id };
+      return { agendado: true, horas: data.horasEstimadas, splits: data.numSplits, id: data.id };
     }
-    throw new Error("Erro ao agendar: " + data.erro);
+    throw new Error("Erro ao agendar: " + (data.erro || "desconhecido"));
   }
 
   async function enviar() {
@@ -103,40 +103,43 @@ export default function App() {
       const signer = await provider.getSigner();
       const contrato = new ethers.Contract(CONTRATO_ENDERECO, CONTRATO_ABI, signer);
 
-      let hash = null;
-      let agendado = false;
-      let horas = null;
-
       if (modo === "padrao") {
-        hash = await enviarPadrao(signer, contrato);
+        const hash = await enviarPadrao(signer, contrato);
         setTxHash(hash); setOk(true);
-        setStatus(token + " enviado com privacidade.");
+        setStatus("Enviado com sucesso via endereço efêmero.");
+        const newEntry = {
+          hash,
+          token, valor,
+          dest: dest.slice(0,6)+"..."+dest.slice(-4),
+          fee: (parseFloat(valor)*0.002).toFixed(token==="ETH"?6:2),
+          recebe: (parseFloat(valor)*0.998).toFixed(token==="ETH"?6:2),
+          date: new Date().toLocaleString("pt-BR"),
+          status: "Confirmado", modo: "padrao", splits: 1, hops: 1
+        };
+        const h = [newEntry, ...history]; setHistory(h); saveHistory(h);
       } else {
         const result = await enviarSilencioso();
-        agendado = result.agendado;
-        horas = result.horas;
         setOk(true);
-        setStatus("Transacao agendada! Sera enviada em ~" + horas + "h com delay aleatorio.");
+        setStatus(
+          "Pipeline iniciado com sucesso!\n" +
+          "Valor dividido em " + result.splits + " partes.\n" +
+          "Cada parte passa por 2-3 endereços efêmeros.\n" +
+          "Estimativa de conclusão: ~" + result.horas + "h"
+        );
+        const newEntry = {
+          hash: "agendado-" + Date.now(),
+          token, valor,
+          dest: dest.slice(0,6)+"..."+dest.slice(-4),
+          fee: (parseFloat(valor)*0.002).toFixed(token==="ETH"?6:2),
+          recebe: (parseFloat(valor)*0.998).toFixed(token==="ETH"?6:2),
+          date: new Date().toLocaleString("pt-BR"),
+          status: "Agendado (~"+result.horas+"h)",
+          modo: "silencioso", splits: result.splits, hops: "2-3"
+        };
+        const h = [newEntry, ...history]; setHistory(h); saveHistory(h);
       }
-
-      const newEntry = {
-        hash: hash || ("agendado-" + Date.now()),
-        token,
-        valor,
-        dest: dest.slice(0,6) + "..." + dest.slice(-4),
-        destFull: dest,
-        fee: (parseFloat(valor) * 0.002).toFixed(token === "ETH" ? 6 : 2),
-        recebe: (parseFloat(valor) * 0.998).toFixed(token === "ETH" ? 6 : 2),
-        date: new Date().toLocaleString("pt-BR"),
-        status: agendado ? "Agendado (~" + horas + "h)" : "Confirmado",
-        modo
-      };
-      const newHistory = [newEntry, ...history];
-      setHistory(newHistory);
-      saveHistory(newHistory);
-
     } catch(err) {
-      setStatus("Erro: " + err.message.slice(0, 80));
+      setStatus("Erro: " + err.message.slice(0, 100));
     } finally { setLoading(false); }
   }
 
@@ -151,7 +154,7 @@ export default function App() {
     navImg: { width:"26px", height:"26px", objectFit:"contain" },
     navName: { fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:"14px", letterSpacing:"0.2em", background:"linear-gradient(135deg,#1E90FF,#00BFFF)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" },
     navBadge: { marginLeft:"auto", fontSize:"10px", color:"rgba(30,144,255,0.4)", border:"1px solid rgba(30,144,255,0.15)", padding:"3px 10px", borderRadius:"20px", letterSpacing:"0.1em" },
-    card: { position:"relative", zIndex:1, width:"100%", maxWidth:"480px", background:"rgba(8,16,28,0.94)", border:"1px solid rgba(30,144,255,0.12)", borderRadius:"20px", padding:"36px", backdropFilter:"blur(20px)", boxShadow:"0 0 80px rgba(30,144,255,0.06),inset 0 1px 0 rgba(30,144,255,0.08)" },
+    card: { position:"relative", zIndex:1, width:"100%", maxWidth:"500px", background:"rgba(8,16,28,0.94)", border:"1px solid rgba(30,144,255,0.12)", borderRadius:"20px", padding:"36px", backdropFilter:"blur(20px)", boxShadow:"0 0 80px rgba(30,144,255,0.06),inset 0 1px 0 rgba(30,144,255,0.08)" },
     hdr: { textAlign:"center", marginBottom:"28px" },
     logoRow: { display:"flex", alignItems:"center", justifyContent:"center", gap:"12px", marginBottom:"8px" },
     logoImg: { width:"36px", height:"36px", objectFit:"contain", filter:"drop-shadow(0 0 12px rgba(30,144,255,0.7))" },
@@ -165,33 +168,30 @@ export default function App() {
     input: { width:"100%", background:"rgba(30,144,255,0.04)", border:"1px solid rgba(30,144,255,0.1)", borderRadius:"10px", padding:"13px 15px", color:"#d8eeff", fontSize:"13px", fontFamily:"'DM Mono',monospace", outline:"none", boxSizing:"border-box" },
     tokenRow: { display:"flex", gap:"8px", marginBottom:"14px" },
     tokenBtn: (active) => ({ flex:1, padding:"10px", border: active ? "1px solid rgba(30,144,255,0.5)" : "1px solid rgba(30,144,255,0.1)", borderRadius:"10px", background: active ? "rgba(30,144,255,0.12)" : "rgba(30,144,255,0.03)", color: active ? "#1E90FF" : "rgba(100,150,200,0.5)", fontFamily:"'DM Mono',monospace", fontSize:"12px", cursor:"pointer", letterSpacing:"0.1em", transition:"all 0.2s" }),
-    modoRow: { display:"flex", gap:"8px", marginBottom:"14px" },
-    modoBtn: (active, color) => ({ flex:1, padding:"12px 8px", border: active ? "1px solid " + color : "1px solid rgba(30,144,255,0.1)", borderRadius:"10px", background: active ? "rgba(30,144,255,0.08)" : "rgba(30,144,255,0.02)", color: active ? color : "rgba(100,150,200,0.4)", fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:"10px", cursor:"pointer", letterSpacing:"0.1em", textTransform:"uppercase", textAlign:"center" }),
-    modoDesc: { fontSize:"10px", color:"rgba(100,150,200,0.35)", textAlign:"center", marginTop:"4px", letterSpacing:"0.05em" },
+    modoRow: { display:"flex", gap:"10px", marginBottom:"18px" },
+    modoCard: (active) => ({ flex:1, padding:"14px", border: active ? "1px solid rgba(30,144,255,0.4)" : "1px solid rgba(30,144,255,0.08)", borderRadius:"12px", background: active ? "rgba(30,144,255,0.08)" : "rgba(30,144,255,0.02)", cursor:"pointer", transition:"all 0.2s" }),
+    modoTitle: (active) => ({ fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:"12px", color: active ? "#1E90FF" : "rgba(100,150,200,0.5)", letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:"6px" }),
+    modoDesc: { fontSize:"10px", color:"rgba(100,150,200,0.35)", lineHeight:"1.5" },
+    modoBullet: { fontSize:"10px", color:"rgba(30,144,255,0.35)", marginTop:"6px", lineHeight:"1.6" },
     feeBox: { background:"rgba(30,144,255,0.03)", border:"1px solid rgba(30,144,255,0.08)", borderRadius:"10px", padding:"13px 15px", marginBottom:"18px" },
     feeRow: { display:"flex", justifyContent:"space-between", fontSize:"11px", padding:"2px 0" },
     feeSep: { height:"1px", background:"rgba(30,144,255,0.07)", margin:"7px 0" },
-    btn: { width:"100%", padding:"15px", background: modo === "silencioso" ? "linear-gradient(135deg,#0066aa,#003d7a)" : "linear-gradient(135deg,#1E90FF,#005FCC)", border:"none", borderRadius:"11px", color:"#fff", fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:"13px", letterSpacing:"0.18em", cursor:"pointer", textTransform:"uppercase" },
-    btnOff: { width:"100%", padding:"15px", background:"rgba(30,144,255,0.12)", border:"none", borderRadius:"11px", color:"rgba(30,144,255,0.35)", fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:"13px", letterSpacing:"0.18em", cursor:"not-allowed", textTransform:"uppercase" },
-    statusBox: { marginTop:"14px", padding:"13px 15px", background:"rgba(30,144,255,0.04)", border:"1px solid rgba(30,144,255,0.09)", borderRadius:"10px", fontSize:"11px", color:"rgba(140,190,255,0.6)", textAlign:"center", letterSpacing:"0.06em" },
-    statusOk: { marginTop:"14px", padding:"13px 15px", background:"rgba(30,144,255,0.07)", border:"1px solid rgba(30,144,255,0.25)", borderRadius:"10px", fontSize:"11px", color:"#1E90FF", textAlign:"center", letterSpacing:"0.06em" },
+    btn: (m) => ({ width:"100%", padding:"15px", background: m==="silencioso" ? "linear-gradient(135deg,#0a4a8a,#003d7a)" : "linear-gradient(135deg,#1E90FF,#005FCC)", border:"none", borderRadius:"11px", color:"#fff", fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:"13px", letterSpacing:"0.18em", cursor:"pointer", textTransform:"uppercase" }),
+    btnOff: { width:"100%", padding:"15px", background:"rgba(30,144,255,0.08)", border:"none", borderRadius:"11px", color:"rgba(30,144,255,0.3)", fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:"13px", letterSpacing:"0.18em", cursor:"not-allowed", textTransform:"uppercase" },
+    statusBox: { marginTop:"14px", padding:"13px 15px", background:"rgba(30,144,255,0.04)", border:"1px solid rgba(30,144,255,0.09)", borderRadius:"10px", fontSize:"11px", color:"rgba(140,190,255,0.6)", textAlign:"center", letterSpacing:"0.06em", whiteSpace:"pre-line", lineHeight:"1.7" },
+    statusOk: { marginTop:"14px", padding:"13px 15px", background:"rgba(30,144,255,0.07)", border:"1px solid rgba(30,144,255,0.25)", borderRadius:"10px", fontSize:"11px", color:"#1E90FF", textAlign:"center", letterSpacing:"0.06em", whiteSpace:"pre-line", lineHeight:"1.7" },
     txLink: { display:"block", marginTop:"10px", textAlign:"center", fontSize:"11px", color:"rgba(30,144,255,0.45)", textDecoration:"none", letterSpacing:"0.08em" },
     emptyHistory: { textAlign:"center", padding:"40px 0", color:"rgba(30,144,255,0.2)", fontSize:"12px", letterSpacing:"0.1em" },
     historyItem: { background:"rgba(30,144,255,0.03)", border:"1px solid rgba(30,144,255,0.08)", borderRadius:"12px", padding:"14px 16px", marginBottom:"10px" },
-    histRow: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"6px" },
-    histToken: { fontSize:"13px", color:"#1E90FF", fontFamily:"'Syne',sans-serif", fontWeight:700 },
-    histValor: { fontSize:"13px", color:"#d8eeff" },
-    histDest: { fontSize:"11px", color:"rgba(100,150,200,0.5)" },
-    histDate: { fontSize:"10px", color:"rgba(100,150,200,0.3)" },
-    histBadge: (s) => ({ fontSize:"10px", color: s === "Confirmado" ? "rgba(30,255,100,0.6)" : "rgba(255,200,30,0.6)", border: "1px solid " + (s === "Confirmado" ? "rgba(30,255,100,0.2)" : "rgba(255,200,30,0.2)"), padding:"2px 8px", borderRadius:"10px" }),
-    histLink: { fontSize:"10px", color:"rgba(30,144,255,0.4)", textDecoration:"none", letterSpacing:"0.05em" },
-    clearBtn: { width:"100%", padding:"10px", background:"transparent", border:"1px solid rgba(255,50,50,0.15)", borderRadius:"10px", color:"rgba(255,100,100,0.4)", fontFamily:"'DM Mono',monospace", fontSize:"11px", cursor:"pointer", marginTop:"8px", letterSpacing:"0.1em" },
+    histRow: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"5px" },
+    histBadge: (s) => ({ fontSize:"9px", color: s==="Confirmado" ? "rgba(30,255,100,0.6)" : "rgba(255,200,30,0.6)", border:"1px solid "+(s==="Confirmado"?"rgba(30,255,100,0.2)":"rgba(255,200,30,0.2)"), padding:"2px 8px", borderRadius:"10px" }),
+    histLink: { fontSize:"10px", color:"rgba(30,144,255,0.4)", textDecoration:"none" },
+    clearBtn: { width:"100%", padding:"10px", background:"transparent", border:"1px solid rgba(255,50,50,0.12)", borderRadius:"10px", color:"rgba(255,100,100,0.35)", fontFamily:"'DM Mono',monospace", fontSize:"11px", cursor:"pointer", marginTop:"8px", letterSpacing:"0.1em" },
   };
 
   return (
     <div style={S.wrap}>
-      <div style={S.bgGlow}/>
-      <div style={S.bgGrid}/>
+      <div style={S.bgGlow}/><div style={S.bgGrid}/>
       <nav style={S.nav}>
         <img src="/logo.png" alt="logo" style={S.navImg}/>
         <span style={S.navName}>SILENTFLOW</span>
@@ -210,34 +210,34 @@ export default function App() {
         <div style={S.tabs}>
           <button style={S.tab(tab==="send")} onClick={()=>setTab("send")}>Enviar</button>
           <button style={S.tab(tab==="history")} onClick={()=>setTab("history")}>
-            Historico {history.length > 0 && "("+history.length+")"}
+            Historico {history.length>0&&"("+history.length+")"}
           </button>
         </div>
 
-        {tab === "send" && (
+        {tab==="send" && (
           <div>
+            {/* MODO */}
             <div style={S.fieldWrap}>
               <label style={S.label}>Modo de privacidade</label>
               <div style={S.modoRow}>
-                <div>
-                  <button style={S.modoBtn(modo==="padrao","#1E90FF")} onClick={()=>setModo("padrao")}>
-                    Padrao
-                  </button>
-                  <div style={S.modoDesc}>Envia agora</div>
+                <div style={S.modoCard(modo==="padrao")} onClick={()=>setModo("padrao")}>
+                  <div style={S.modoTitle(modo==="padrao")}>⚡ Padrão</div>
+                  <div style={S.modoDesc}>Envio instantâneo</div>
+                  <div style={S.modoBullet}>→ 1 endereço efêmero{"\n"}→ Confirmação imediata{"\n"}→ Sem delay</div>
                 </div>
-                <div>
-                  <button style={S.modoBtn(modo==="silencioso","#00BFFF")} onClick={()=>setModo("silencioso")}>
-                    Silencioso
-                  </button>
-                  <div style={S.modoDesc}>Delay 1-6h</div>
+                <div style={S.modoCard(modo==="silencioso")} onClick={()=>setModo("silencioso")}>
+                  <div style={S.modoTitle(modo==="silencioso")}>👻 Silencioso</div>
+                  <div style={S.modoDesc}>Máxima privacidade</div>
+                  <div style={S.modoBullet}>→ Split em 2–4 partes{"\n"}→ 2–3 hops por parte{"\n"}→ Delay 1–6h + dummy tx</div>
                 </div>
               </div>
             </div>
 
+            {/* TOKEN */}
             <div style={S.fieldWrap}>
               <label style={S.label}>Token</label>
               <div style={S.tokenRow}>
-                {Object.keys(TOKENS).map(t => (
+                {Object.keys(TOKENS).map(t=>(
                   <button key={t} style={S.tokenBtn(token===t)} onClick={()=>setToken(t)}>
                     {TOKENS[t].icon} {t}
                   </button>
@@ -245,16 +245,19 @@ export default function App() {
               </div>
             </div>
 
+            {/* DESTINATARIO */}
             <div style={S.fieldWrap}>
-              <label style={S.label}>Destinatario</label>
+              <label style={S.label}>Destinatário</label>
               <input style={S.input} value={dest} onChange={e=>setDest(e.target.value)} placeholder="0x..."/>
             </div>
 
+            {/* VALOR */}
             <div style={S.fieldWrap}>
               <label style={S.label}>Valor ({token})</label>
               <input style={S.input} value={valor} onChange={e=>setValor(e.target.value)} placeholder={token==="ETH"?"0.01":"10.00"} type="number"/>
             </div>
 
+            {/* FEE BOX */}
             {fee && (
               <div style={S.feeBox}>
                 <div style={S.feeRow}>
@@ -263,58 +266,71 @@ export default function App() {
                 </div>
                 <div style={S.feeSep}/>
                 <div style={S.feeRow}>
-                  <span style={{color:"rgba(200,230,255,0.65)"}}>Destinatario recebe</span>
+                  <span style={{color:"rgba(200,230,255,0.65)"}}>Destinatário recebe</span>
                   <span style={{color:"#1E90FF"}}>{fin} {token}</span>
                 </div>
-                {modo === "silencioso" && (
-                  <div style={{...S.feeRow, marginTop:"8px"}}>
-                    <span style={{color:"rgba(0,191,255,0.5)"}}>Delay aleatorio</span>
-                    <span style={{color:"rgba(0,191,255,0.7)"}}>1 a 6 horas</span>
-                  </div>
+                {modo==="silencioso" && (
+                  <>
+                    <div style={S.feeSep}/>
+                    <div style={S.feeRow}>
+                      <span style={{color:"rgba(0,191,255,0.4)"}}>Split automático</span>
+                      <span style={{color:"rgba(0,191,255,0.6)"}}>2–4 partes aleatórias</span>
+                    </div>
+                    <div style={S.feeRow}>
+                      <span style={{color:"rgba(0,191,255,0.4)"}}>Multi-hop por parte</span>
+                      <span style={{color:"rgba(0,191,255,0.6)"}}>2–3 endereços efêmeros</span>
+                    </div>
+                    <div style={S.feeRow}>
+                      <span style={{color:"rgba(0,191,255,0.4)"}}>Delay estimado</span>
+                      <span style={{color:"rgba(0,191,255,0.6)"}}>1–6 horas</span>
+                    </div>
+                  </>
                 )}
               </div>
             )}
 
-            <button style={loading||!dest||!valor ? S.btnOff : S.btn} onClick={enviar} disabled={loading||!dest||!valor}>
-              {loading ? "Processando..." : modo === "silencioso" ? "Enviar modo silencioso" : "Enviar com privacidade"}
+            <button style={loading||!dest||!valor ? S.btnOff : S.btn(modo)} onClick={enviar} disabled={loading||!dest||!valor}>
+              {loading ? "Processando..." : modo==="silencioso" ? "👻 Enviar Modo Silencioso" : "⚡ Enviar com Privacidade"}
             </button>
 
             {status && <div style={ok?S.statusOk:S.statusBox}>{status}</div>}
             {txHash && (
               <a style={S.txLink} href={"https://sepolia.etherscan.io/tx/"+txHash} target="_blank" rel="noreferrer">
-                Ver transacao no Etherscan
+                Ver transação no Etherscan →
               </a>
             )}
           </div>
         )}
 
-        {tab === "history" && (
+        {tab==="history" && (
           <div>
-            {history.length === 0 ? (
-              <div style={S.emptyHistory}>Nenhuma transacao ainda</div>
-            ) : (
-              history.map((tx, i) => (
-                <div key={i} style={S.historyItem}>
-                  <div style={S.histRow}>
-                    <span style={S.histToken}>{TOKENS[tx.token]?.icon} {tx.token}</span>
-                    <span style={S.histValor}>{tx.recebe} {tx.token}</span>
-                  </div>
-                  <div style={S.histRow}>
-                    <span style={S.histDest}>Para: {tx.dest}</span>
-                    <span style={S.histBadge(tx.status)}>{tx.status}</span>
-                  </div>
-                  <div style={{...S.histRow, marginBottom:0}}>
-                    <span style={S.histDate}>{tx.date} · {tx.modo}</span>
-                    {!tx.hash.startsWith("agendado") && (
-                      <a style={S.histLink} href={"https://sepolia.etherscan.io/tx/"+tx.hash} target="_blank" rel="noreferrer">Ver TX →</a>
-                    )}
-                  </div>
+            {history.length===0 ? (
+              <div style={S.emptyHistory}>Nenhuma transação ainda</div>
+            ) : history.map((tx,i)=>(
+              <div key={i} style={S.historyItem}>
+                <div style={S.histRow}>
+                  <span style={{fontSize:"13px",color:"#1E90FF",fontFamily:"'Syne',sans-serif",fontWeight:700}}>
+                    {TOKENS[tx.token]?.icon} {tx.token}
+                  </span>
+                  <span style={{fontSize:"13px",color:"#d8eeff"}}>{tx.recebe} {tx.token}</span>
                 </div>
-              ))
-            )}
-            {history.length > 0 && (
+                <div style={S.histRow}>
+                  <span style={{fontSize:"11px",color:"rgba(100,150,200,0.5)"}}>Para: {tx.dest}</span>
+                  <span style={S.histBadge(tx.status)}>{tx.status}</span>
+                </div>
+                <div style={S.histRow}>
+                  <span style={{fontSize:"10px",color:"rgba(100,150,200,0.3)"}}>
+                    {tx.date} · {tx.modo==="silencioso" ? "👻 "+tx.splits+" splits · "+tx.hops+" hops" : "⚡ padrão"}
+                  </span>
+                  {tx.hash && !tx.hash.startsWith("agendado") && (
+                    <a style={S.histLink} href={"https://sepolia.etherscan.io/tx/"+tx.hash} target="_blank" rel="noreferrer">Ver TX →</a>
+                  )}
+                </div>
+              </div>
+            ))}
+            {history.length>0 && (
               <button style={S.clearBtn} onClick={()=>{setHistory([]);saveHistory([]);}}>
-                Limpar historico
+                Limpar histórico
               </button>
             )}
           </div>
