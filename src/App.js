@@ -3,445 +3,318 @@ import { ethers } from "ethers";
 
 const CONTRACT_ADDRESS = "0x3b1958ee8e636d69E868CaFCad3e7dB2eE8B4755";
 const BACKEND_URL = "https://silentflow-production.up.railway.app";
+const LOGO_URL = "https://raw.githubusercontent.com/marellobr/silentflow/main/frontend/public/logo-silentflow-principal.png";
 
 const ABI = [
   "function depositETH(address recipient) external payable",
   "function depositToken(address token, uint256 amount, address recipient) external",
-  "function withdraw(address token, uint256 amount) external",
   "event Deposit(address indexed sender, address indexed recipient, address token, uint256 amount)",
 ];
-
-const TOKENS = {
-  ETH: { address: null, decimals: 18, symbol: "ETH" },
-  USDC: { address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", decimals: 6, symbol: "USDC" },
-  USDT: { address: "0xaA8E23Fb1079EA71e0a56F48a2aA51851D8433D0", decimals: 6, symbol: "USDT" },
-};
 
 const ERC20_ABI = [
   "function approve(address spender, uint256 amount) external returns (bool)",
   "function allowance(address owner, address spender) external view returns (uint256)",
-  "function balanceOf(address account) external view returns (uint256)",
 ];
+
+const TOKENS = {
+  ETH:  { address: null, decimals: 18 },
+  USDC: { address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", decimals: 6 },
+  USDT: { address: "0xaA8E23Fb1079EA71e0a56F48a2aA51851D8433D0", decimals: 6 },
+};
+
+const STYLE = `
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:#03060f;color:#e8eaf0;font-family:'DM Mono',monospace;min-height:100vh}
+
+.bg{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.bg::before{content:'';position:absolute;width:800px;height:800px;top:-300px;left:50%;transform:translateX(-50%);background:radial-gradient(ellipse,rgba(30,144,255,.07) 0%,transparent 70%);border-radius:50%}
+.bg::after{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:60%;height:1px;background:linear-gradient(90deg,transparent,rgba(30,144,255,.35),transparent)}
+
+.wrap{position:relative;z-index:1;max-width:1000px;margin:0 auto;padding:0 24px 80px}
+
+/* HEADER */
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:28px 0 44px;border-bottom:1px solid rgba(255,255,255,.05);margin-bottom:44px}
+.logo{display:flex;align-items:center;gap:12px}
+.logo img{height:34px;width:auto;object-fit:contain;filter:drop-shadow(0 0 14px rgba(30,144,255,.5))}
+.logo-fb{height:34px;width:34px;background:linear-gradient(135deg,#1E90FF,#00BFFF);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px}
+.logo-name{font-family:'Syne',sans-serif;font-size:21px;font-weight:800;color:#fff;letter-spacing:-.3px}
+.logo-name b{color:#1E90FF}
+.net-tag{font-size:10px;padding:3px 9px;border:1px solid rgba(30,144,255,.25);border-radius:20px;color:rgba(30,144,255,.75);background:rgba(30,144,255,.06);letter-spacing:.5px}
+.conn-btn{padding:10px 20px;background:rgba(30,144,255,.09);border:1px solid rgba(30,144,255,.22);border-radius:10px;color:#1E90FF;font-family:'DM Mono',monospace;font-size:13px;cursor:pointer;transition:all .2s;letter-spacing:.2px}
+.conn-btn:hover{background:rgba(30,144,255,.17);border-color:rgba(30,144,255,.45)}
+.conn-btn.on{background:rgba(0,255,136,.07);border-color:rgba(0,255,136,.22);color:#00ff88}
+
+/* GRID */
+.grid{display:grid;grid-template-columns:1fr 370px;gap:24px;align-items:start}
+
+/* LEFT */
+.left{display:flex;flex-direction:column;gap:20px}
+.sec-label{font-family:'Syne',sans-serif;font-size:11px;font-weight:600;color:rgba(255,255,255,.25);letter-spacing:2px;text-transform:uppercase}
+
+.pipe-card{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.07);border-radius:16px;overflow:hidden}
+.pipe-hdr{display:flex;align-items:center;justify-content:space-between;padding:18px 22px 16px;border-bottom:1px solid rgba(255,255,255,.05)}
+.pipe-title{font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:#fff}
+.pipe-badge{display:flex;align-items:center;gap:5px;padding:4px 11px;background:rgba(30,144,255,.09);border:1px solid rgba(30,144,255,.18);border-radius:20px;font-size:11px;color:#1E90FF}
+
+.pipe-row{display:flex;align-items:center;justify-content:space-between;padding:13px 22px;transition:background .15s}
+.pipe-row:hover{background:rgba(255,255,255,.02)}
+.pipe-row+.pipe-row{border-top:1px solid rgba(255,255,255,.04)}
+.row-l{display:flex;align-items:center;gap:10px}
+.row-ico{width:30px;height:30px;background:rgba(30,144,255,.07);border:1px solid rgba(30,144,255,.13);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px}
+.row-lbl{font-size:13px;color:rgba(255,255,255,.55)}
+.row-val{font-size:13px;color:#1E90FF;font-weight:500}
+
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.stat{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:16px;text-align:center}
+.stat-n{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#1E90FF;display:block;margin-bottom:3px}
+.stat-l{font-size:10px;color:rgba(255,255,255,.28);letter-spacing:.5px;text-transform:uppercase}
+
+.hist-card{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:18px 22px}
+.hist-empty{text-align:center;padding:28px 0;color:rgba(255,255,255,.18);font-size:13px}
+.hist-item{padding:13px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.hist-item:last-child{border-bottom:none}
+.hist-top{display:flex;justify-content:space-between;margin-bottom:5px}
+.hist-tag{font-size:11px;color:#1E90FF;background:rgba(30,144,255,.07);border:1px solid rgba(30,144,255,.13);border-radius:20px;padding:2px 9px}
+.hist-time{font-size:11px;color:rgba(255,255,255,.22)}
+.hist-det{font-size:12px;color:rgba(255,255,255,.4);margin-bottom:5px}
+.hist-link{font-size:11px;color:rgba(30,144,255,.45);text-decoration:none}
+.hist-link:hover{color:#1E90FF}
+
+/* FORM */
+.form-card{background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:26px;position:sticky;top:24px}
+.form-title{font-family:'Syne',sans-serif;font-size:19px;font-weight:800;color:#fff;margin-bottom:3px}
+.form-sub{font-size:11px;color:rgba(255,255,255,.28);margin-bottom:22px;letter-spacing:.2px}
+
+.toks{display:flex;gap:8px;margin-bottom:18px}
+.tok{flex:1;padding:10px 0;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:9px;color:rgba(255,255,255,.38);font-family:'DM Mono',monospace;font-size:13px;cursor:pointer;transition:all .2s}
+.tok:hover{border-color:rgba(30,144,255,.28);color:rgba(255,255,255,.65)}
+.tok.on{background:rgba(30,144,255,.11);border-color:rgba(30,144,255,.38);color:#1E90FF}
+
+.fld{margin-bottom:15px}
+.fld label{display:block;font-size:10px;color:rgba(255,255,255,.3);letter-spacing:1.2px;text-transform:uppercase;margin-bottom:7px}
+.fld input{width:100%;padding:13px 13px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:10px;color:#fff;font-family:'DM Mono',monospace;font-size:14px;outline:none;transition:border-color .2s}
+.fld input:focus{border-color:rgba(30,144,255,.38)}
+.fld input::placeholder{color:rgba(255,255,255,.18)}
+
+.fee-row{display:flex;justify-content:space-between;padding:9px 12px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.05);border-radius:8px;margin-bottom:18px}
+.fee-l{font-size:11px;color:rgba(255,255,255,.28)}
+.fee-v{font-size:11px;color:rgba(255,255,255,.45)}
+
+.send-btn{width:100%;padding:15px;background:linear-gradient(135deg,#1E90FF,#0062cc);border:none;border-radius:12px;color:#fff;font-family:'Syne',sans-serif;font-size:15px;font-weight:700;cursor:pointer;transition:all .2s;box-shadow:0 4px 24px rgba(30,144,255,.22);letter-spacing:.2px}
+.send-btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 6px 32px rgba(30,144,255,.35)}
+.send-btn:disabled{opacity:.5;cursor:not-allowed}
+
+.status-box{margin-top:15px;padding:13px;background:rgba(30,144,255,.06);border:1px solid rgba(30,144,255,.16);border-radius:10px}
+.status-box pre{font-family:'DM Mono',monospace;font-size:12px;color:#1E90FF;white-space:pre-wrap;margin:0;line-height:1.65}
+
+@media(max-width:760px){
+  .grid{grid-template-columns:1fr}
+  .form-card{position:static}
+}
+`;
 
 export default function App() {
   const [account, setAccount] = useState(null);
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount]   = useState("");
   const [recipient, setRecipient] = useState("");
-  const [selectedToken, setSelectedToken] = useState("ETH");
-  const [status, setStatus] = useState("");
+  const [token, setToken]     = useState("ETH");
+  const [status, setStatus]   = useState("");
   const [loading, setLoading] = useState(false);
-  const [txHistory, setTxHistory] = useState([]);
+  const [history, setHistory] = useState([]);
   const [pendingId, setPendingId] = useState(null);
+  const [logoErr, setLogoErr] = useState(false);
 
   useEffect(() => {
-    if (pendingId) {
-      const interval = setInterval(async () => {
-        try {
-          const res = await fetch(`${BACKEND_URL}/status/${pendingId}`);
-          const data = await res.json();
-          if (data.concluido) {
-            setStatus("✅ Transação concluída! Todos os hops entregues.");
-            clearInterval(interval);
-            setPendingId(null);
-          } else {
-            setStatus(`⏳ Processando... ${data.hopsFeitos}/${data.hopsTotal} hops (${data.minutosRestantes} min restantes)`);
-          }
-        } catch (e) {
-          // silently fail
+    const s = document.createElement("style");
+    s.textContent = STYLE;
+    document.head.appendChild(s);
+    return () => document.head.removeChild(s);
+  }, []);
+
+  useEffect(() => {
+    if (!pendingId) return;
+    const iv = setInterval(async () => {
+      try {
+        const r = await fetch(`${BACKEND_URL}/status/${pendingId}`);
+        const d = await r.json();
+        if (d.concluido) {
+          setStatus("✅ Concluído! Todos os hops entregues.");
+          clearInterval(iv);
+          setPendingId(null);
+        } else {
+          setStatus(`⏳ Processando...\n${d.hopsFeitos}/${d.hopsTotal} hops · ~${d.minutosRestantes}min restantes`);
         }
-      }, 15000);
-      return () => clearInterval(interval);
-    }
+      } catch (_) {}
+    }, 15000);
+    return () => clearInterval(iv);
   }, [pendingId]);
 
-  const connectWallet = async () => {
+  const connect = async () => {
     if (!window.ethereum) return alert("MetaMask não encontrada.");
-    const provider = new ethers.BrowserProvider(window.ethereum);
-    const accounts = await provider.send("eth_requestAccounts", []);
-    setAccount(accounts[0]);
+    const p = new ethers.BrowserProvider(window.ethereum);
+    const [acc] = await p.send("eth_requestAccounts", []);
+    setAccount(acc);
   };
 
-  const sendTransaction = async () => {
-    if (!account) return alert("Conecte sua carteira primeiro.");
+  const send = async () => {
+    if (!account)            return alert("Conecte sua carteira.");
     if (!amount || !recipient) return alert("Preencha todos os campos.");
-
     setLoading(true);
     setStatus("🔒 Iniciando pipeline de privacidade...");
-
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
+      const signer   = await provider.getSigner();
       const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
-
       let txHash;
 
-      if (selectedToken === "ETH") {
-        const value = ethers.parseEther(amount);
-        const tx = await contract.depositETH(recipient, { value });
-        await tx.wait();
-        txHash = tx.hash;
+      if (token === "ETH") {
+        const tx = await contract.depositETH(recipient, { value: ethers.parseEther(amount) });
+        await tx.wait(); txHash = tx.hash;
       } else {
-        const token = TOKENS[selectedToken];
-        const tokenContract = new ethers.Contract(token.address, ERC20_ABI, signer);
-        const parsedAmount = ethers.parseUnits(amount, token.decimals);
-
-        const allowance = await tokenContract.allowance(account, CONTRACT_ADDRESS);
-        if (allowance < parsedAmount) {
-          const approveTx = await tokenContract.approve(CONTRACT_ADDRESS, parsedAmount);
-          await approveTx.wait();
-        }
-
-        const tx = await contract.depositToken(token.address, parsedAmount, recipient);
-        await tx.wait();
-        txHash = tx.hash;
+        const t = TOKENS[token];
+        const tc = new ethers.Contract(t.address, ERC20_ABI, signer);
+        const val = ethers.parseUnits(amount, t.decimals);
+        const allow = await tc.allowance(account, CONTRACT_ADDRESS);
+        if (allow < val) { const a = await tc.approve(CONTRACT_ADDRESS, val); await a.wait(); }
+        const tx = await contract.depositToken(t.address, val, recipient);
+        await tx.wait(); txHash = tx.hash;
       }
 
-      // Agendamento no backend
-      const res = await fetch(`${BACKEND_URL}/agendar`, {
+      const res  = await fetch(`${BACKEND_URL}/agendar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          txHash,
-          destinatario: recipient,
-          valor: amount,
-          token: selectedToken,
-        }),
+        body: JSON.stringify({ txHash, destinatario: recipient, valor: amount, token }),
       });
-
       const data = await res.json();
       setPendingId(data.id);
 
-      const newTx = {
-        id: data.id,
-        hash: txHash,
-        amount,
-        token: selectedToken,
-        recipient: recipient.slice(0, 6) + "..." + recipient.slice(-4),
-        splits: data.splits,
-        hops: data.hopsTotal,
-        estimativa: data.estimativaMinutos,
+      setHistory(h => [{
+        id: data.id, hash: txHash, amount, token,
+        recipient: recipient.slice(0,6) + "..." + recipient.slice(-4),
+        splits: data.splits, hops: data.hopsTotal,
         time: new Date().toLocaleTimeString("pt-BR"),
-        status: "processando",
-      };
+      }, ...h]);
 
-      setTxHistory((prev) => [newTx, ...prev]);
-      setStatus(
-        `👻 Pipeline iniciado!\nValor dividido em ${data.splits} partes.\nCada parte: 2–3 hops efêmeros.\nEstimativa: ~${data.estimativaMinutos} minutos`
-      );
-      setAmount("");
-      setRecipient("");
-    } catch (err) {
-      console.error(err);
-      setStatus("❌ Erro: " + (err.reason || err.message));
+      setStatus(`👻 Pipeline iniciado!\n${data.splits} splits · ${data.hopsTotal} hops\nEstimativa: ~${data.estimativaMinutos} min`);
+      setAmount(""); setRecipient("");
+    } catch (e) {
+      setStatus("❌ " + (e.reason || e.message));
     }
-
     setLoading(false);
   };
 
+  const fee = amount ? `≈ ${(parseFloat(amount)*0.002).toFixed(6)} ${token}` : "—";
+
   return (
-    <div style={styles.container}>
-      {/* Header */}
-      <div style={styles.header}>
-        <div style={styles.logo}>
-          <span style={styles.logoIcon}>👻</span>
-          <span style={styles.logoText}>SilentFlow</span>
-          <span style={styles.badge}>v2 · Sepolia</span>
-        </div>
-        <button onClick={connectWallet} style={styles.connectBtn}>
-          {account ? account.slice(0, 6) + "..." + account.slice(-4) : "Conectar Carteira"}
-        </button>
-      </div>
+    <>
+      <div className="bg" />
+      <div className="wrap">
 
-      {/* Main Card */}
-      <div style={styles.card}>
-        <div style={styles.cardHeader}>
-          <span style={styles.cardTitle}>Envio Privado</span>
-          <div style={styles.privacyBadge}>
-            <span style={{ fontSize: 12 }}>🔒</span>
-            <span style={{ fontSize: 12, marginLeft: 4 }}>Split + Multi-hop + Dummy Tx</span>
+        <header className="hdr">
+          <div className="logo">
+            {!logoErr
+              ? <img src={LOGO_URL} alt="SilentFlow" onError={() => setLogoErr(true)} />
+              : <div className="logo-fb">👻</div>}
+            <span className="logo-name">Silent<b>Flow</b></span>
+            <span className="net-tag">SEPOLIA</span>
           </div>
-        </div>
+          <button className={`conn-btn${account ? " on" : ""}`} onClick={connect}>
+            {account ? `● ${account.slice(0,6)}...${account.slice(-4)}` : "Conectar Carteira"}
+          </button>
+        </header>
 
-        {/* Privacy info box */}
-        <div style={styles.infoBox}>
-          <div style={styles.infoRow}>
-            <span style={styles.infoLabel}>✂️ Split automático</span>
-            <span style={styles.infoValue}>2–4 partes aleatórias</span>
-          </div>
-          <div style={styles.infoRow}>
-            <span style={styles.infoLabel}>🔀 Multi-hop por parte</span>
-            <span style={styles.infoValue}>2–3 endereços efêmeros</span>
-          </div>
-          <div style={styles.infoRow}>
-            <span style={styles.infoLabel}>⏱ Delay estimado</span>
-            <span style={styles.infoValue}>1–10 minutos</span>
-          </div>
-          <div style={styles.infoRow}>
-            <span style={styles.infoLabel}>🎭 Dummy transactions</span>
-            <span style={styles.infoValue}>ruído entre hops</span>
-          </div>
-        </div>
+        <div className="grid">
 
-        {/* Token selector */}
-        <div style={styles.tokenRow}>
-          {Object.keys(TOKENS).map((token) => (
-            <button
-              key={token}
-              onClick={() => setSelectedToken(token)}
-              style={{
-                ...styles.tokenBtn,
-                ...(selectedToken === token ? styles.tokenBtnActive : {}),
-              }}
-            >
-              {token}
-            </button>
-          ))}
-        </div>
+          {/* LEFT */}
+          <div className="left">
+            <span className="sec-label">Privacidade</span>
 
-        {/* Amount */}
-        <div style={styles.inputGroup}>
-          <label style={styles.label}>Valor</label>
-          <input
-            type="number"
-            placeholder={`0.0 ${selectedToken}`}
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            style={styles.input}
-          />
-        </div>
-
-        {/* Recipient */}
-        <div style={styles.inputGroup}>
-          <label style={styles.label}>Destinatário</label>
-          <input
-            type="text"
-            placeholder="0x..."
-            value={recipient}
-            onChange={(e) => setRecipient(e.target.value)}
-            style={styles.input}
-          />
-        </div>
-
-        {/* Fee */}
-        <div style={styles.feeBox}>
-          <span style={styles.feeText}>Taxa de privacidade: <strong>0,2%</strong></span>
-          {amount && (
-            <span style={styles.feeValue}>
-              ≈ {(parseFloat(amount) * 0.002).toFixed(6)} {selectedToken}
-            </span>
-          )}
-        </div>
-
-        {/* Send button */}
-        <button
-          onClick={sendTransaction}
-          disabled={loading || !account}
-          style={{ ...styles.sendBtn, opacity: loading || !account ? 0.6 : 1 }}
-        >
-          {loading ? "⏳ Processando..." : "👻 Enviar com Privacidade"}
-        </button>
-
-        {/* Status */}
-        {status && (
-          <div style={styles.statusBox}>
-            <pre style={styles.statusText}>{status}</pre>
-          </div>
-        )}
-      </div>
-
-      {/* History */}
-      {txHistory.length > 0 && (
-        <div style={styles.historyCard}>
-          <div style={styles.historyTitle}>Histórico</div>
-          {txHistory.map((tx) => (
-            <div key={tx.id} style={styles.historyItem}>
-              <div style={styles.historyRow}>
-                <span style={styles.historyBadge}>
-                  👻 {tx.splits} splits · {tx.hops} hops
-                </span>
-                <span style={styles.historyTime}>{tx.time}</span>
+            <div className="pipe-card">
+              <div className="pipe-hdr">
+                <span className="pipe-title">Pipeline Ativo</span>
+                <span className="pipe-badge">🔒 v2</span>
               </div>
-              <div style={styles.historyDetails}>
-                {tx.amount} {tx.token} → {tx.recipient}
-              </div>
-              <a
-                href={`https://sepolia.etherscan.io/tx/${tx.hash}`}
-                target="_blank"
-                rel="noreferrer"
-                style={styles.historyLink}
-              >
-                Ver no Etherscan ↗
-              </a>
+              {[
+                ["✂️","Split automático",    "2–4 partes aleatórias"],
+                ["🔀","Multi-hop por parte", "2–3 endereços efêmeros"],
+                ["⏱","Delay por hop",       "1–10 minutos"],
+                ["🎭","Dummy transactions",  "ruído entre hops"],
+              ].map(([ico, lbl, val]) => (
+                <div className="pipe-row" key={lbl}>
+                  <div className="row-l">
+                    <div className="row-ico">{ico}</div>
+                    <span className="row-lbl">{lbl}</span>
+                  </div>
+                  <span className="row-val">{val}</span>
+                </div>
+              ))}
             </div>
-          ))}
+
+            <div className="stats">
+              {[["0.2%","Taxa"],["≤10m","Estimativa"],["3","Tokens"]].map(([n,l]) => (
+                <div className="stat" key={l}>
+                  <span className="stat-n">{n}</span>
+                  <span className="stat-l">{l}</span>
+                </div>
+              ))}
+            </div>
+
+            <span className="sec-label" style={{marginTop:4}}>Histórico</span>
+            <div className="hist-card">
+              {history.length === 0
+                ? <div className="hist-empty">Nenhuma transação ainda</div>
+                : history.map(tx => (
+                  <div className="hist-item" key={tx.id}>
+                    <div className="hist-top">
+                      <span className="hist-tag">👻 {tx.splits} splits · {tx.hops} hops</span>
+                      <span className="hist-time">{tx.time}</span>
+                    </div>
+                    <div className="hist-det">{tx.amount} {tx.token} → {tx.recipient}</div>
+                    <a className="hist-link" href={`https://sepolia.etherscan.io/tx/${tx.hash}`} target="_blank" rel="noreferrer">
+                      Ver no Etherscan ↗
+                    </a>
+                  </div>
+                ))
+              }
+            </div>
+          </div>
+
+          {/* FORM */}
+          <div className="form-card">
+            <div className="form-title">Envio Privado</div>
+            <div className="form-sub">Sem rastreabilidade · Non-custodial</div>
+
+            <div className="toks">
+              {Object.keys(TOKENS).map(t => (
+                <button key={t} className={`tok${token===t?" on":""}`} onClick={() => setToken(t)}>{t}</button>
+              ))}
+            </div>
+
+            <div className="fld">
+              <label>Valor</label>
+              <input type="number" placeholder={`0.00 ${token}`} value={amount} onChange={e=>setAmount(e.target.value)} />
+            </div>
+
+            <div className="fld">
+              <label>Destinatário</label>
+              <input type="text" placeholder="0x..." value={recipient} onChange={e=>setRecipient(e.target.value)} />
+            </div>
+
+            <div className="fee-row">
+              <span className="fee-l">Taxa de privacidade · 0.2%</span>
+              <span className="fee-v">{fee}</span>
+            </div>
+
+            <button className="send-btn" onClick={send} disabled={loading || !account}>
+              {loading ? "⏳ Processando..." : "👻 Enviar com Privacidade"}
+            </button>
+
+            {status && <div className="status-box"><pre>{status}</pre></div>}
+          </div>
+
         </div>
-      )}
-    </div>
+      </div>
+    </>
   );
 }
-
-const styles = {
-  container: {
-    minHeight: "100vh",
-    backgroundColor: "#010408",
-    color: "#fff",
-    fontFamily: "'DM Mono', monospace",
-    padding: "20px",
-    maxWidth: "480px",
-    margin: "0 auto",
-  },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "32px",
-    paddingTop: "8px",
-  },
-  logo: { display: "flex", alignItems: "center", gap: "8px" },
-  logoIcon: { fontSize: "24px" },
-  logoText: { fontSize: "20px", fontWeight: "700", color: "#1E90FF" },
-  badge: {
-    fontSize: "10px",
-    padding: "2px 8px",
-    backgroundColor: "rgba(30,144,255,0.15)",
-    border: "1px solid rgba(30,144,255,0.3)",
-    borderRadius: "20px",
-    color: "#1E90FF",
-  },
-  connectBtn: {
-    padding: "8px 16px",
-    backgroundColor: "rgba(30,144,255,0.1)",
-    border: "1px solid rgba(30,144,255,0.3)",
-    borderRadius: "8px",
-    color: "#1E90FF",
-    cursor: "pointer",
-    fontSize: "13px",
-    fontFamily: "'DM Mono', monospace",
-  },
-  card: {
-    backgroundColor: "rgba(255,255,255,0.03)",
-    border: "1px solid rgba(255,255,255,0.08)",
-    borderRadius: "16px",
-    padding: "24px",
-    marginBottom: "16px",
-  },
-  cardHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "20px",
-  },
-  cardTitle: { fontSize: "18px", fontWeight: "700" },
-  privacyBadge: {
-    display: "flex",
-    alignItems: "center",
-    padding: "4px 10px",
-    backgroundColor: "rgba(30,144,255,0.1)",
-    border: "1px solid rgba(30,144,255,0.2)",
-    borderRadius: "20px",
-    color: "#1E90FF",
-  },
-  infoBox: {
-    backgroundColor: "rgba(30,144,255,0.05)",
-    border: "1px solid rgba(30,144,255,0.15)",
-    borderRadius: "10px",
-    padding: "14px",
-    marginBottom: "20px",
-  },
-  infoRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingBottom: "8px",
-    marginBottom: "8px",
-    borderBottom: "1px solid rgba(255,255,255,0.05)",
-  },
-  infoLabel: { fontSize: "12px", color: "rgba(255,255,255,0.5)" },
-  infoValue: { fontSize: "12px", color: "#1E90FF" },
-  tokenRow: { display: "flex", gap: "8px", marginBottom: "20px" },
-  tokenBtn: {
-    flex: 1,
-    padding: "10px",
-    backgroundColor: "rgba(255,255,255,0.05)",
-    border: "1px solid rgba(255,255,255,0.1)",
-    borderRadius: "8px",
-    color: "rgba(255,255,255,0.5)",
-    cursor: "pointer",
-    fontSize: "13px",
-    fontFamily: "'DM Mono', monospace",
-    transition: "all 0.2s",
-  },
-  tokenBtnActive: {
-    backgroundColor: "rgba(30,144,255,0.15)",
-    border: "1px solid rgba(30,144,255,0.4)",
-    color: "#1E90FF",
-  },
-  inputGroup: { marginBottom: "16px" },
-  label: { display: "block", fontSize: "12px", color: "rgba(255,255,255,0.4)", marginBottom: "8px" },
-  input: {
-    width: "100%",
-    padding: "12px",
-    backgroundColor: "rgba(255,255,255,0.05)",
-    border: "1px solid rgba(255,255,255,0.1)",
-    borderRadius: "8px",
-    color: "#fff",
-    fontSize: "14px",
-    fontFamily: "'DM Mono', monospace",
-    outline: "none",
-    boxSizing: "border-box",
-  },
-  feeBox: {
-    display: "flex",
-    justifyContent: "space-between",
-    padding: "10px 12px",
-    backgroundColor: "rgba(255,255,255,0.03)",
-    borderRadius: "8px",
-    marginBottom: "20px",
-  },
-  feeText: { fontSize: "12px", color: "rgba(255,255,255,0.4)" },
-  feeValue: { fontSize: "12px", color: "rgba(255,255,255,0.6)" },
-  sendBtn: {
-    width: "100%",
-    padding: "14px",
-    backgroundColor: "#1E90FF",
-    border: "none",
-    borderRadius: "10px",
-    color: "#fff",
-    fontSize: "15px",
-    fontWeight: "600",
-    cursor: "pointer",
-    fontFamily: "'DM Mono', monospace",
-    transition: "all 0.2s",
-  },
-  statusBox: {
-    marginTop: "16px",
-    padding: "12px",
-    backgroundColor: "rgba(30,144,255,0.08)",
-    border: "1px solid rgba(30,144,255,0.2)",
-    borderRadius: "8px",
-  },
-  statusText: {
-    fontSize: "12px",
-    color: "#1E90FF",
-    margin: 0,
-    whiteSpace: "pre-wrap",
-    fontFamily: "'DM Mono', monospace",
-  },
-  historyCard: {
-    backgroundColor: "rgba(255,255,255,0.03)",
-    border: "1px solid rgba(255,255,255,0.08)",
-    borderRadius: "16px",
-    padding: "20px",
-  },
-  historyTitle: { fontSize: "14px", color: "rgba(255,255,255,0.4)", marginBottom: "16px" },
-  historyItem: {
-    paddingBottom: "14px",
-    marginBottom: "14px",
-    borderBottom: "1px solid rgba(255,255,255,0.05)",
-  },
-  historyRow: { display: "flex", justifyContent: "space-between", marginBottom: "4px" },
-  historyBadge: { fontSize: "12px", color: "#1E90FF" },
-  historyTime: { fontSize: "11px", color: "rgba(255,255,255,0.3)" },
-  historyDetails: { fontSize: "12px", color: "rgba(255,255,255,0.5)", marginBottom: "6px" },
-  historyLink: { fontSize: "11px", color: "rgba(30,144,255,0.6)", textDecoration: "none" },
-};
