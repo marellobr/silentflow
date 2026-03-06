@@ -1,357 +1,447 @@
-require("dotenv").config();
-const express = require("express");
-const cors = require("cors");
-const { ethers } = require("ethers");
+import { useState, useEffect } from "react";
+import { ethers } from "ethers";
 
-const app = express();
-app.use(cors());
-app.use(express.json());
+const CONTRACT_ADDRESS = "0x3b1958ee8e636d69E868CaFCad3e7dB2eE8B4755";
+const BACKEND_URL = "https://silentflow-production.up.railway.app";
 
-// ─── CONFIG ───────────────────────────────────────────────
-const CONTRATO_ENDERECO = "0x3b1958ee8e636d69E868CaFCad3e7dB2eE8B4755";
-const CONTRATO_ABI = [
-  "function enviar(address payable destinatario) external payable",
-  "function enviarToken(address token, address destinatario, uint256 valor) external"
+const ABI = [
+  "function depositETH(address recipient) external payable",
+  "function depositToken(address token, uint256 amount, address recipient) external",
+  "function withdraw(address token, uint256 amount) external",
+  "event Deposit(address indexed sender, address indexed recipient, address token, uint256 amount)",
 ];
+
+const TOKENS = {
+  ETH: { address: null, decimals: 18, symbol: "ETH" },
+  USDC: { address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", decimals: 6, symbol: "USDC" },
+  USDT: { address: "0xaA8E23Fb1079EA71e0a56F48a2aA51851D8433D0", decimals: 6, symbol: "USDT" },
+};
+
 const ERC20_ABI = [
   "function approve(address spender, uint256 amount) external returns (bool)",
-  "function transfer(address to, uint256 amount) external returns (bool)",
-  "function decimals() external view returns (uint8)"
+  "function allowance(address owner, address spender) external view returns (uint256)",
+  "function balanceOf(address account) external view returns (uint256)",
 ];
-const FEE = 0.002;
 
-// ─── FILA ─────────────────────────────────────────────────
-// Cada item: { id, hops: [{from, to, valor, executeAt, done}], token, tokenAddress, decimals, status }
-const fila = [];
+export default function App() {
+  const [account, setAccount] = useState(null);
+  const [amount, setAmount] = useState("");
+  const [recipient, setRecipient] = useState("");
+  const [selectedToken, setSelectedToken] = useState("ETH");
+  const [status, setStatus] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [txHistory, setTxHistory] = useState([]);
+  const [pendingId, setPendingId] = useState(null);
 
-// ─── UTILS ────────────────────────────────────────────────
-
-function getProvider() {
-  return new ethers.JsonRpcProvider(process.env.ALCHEMY_URL);
-}
-
-function getMasterWallet() {
-  return new ethers.Wallet(process.env.CARTEIRA_PRIVADA, getProvider());
-}
-
-// Gera N carteiras efemeras
-function gerarCarteiraEfemera() {
-  return ethers.Wallet.createRandom().connect(getProvider());
-}
-
-// Divide valor em N partes aleatorias que somam o total
-function splitAleatorio(total, partes) {
-  const floatTotal = parseFloat(total);
-  const splits = [];
-  let restante = floatTotal;
-  for (let i = 0; i < partes - 1; i++) {
-    const min = restante * 0.15;
-    const max = restante * 0.55;
-    const parte = parseFloat((Math.random() * (max - min) + min).toFixed(8));
-    splits.push(parte);
-    restante = parseFloat((restante - parte).toFixed(8));
-  }
-  splits.push(parseFloat(restante.toFixed(8)));
-  return splits;
-}
-
-// Delay aleatorio em ms entre min e max horas
-function delayAleatorio(minHoras, maxHoras) {
-  const min = minHoras * 3600 * 1000;
-  const max = maxHoras * 3600 * 1000;
-  return Math.floor(Math.random() * (max - min) + min);
-}
-
-// Embaralha array
-function shuffle(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
-
-// Numero aleatorio de hops (2 ou 3)
-function numHops() {
-  return Math.random() < 0.5 ? 2 : 3;
-}
-
-// ─── MONTA PLANO DE HOPS ──────────────────────────────────
-// Para cada parte do split, cria cadeia de hops com carteiras efemeras
-function montarPlano(destinatario, splits, token, tokenAddress, decimals) {
-  const plano = [];
-  let tempoBase = Date.now();
-
-  // Embaralha splits para nao sair em ordem
-  const splitsEmbaralhados = shuffle([...splits]);
-
-  for (let i = 0; i < splitsEmbaralhados.length; i++) {
-    const valor = splitsEmbaralhados[i];
-    const hops = numHops();
-    const cadeia = [];
-
-    // Gera carteiras intermediarias
-    const carteirasIntermedias = [];
-    for (let h = 0; h < hops - 1; h++) {
-      carteirasIntermedias.push(gerarCarteiraEfemera());
-    }
-
-    // Monta hops: master → E1 → E2 → ... → destinatario
-    for (let h = 0; h < hops; h++) {
-      const de = h === 0 ? "master" : carteirasIntermedias[h - 1].address;
-      const deKey = h === 0 ? null : carteirasIntermedias[h - 1].privateKey;
-      const para = h === hops - 1 ? destinatario : carteirasIntermedias[h].address;
-
-      // Delay acumulativo aleatorio, cada hop tem delay separado
-      const delay = delayAleatorio(
-        h === 0 ? 0.016 : 0.5,  // primeiro hop: min 1 min, resto min 30 min
-        h === 0 ? 0.5 : 3       // primeiro hop: max 30 min, resto max 3h
-      );
-      tempoBase += delay + (i * delayAleatorio(0.1, 1) * 1000); // embaralha entre splits
-
-      cadeia.push({
-        hopIndex: h,
-        de,
-        deKey,
-        para,
-        valor: valor.toFixed(8),
-        executeAt: tempoBase,
-        done: false,
-        tentativas: 0
-      });
-    }
-
-    plano.push({
-      splitIndex: i,
-      valorOriginal: valor,
-      cadeia
-    });
-  }
-
-  return plano;
-}
-
-// ─── EXECUTA HOP ETH ──────────────────────────────────────
-async function executarHopETH(hop) {
-  const provider = getProvider();
-  let signer;
-
-  if (hop.de === "master") {
-    signer = getMasterWallet();
-  } else {
-    signer = new ethers.Wallet(hop.deKey, provider);
-  }
-
-  const valor = ethers.parseEther(hop.valor);
-  const gasPrice = (await provider.getFeeData()).gasPrice;
-  const gasCusto = gasPrice * 21000n;
-
-  // Se nao for o ultimo hop, reserva gas
-  const valorEnviar = hop.para === hop.para ? valor - gasCusto : valor;
-
-  const tx = await signer.sendTransaction({
-    to: hop.para,
-    value: valorEnviar > 0n ? valorEnviar : valor,
-    gasLimit: 21000
-  });
-  await tx.wait();
-  console.log("Hop ETH executado:", hop.de.slice(0,8), "->", hop.para.slice(0,8), "| valor:", hop.valor, "| tx:", tx.hash);
-  return tx.hash;
-}
-
-// ─── EXECUTA HOP TOKEN ────────────────────────────────────
-async function executarHopToken(hop, tokenAddress, decimals) {
-  const provider = getProvider();
-  let signer;
-
-  if (hop.de === "master") {
-    signer = getMasterWallet();
-  } else {
-    signer = new ethers.Wallet(hop.deKey, provider);
-  }
-
-  const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
-  const valor = ethers.parseUnits(hop.valor, decimals);
-  const tx = await tokenContract.transfer(hop.para, valor);
-  await tx.wait();
-  console.log("Hop TOKEN executado:", hop.de.slice(0,8), "->", hop.para.slice(0,8), "| valor:", hop.valor);
-  return tx.hash;
-}
-
-// ─── DUMMY TRANSACTION ────────────────────────────────────
-async function enviarDummy() {
-  try {
-    const provider = getProvider();
-    const master = getMasterWallet();
-    const dummy = gerarCarteiraEfemera();
-    const valorDummy = ethers.parseEther((Math.random() * 0.005 + 0.001).toFixed(6));
-    const gasPrice = (await provider.getFeeData()).gasPrice;
-
-    // Envia pequeno valor para carteira efemera aleatoria (ruido)
-    const tx = await master.sendTransaction({
-      to: dummy.address,
-      value: valorDummy,
-      gasLimit: 21000,
-      gasPrice
-    });
-    await tx.wait();
-
-    // Devolve imediatamente com delay curto
-    setTimeout(async () => {
-      try {
-        const dummySigner = dummy.connect(provider);
-        const saldo = await provider.getBalance(dummy.address);
-        const gasCusto = gasPrice * 21000n;
-        if (saldo > gasCusto) {
-          await dummySigner.sendTransaction({
-            to: master.address,
-            value: saldo - gasCusto,
-            gasLimit: 21000,
-            gasPrice
-          });
-        }
-      } catch(e) {}
-    }, delayAleatorio(0.016, 0.1));
-
-    console.log("Dummy transaction enviada para:", dummy.address.slice(0,10));
-  } catch(e) {
-    console.log("Erro dummy tx:", e.message);
-  }
-}
-
-// ─── PROCESSA FILA ────────────────────────────────────────
-setInterval(async () => {
-  const agora = Date.now();
-
-  for (const tx of fila) {
-    if (tx.status === "concluido" || tx.status === "erro") continue;
-
-    for (const split of tx.plano) {
-      for (const hop of split.cadeia) {
-        if (hop.done) continue;
-        if (hop.executeAt > agora) continue;
-
-        // Verifica se hop anterior foi concluido
-        if (hop.hopIndex > 0) {
-          const hopAnterior = split.cadeia[hop.hopIndex - 1];
-          if (!hopAnterior.done) continue;
-        }
-
-        // Marca como processando
-        hop.processando = true;
-        hop.tentativas++;
-
+  useEffect(() => {
+    if (pendingId) {
+      const interval = setInterval(async () => {
         try {
-          let hash;
-          if (tx.token === "ETH") {
-            hash = await executarHopETH(hop);
+          const res = await fetch(`${BACKEND_URL}/status/${pendingId}`);
+          const data = await res.json();
+          if (data.concluido) {
+            setStatus("✅ Transação concluída! Todos os hops entregues.");
+            clearInterval(interval);
+            setPendingId(null);
           } else {
-            hash = await executarHopToken(hop, tx.tokenAddress, tx.decimals);
+            setStatus(`⏳ Processando... ${data.hopsFeitos}/${data.hopsTotal} hops (${data.minutosRestantes} min restantes)`);
           }
-          hop.done = true;
-          hop.hash = hash;
-          hop.processando = false;
-
-          // Envia dummy apos cada hop real
-          if (Math.random() < 0.6) {
-            setTimeout(() => enviarDummy(), delayAleatorio(0.016, 0.25));
-          }
-
-        } catch(err) {
-          hop.processando = false;
-          console.error("Erro no hop:", err.message);
-          if (hop.tentativas >= 3) {
-            tx.status = "erro";
-            console.error("TX falhou apos 3 tentativas:", tx.id);
-          }
+        } catch (e) {
+          // silently fail
         }
-      }
+      }, 15000);
+      return () => clearInterval(interval);
     }
+  }, [pendingId]);
 
-    // Verifica se todos os hops foram concluidos
-    const totalHops = tx.plano.reduce((sum, s) => sum + s.cadeia.length, 0);
-    const hopsFeitos = tx.plano.reduce((sum, s) => sum + s.cadeia.filter(h => h.done).length, 0);
-    if (hopsFeitos === totalHops) {
-      tx.status = "concluido";
-      console.log("TX concluida:", tx.id, "| splits:", tx.plano.length, "| hops totais:", totalHops);
-    }
-  }
-}, 15000); // Verifica a cada 15 segundos
-
-// ─── ENDPOINTS ────────────────────────────────────────────
-
-// Agendar transacao silenciosa com split + multi-hop
-app.post("/agendar", (req, res) => {
-  const { destinatario, valor, token, tokenAddress, decimals } = req.body;
-
-  if (!destinatario || !valor || !token) {
-    return res.status(400).json({ erro: "Dados incompletos" });
-  }
-
-  // Desconta fee
-  const valorLiquido = (parseFloat(valor) * (1 - FEE)).toFixed(8);
-
-  // Numero de splits: 2, 3 ou 4 aleatorio
-  const numSplits = Math.floor(Math.random() * 3) + 2;
-  const splits = splitAleatorio(valorLiquido, numSplits);
-
-  // Monta plano de hops
-  const plano = montarPlano(destinatario, splits, token, tokenAddress, decimals || 18);
-
-  // Calcula tempo estimado (ultimo executeAt)
-  let maxExecuteAt = 0;
-  plano.forEach(s => s.cadeia.forEach(h => { if (h.executeAt > maxExecuteAt) maxExecuteAt = h.executeAt; }));
-  const horasEstimadas = ((maxExecuteAt - Date.now()) / 3600000).toFixed(1);
-
-  const txEntry = {
-    id: Date.now().toString(),
-    destinatario,
-    valorOriginal: valor,
-    valorLiquido,
-    token,
-    tokenAddress: tokenAddress || null,
-    decimals: decimals || 18,
-    plano,
-    status: "pendente",
-    numSplits,
-    criadoEm: new Date().toISOString()
+  const connectWallet = async () => {
+    if (!window.ethereum) return alert("MetaMask não encontrada.");
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const accounts = await provider.send("eth_requestAccounts", []);
+    setAccount(accounts[0]);
   };
 
-  fila.push(txEntry);
+  const sendTransaction = async () => {
+    if (!account) return alert("Conecte sua carteira primeiro.");
+    if (!amount || !recipient) return alert("Preencha todos os campos.");
 
-  console.log("TX agendada:", txEntry.id, "| splits:", numSplits, "| estimativa:", horasEstimadas, "h");
+    setLoading(true);
+    setStatus("🔒 Iniciando pipeline de privacidade...");
 
-  res.json({
-    sucesso: true,
-    id: txEntry.id,
-    numSplits,
-    horasEstimadas,
-    mensagem: "Transacao agendada com " + numSplits + " splits e multi-hop. Estimativa: ~" + horasEstimadas + "h"
-  });
-});
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
 
-// Status de uma transacao
-app.get("/status/:id", (req, res) => {
-  const tx = fila.find(t => t.id === req.params.id);
-  if (!tx) return res.json({ status: "nao_encontrado" });
+      let txHash;
 
-  const totalHops = tx.plano.reduce((sum, s) => sum + s.cadeia.length, 0);
-  const hopsFeitos = tx.plano.reduce((sum, s) => sum + s.cadeia.filter(h => h.done).length, 0);
+      if (selectedToken === "ETH") {
+        const value = ethers.parseEther(amount);
+        const tx = await contract.depositETH(recipient, { value });
+        await tx.wait();
+        txHash = tx.hash;
+      } else {
+        const token = TOKENS[selectedToken];
+        const tokenContract = new ethers.Contract(token.address, ERC20_ABI, signer);
+        const parsedAmount = ethers.parseUnits(amount, token.decimals);
 
-  let maxExecuteAt = 0;
-  tx.plano.forEach(s => s.cadeia.forEach(h => { if (!h.done && h.executeAt > maxExecuteAt) maxExecuteAt = h.executeAt; }));
-  const minutosRestantes = Math.ceil(Math.max(0, maxExecuteAt - Date.now()) / 60000);
+        const allowance = await tokenContract.allowance(account, CONTRACT_ADDRESS);
+        if (allowance < parsedAmount) {
+          const approveTx = await tokenContract.approve(CONTRACT_ADDRESS, parsedAmount);
+          await approveTx.wait();
+        }
 
-  res.json({
-    status: tx.status,
-    progresso: hopsFeitos + "/" + totalHops + " hops",
-    minutosRestantes,
-    numSplits: tx.numSplits
-  });
-});
+        const tx = await contract.depositToken(token.address, parsedAmount, recipient);
+        await tx.wait();
+        txHash = tx.hash;
+      }
 
-// Health check
-app.get("/health", (req, res) => res.json({ ok: true, filaSize: fila.length }));
+      // Agendamento no backend
+      const res = await fetch(`${BACKEND_URL}/agendar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          txHash,
+          destinatario: recipient,
+          valor: amount,
+          token: selectedToken,
+        }),
+      });
 
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log("SilentFlow v2 backend rodando na porta", PORT));
+      const data = await res.json();
+      setPendingId(data.id);
+
+      const newTx = {
+        id: data.id,
+        hash: txHash,
+        amount,
+        token: selectedToken,
+        recipient: recipient.slice(0, 6) + "..." + recipient.slice(-4),
+        splits: data.splits,
+        hops: data.hopsTotal,
+        estimativa: data.estimativaMinutos,
+        time: new Date().toLocaleTimeString("pt-BR"),
+        status: "processando",
+      };
+
+      setTxHistory((prev) => [newTx, ...prev]);
+      setStatus(
+        `👻 Pipeline iniciado!\nValor dividido em ${data.splits} partes.\nCada parte: 2–3 hops efêmeros.\nEstimativa: ~${data.estimativaMinutos} minutos`
+      );
+      setAmount("");
+      setRecipient("");
+    } catch (err) {
+      console.error(err);
+      setStatus("❌ Erro: " + (err.reason || err.message));
+    }
+
+    setLoading(false);
+  };
+
+  return (
+    <div style={styles.container}>
+      {/* Header */}
+      <div style={styles.header}>
+        <div style={styles.logo}>
+          <span style={styles.logoIcon}>👻</span>
+          <span style={styles.logoText}>SilentFlow</span>
+          <span style={styles.badge}>v2 · Sepolia</span>
+        </div>
+        <button onClick={connectWallet} style={styles.connectBtn}>
+          {account ? account.slice(0, 6) + "..." + account.slice(-4) : "Conectar Carteira"}
+        </button>
+      </div>
+
+      {/* Main Card */}
+      <div style={styles.card}>
+        <div style={styles.cardHeader}>
+          <span style={styles.cardTitle}>Envio Privado</span>
+          <div style={styles.privacyBadge}>
+            <span style={{ fontSize: 12 }}>🔒</span>
+            <span style={{ fontSize: 12, marginLeft: 4 }}>Split + Multi-hop + Dummy Tx</span>
+          </div>
+        </div>
+
+        {/* Privacy info box */}
+        <div style={styles.infoBox}>
+          <div style={styles.infoRow}>
+            <span style={styles.infoLabel}>✂️ Split automático</span>
+            <span style={styles.infoValue}>2–4 partes aleatórias</span>
+          </div>
+          <div style={styles.infoRow}>
+            <span style={styles.infoLabel}>🔀 Multi-hop por parte</span>
+            <span style={styles.infoValue}>2–3 endereços efêmeros</span>
+          </div>
+          <div style={styles.infoRow}>
+            <span style={styles.infoLabel}>⏱ Delay estimado</span>
+            <span style={styles.infoValue}>1–10 minutos</span>
+          </div>
+          <div style={styles.infoRow}>
+            <span style={styles.infoLabel}>🎭 Dummy transactions</span>
+            <span style={styles.infoValue}>ruído entre hops</span>
+          </div>
+        </div>
+
+        {/* Token selector */}
+        <div style={styles.tokenRow}>
+          {Object.keys(TOKENS).map((token) => (
+            <button
+              key={token}
+              onClick={() => setSelectedToken(token)}
+              style={{
+                ...styles.tokenBtn,
+                ...(selectedToken === token ? styles.tokenBtnActive : {}),
+              }}
+            >
+              {token}
+            </button>
+          ))}
+        </div>
+
+        {/* Amount */}
+        <div style={styles.inputGroup}>
+          <label style={styles.label}>Valor</label>
+          <input
+            type="number"
+            placeholder={`0.0 ${selectedToken}`}
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            style={styles.input}
+          />
+        </div>
+
+        {/* Recipient */}
+        <div style={styles.inputGroup}>
+          <label style={styles.label}>Destinatário</label>
+          <input
+            type="text"
+            placeholder="0x..."
+            value={recipient}
+            onChange={(e) => setRecipient(e.target.value)}
+            style={styles.input}
+          />
+        </div>
+
+        {/* Fee */}
+        <div style={styles.feeBox}>
+          <span style={styles.feeText}>Taxa de privacidade: <strong>0,2%</strong></span>
+          {amount && (
+            <span style={styles.feeValue}>
+              ≈ {(parseFloat(amount) * 0.002).toFixed(6)} {selectedToken}
+            </span>
+          )}
+        </div>
+
+        {/* Send button */}
+        <button
+          onClick={sendTransaction}
+          disabled={loading || !account}
+          style={{ ...styles.sendBtn, opacity: loading || !account ? 0.6 : 1 }}
+        >
+          {loading ? "⏳ Processando..." : "👻 Enviar com Privacidade"}
+        </button>
+
+        {/* Status */}
+        {status && (
+          <div style={styles.statusBox}>
+            <pre style={styles.statusText}>{status}</pre>
+          </div>
+        )}
+      </div>
+
+      {/* History */}
+      {txHistory.length > 0 && (
+        <div style={styles.historyCard}>
+          <div style={styles.historyTitle}>Histórico</div>
+          {txHistory.map((tx) => (
+            <div key={tx.id} style={styles.historyItem}>
+              <div style={styles.historyRow}>
+                <span style={styles.historyBadge}>
+                  👻 {tx.splits} splits · {tx.hops} hops
+                </span>
+                <span style={styles.historyTime}>{tx.time}</span>
+              </div>
+              <div style={styles.historyDetails}>
+                {tx.amount} {tx.token} → {tx.recipient}
+              </div>
+              <a
+                href={`https://sepolia.etherscan.io/tx/${tx.hash}`}
+                target="_blank"
+                rel="noreferrer"
+                style={styles.historyLink}
+              >
+                Ver no Etherscan ↗
+              </a>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const styles = {
+  container: {
+    minHeight: "100vh",
+    backgroundColor: "#010408",
+    color: "#fff",
+    fontFamily: "'DM Mono', monospace",
+    padding: "20px",
+    maxWidth: "480px",
+    margin: "0 auto",
+  },
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: "32px",
+    paddingTop: "8px",
+  },
+  logo: { display: "flex", alignItems: "center", gap: "8px" },
+  logoIcon: { fontSize: "24px" },
+  logoText: { fontSize: "20px", fontWeight: "700", color: "#1E90FF" },
+  badge: {
+    fontSize: "10px",
+    padding: "2px 8px",
+    backgroundColor: "rgba(30,144,255,0.15)",
+    border: "1px solid rgba(30,144,255,0.3)",
+    borderRadius: "20px",
+    color: "#1E90FF",
+  },
+  connectBtn: {
+    padding: "8px 16px",
+    backgroundColor: "rgba(30,144,255,0.1)",
+    border: "1px solid rgba(30,144,255,0.3)",
+    borderRadius: "8px",
+    color: "#1E90FF",
+    cursor: "pointer",
+    fontSize: "13px",
+    fontFamily: "'DM Mono', monospace",
+  },
+  card: {
+    backgroundColor: "rgba(255,255,255,0.03)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    borderRadius: "16px",
+    padding: "24px",
+    marginBottom: "16px",
+  },
+  cardHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: "20px",
+  },
+  cardTitle: { fontSize: "18px", fontWeight: "700" },
+  privacyBadge: {
+    display: "flex",
+    alignItems: "center",
+    padding: "4px 10px",
+    backgroundColor: "rgba(30,144,255,0.1)",
+    border: "1px solid rgba(30,144,255,0.2)",
+    borderRadius: "20px",
+    color: "#1E90FF",
+  },
+  infoBox: {
+    backgroundColor: "rgba(30,144,255,0.05)",
+    border: "1px solid rgba(30,144,255,0.15)",
+    borderRadius: "10px",
+    padding: "14px",
+    marginBottom: "20px",
+  },
+  infoRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingBottom: "8px",
+    marginBottom: "8px",
+    borderBottom: "1px solid rgba(255,255,255,0.05)",
+  },
+  infoLabel: { fontSize: "12px", color: "rgba(255,255,255,0.5)" },
+  infoValue: { fontSize: "12px", color: "#1E90FF" },
+  tokenRow: { display: "flex", gap: "8px", marginBottom: "20px" },
+  tokenBtn: {
+    flex: 1,
+    padding: "10px",
+    backgroundColor: "rgba(255,255,255,0.05)",
+    border: "1px solid rgba(255,255,255,0.1)",
+    borderRadius: "8px",
+    color: "rgba(255,255,255,0.5)",
+    cursor: "pointer",
+    fontSize: "13px",
+    fontFamily: "'DM Mono', monospace",
+    transition: "all 0.2s",
+  },
+  tokenBtnActive: {
+    backgroundColor: "rgba(30,144,255,0.15)",
+    border: "1px solid rgba(30,144,255,0.4)",
+    color: "#1E90FF",
+  },
+  inputGroup: { marginBottom: "16px" },
+  label: { display: "block", fontSize: "12px", color: "rgba(255,255,255,0.4)", marginBottom: "8px" },
+  input: {
+    width: "100%",
+    padding: "12px",
+    backgroundColor: "rgba(255,255,255,0.05)",
+    border: "1px solid rgba(255,255,255,0.1)",
+    borderRadius: "8px",
+    color: "#fff",
+    fontSize: "14px",
+    fontFamily: "'DM Mono', monospace",
+    outline: "none",
+    boxSizing: "border-box",
+  },
+  feeBox: {
+    display: "flex",
+    justifyContent: "space-between",
+    padding: "10px 12px",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderRadius: "8px",
+    marginBottom: "20px",
+  },
+  feeText: { fontSize: "12px", color: "rgba(255,255,255,0.4)" },
+  feeValue: { fontSize: "12px", color: "rgba(255,255,255,0.6)" },
+  sendBtn: {
+    width: "100%",
+    padding: "14px",
+    backgroundColor: "#1E90FF",
+    border: "none",
+    borderRadius: "10px",
+    color: "#fff",
+    fontSize: "15px",
+    fontWeight: "600",
+    cursor: "pointer",
+    fontFamily: "'DM Mono', monospace",
+    transition: "all 0.2s",
+  },
+  statusBox: {
+    marginTop: "16px",
+    padding: "12px",
+    backgroundColor: "rgba(30,144,255,0.08)",
+    border: "1px solid rgba(30,144,255,0.2)",
+    borderRadius: "8px",
+  },
+  statusText: {
+    fontSize: "12px",
+    color: "#1E90FF",
+    margin: 0,
+    whiteSpace: "pre-wrap",
+    fontFamily: "'DM Mono', monospace",
+  },
+  historyCard: {
+    backgroundColor: "rgba(255,255,255,0.03)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    borderRadius: "16px",
+    padding: "20px",
+  },
+  historyTitle: { fontSize: "14px", color: "rgba(255,255,255,0.4)", marginBottom: "16px" },
+  historyItem: {
+    paddingBottom: "14px",
+    marginBottom: "14px",
+    borderBottom: "1px solid rgba(255,255,255,0.05)",
+  },
+  historyRow: { display: "flex", justifyContent: "space-between", marginBottom: "4px" },
+  historyBadge: { fontSize: "12px", color: "#1E90FF" },
+  historyTime: { fontSize: "11px", color: "rgba(255,255,255,0.3)" },
+  historyDetails: { fontSize: "12px", color: "rgba(255,255,255,0.5)", marginBottom: "6px" },
+  historyLink: { fontSize: "11px", color: "rgba(30,144,255,0.6)", textDecoration: "none" },
+};
