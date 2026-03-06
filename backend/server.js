@@ -28,10 +28,10 @@ function splitAleatorio(total, partes) {
   return vals.sort(() => Math.random() - 0.5);
 }
 
-// Delay de 1 a 10 minutos (em ms)
+// Delay de 30s a 3 minutos (em ms)
 function delayAleatorio() {
-  const minMs = 1 * 60 * 1000;
-  const maxMs = 10 * 60 * 1000;
+  const minMs = 30 * 1000;
+  const maxMs = 3 * 60 * 1000;
   return minMs + Math.random() * (maxMs - minMs);
 }
 
@@ -222,8 +222,8 @@ app.post("/agendar", async (req, res) => {
       criadoEm: Date.now(),
     });
 
-    // Estimativa: máximo de 10 min
-    const estimativaMinutos = 10;
+    // Estimativa: hopsTotal * 3 min max
+    const estimativaMinutos = hopsTotal * 3;
 
     console.log(`📥 Nova tx agendada: ${id} — ${numSplits} splits, ${hopsTotal} hops`);
 
@@ -243,11 +243,11 @@ app.get("/status/:id", (req, res) => {
   const tx = fila.get(req.params.id);
   if (!tx) return res.status(404).json({ erro: "Não encontrado" });
 
-  const criadoEm = tx.criadoEm || Date.now();
-  const decorrido = (Date.now() - criadoEm) / 1000 / 60;
-  const minutosRestantes = Math.max(0, 10 - decorrido).toFixed(1);
-  const hopsFeitos = tx.hopsFeitos || 0;
-  const hopsTotal  = tx.hopsTotal  || 0;
+  const hopsFeitos  = tx.hopsFeitos || 0;
+  const hopsTotal   = tx.hopsTotal  || 1;
+  const hopsRestantes = hopsTotal - hopsFeitos;
+  // Each remaining hop takes up to 3 min
+  const minutosRestantes = (hopsRestantes * 3).toFixed(0);
 
   res.json({
     concluido: tx.concluido || false,
