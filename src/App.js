@@ -3,7 +3,6 @@ import { ethers } from "ethers";
 
 const CONTRACT_ADDRESS = "0x3b1958ee8e636d69E868CaFCad3e7dB2eE8B4755";
 const BACKEND_URL = "https://silentflow-production.up.railway.app";
-const LOGO_URL = "https://raw.githubusercontent.com/marellobr/silentflow/main/frontend/public/logo-silentflow-principal.png";
 
 const ABI = [
   "function depositETH(address recipient) external payable",
@@ -23,107 +22,112 @@ const TOKENS = {
 };
 
 const STYLE = `
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{background:#03060f;color:#e8eaf0;font-family:'DM Mono',monospace;min-height:100vh}
+body{background:#050810;color:#dde1ec;font-family:'DM Mono',monospace;min-height:100vh}
 
-.bg{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
-.bg::before{content:'';position:absolute;width:800px;height:800px;top:-300px;left:50%;transform:translateX(-50%);background:radial-gradient(ellipse,rgba(30,144,255,.07) 0%,transparent 70%);border-radius:50%}
-.bg::after{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:60%;height:1px;background:linear-gradient(90deg,transparent,rgba(30,144,255,.35),transparent)}
+.bg{position:fixed;inset:0;z-index:0;pointer-events:none}
+.bg::before{content:'';position:absolute;width:900px;height:500px;top:-200px;left:50%;transform:translateX(-50%);background:radial-gradient(ellipse,rgba(30,144,255,.055) 0%,transparent 68%)}
+.bg::after{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:50%;height:1px;background:linear-gradient(90deg,transparent,rgba(30,144,255,.3),transparent)}
 
-.wrap{position:relative;z-index:1;max-width:1000px;margin:0 auto;padding:0 24px 80px}
+.wrap{position:relative;z-index:1;max-width:980px;margin:0 auto;padding:0 28px 100px}
 
 /* HEADER */
-.hdr{display:flex;align-items:center;justify-content:space-between;padding:28px 0 44px;border-bottom:1px solid rgba(255,255,255,.05);margin-bottom:44px}
-.logo{display:flex;align-items:center;gap:12px}
-.logo img{height:34px;width:auto;object-fit:contain;filter:drop-shadow(0 0 14px rgba(30,144,255,.5))}
-.logo-fb{height:34px;width:34px;background:linear-gradient(135deg,#1E90FF,#00BFFF);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px}
-.logo-name{font-family:'Syne',sans-serif;font-size:21px;font-weight:800;color:#fff;letter-spacing:-.3px}
-.logo-name b{color:#1E90FF}
-.net-tag{font-size:10px;padding:3px 9px;border:1px solid rgba(30,144,255,.25);border-radius:20px;color:rgba(30,144,255,.75);background:rgba(30,144,255,.06);letter-spacing:.5px}
-.conn-btn{padding:10px 20px;background:rgba(30,144,255,.09);border:1px solid rgba(30,144,255,.22);border-radius:10px;color:#1E90FF;font-family:'DM Mono',monospace;font-size:13px;cursor:pointer;transition:all .2s;letter-spacing:.2px}
-.conn-btn:hover{background:rgba(30,144,255,.17);border-color:rgba(30,144,255,.45)}
-.conn-btn.on{background:rgba(0,255,136,.07);border-color:rgba(0,255,136,.22);color:#00ff88}
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:30px 0 42px;border-bottom:1px solid rgba(255,255,255,.04);margin-bottom:48px}
+.logo{display:flex;align-items:center;gap:14px}
+.logo img{height:32px;width:auto;object-fit:contain}
+.net{font-size:10px;padding:3px 9px;border:1px solid rgba(255,255,255,.1);border-radius:20px;color:rgba(255,255,255,.3);letter-spacing:.8px}
+.conn-btn{padding:10px 20px;background:transparent;border:1px solid rgba(255,255,255,.12);border-radius:10px;color:rgba(255,255,255,.5);font-family:'DM Mono',monospace;font-size:13px;cursor:pointer;transition:all .2s;letter-spacing:.2px}
+.conn-btn:hover{border-color:rgba(255,255,255,.25);color:rgba(255,255,255,.8)}
+.conn-btn.on{border-color:rgba(0,220,100,.25);color:#00dc64;background:rgba(0,220,100,.05)}
 
-/* GRID */
-.grid{display:grid;grid-template-columns:1fr 370px;gap:24px;align-items:start}
+/* LAYOUT */
+.grid{display:grid;grid-template-columns:1fr 360px;gap:28px;align-items:start}
 
 /* LEFT */
-.left{display:flex;flex-direction:column;gap:20px}
-.sec-label{font-family:'Syne',sans-serif;font-size:11px;font-weight:600;color:rgba(255,255,255,.25);letter-spacing:2px;text-transform:uppercase}
+.left{display:flex;flex-direction:column;gap:16px}
 
-.pipe-card{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.07);border-radius:16px;overflow:hidden}
-.pipe-hdr{display:flex;align-items:center;justify-content:space-between;padding:18px 22px 16px;border-bottom:1px solid rgba(255,255,255,.05)}
-.pipe-title{font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:#fff}
-.pipe-badge{display:flex;align-items:center;gap:5px;padding:4px 11px;background:rgba(30,144,255,.09);border:1px solid rgba(30,144,255,.18);border-radius:20px;font-size:11px;color:#1E90FF}
-
-.pipe-row{display:flex;align-items:center;justify-content:space-between;padding:13px 22px;transition:background .15s}
-.pipe-row:hover{background:rgba(255,255,255,.02)}
-.pipe-row+.pipe-row{border-top:1px solid rgba(255,255,255,.04)}
-.row-l{display:flex;align-items:center;gap:10px}
-.row-ico{width:30px;height:30px;background:rgba(30,144,255,.07);border:1px solid rgba(30,144,255,.13);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px}
-.row-lbl{font-size:13px;color:rgba(255,255,255,.55)}
-.row-val{font-size:13px;color:#1E90FF;font-weight:500}
-
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-.stat{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:16px;text-align:center}
-.stat-n{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#1E90FF;display:block;margin-bottom:3px}
-.stat-l{font-size:10px;color:rgba(255,255,255,.28);letter-spacing:.5px;text-transform:uppercase}
-
-.hist-card{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:18px 22px}
-.hist-empty{text-align:center;padding:28px 0;color:rgba(255,255,255,.18);font-size:13px}
-.hist-item{padding:13px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.hist-card{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:22px 24px}
+.hist-title{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:rgba(255,255,255,.35);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:18px}
+.hist-empty{color:rgba(255,255,255,.18);font-size:13px;text-align:center;padding:24px 0}
+.hist-item{padding:14px 0;border-bottom:1px solid rgba(255,255,255,.04)}
 .hist-item:last-child{border-bottom:none}
-.hist-top{display:flex;justify-content:space-between;margin-bottom:5px}
-.hist-tag{font-size:11px;color:#1E90FF;background:rgba(30,144,255,.07);border:1px solid rgba(30,144,255,.13);border-radius:20px;padding:2px 9px}
-.hist-time{font-size:11px;color:rgba(255,255,255,.22)}
-.hist-det{font-size:12px;color:rgba(255,255,255,.4);margin-bottom:5px}
-.hist-link{font-size:11px;color:rgba(30,144,255,.45);text-decoration:none}
-.hist-link:hover{color:#1E90FF}
+.hist-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
+.hist-amt{font-size:15px;font-weight:500;color:#dde1ec}
+.hist-time{font-size:11px;color:rgba(255,255,255,.2)}
+.hist-to{font-size:12px;color:rgba(255,255,255,.35);margin-bottom:6px}
+.hist-status{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:2px 9px;border-radius:20px}
+.hist-status.done{background:rgba(0,220,100,.07);border:1px solid rgba(0,220,100,.15);color:#00dc64}
+.hist-status.proc{background:rgba(30,144,255,.07);border:1px solid rgba(30,144,255,.15);color:#4da6ff}
+.hist-link{float:right;font-size:11px;color:rgba(255,255,255,.25);text-decoration:none;transition:color .2s}
+.hist-link:hover{color:rgba(255,255,255,.55)}
 
-/* FORM */
-.form-card{background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:26px;position:sticky;top:24px}
-.form-title{font-family:'Syne',sans-serif;font-size:19px;font-weight:800;color:#fff;margin-bottom:3px}
-.form-sub{font-size:11px;color:rgba(255,255,255,.28);margin-bottom:22px;letter-spacing:.2px}
+/* privacy details - collapsed at bottom */
+.details-toggle{display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:14px 18px;background:rgba(255,255,255,.015);border:1px solid rgba(255,255,255,.05);border-radius:12px;transition:background .2s;user-select:none}
+.details-toggle:hover{background:rgba(255,255,255,.03)}
+.details-toggle-label{font-size:12px;color:rgba(255,255,255,.3);letter-spacing:.3px}
+.details-toggle-icon{font-size:11px;color:rgba(255,255,255,.2);transition:transform .25s}
+.details-toggle-icon.open{transform:rotate(180deg)}
+.details-body{overflow:hidden;transition:max-height .3s ease,opacity .3s ease}
+.details-body.closed{max-height:0;opacity:0;pointer-events:none}
+.details-body.open{max-height:300px;opacity:1}
+.details-inner{padding:4px 0 0}
+.detail-row{display:flex;justify-content:space-between;align-items:center;padding:10px 18px;border-bottom:1px solid rgba(255,255,255,.03)}
+.detail-row:last-child{border-bottom:none}
+.detail-k{font-size:12px;color:rgba(255,255,255,.3)}
+.detail-v{font-size:12px;color:rgba(255,255,255,.5)}
 
-.toks{display:flex;gap:8px;margin-bottom:18px}
-.tok{flex:1;padding:10px 0;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:9px;color:rgba(255,255,255,.38);font-family:'DM Mono',monospace;font-size:13px;cursor:pointer;transition:all .2s}
-.tok:hover{border-color:rgba(30,144,255,.28);color:rgba(255,255,255,.65)}
-.tok.on{background:rgba(30,144,255,.11);border-color:rgba(30,144,255,.38);color:#1E90FF}
+/* FORM CARD */
+.form-card{background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.07);border-radius:20px;padding:28px;position:sticky;top:24px}
+.form-title{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:#fff;margin-bottom:2px;letter-spacing:-.3px}
+.form-sub{font-size:11px;color:rgba(255,255,255,.25);margin-bottom:26px}
 
-.fld{margin-bottom:15px}
-.fld label{display:block;font-size:10px;color:rgba(255,255,255,.3);letter-spacing:1.2px;text-transform:uppercase;margin-bottom:7px}
-.fld input{width:100%;padding:13px 13px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:10px;color:#fff;font-family:'DM Mono',monospace;font-size:14px;outline:none;transition:border-color .2s}
-.fld input:focus{border-color:rgba(30,144,255,.38)}
-.fld input::placeholder{color:rgba(255,255,255,.18)}
+.toks{display:flex;gap:6px;margin-bottom:20px}
+.tok{flex:1;padding:9px 0;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:8px;color:rgba(255,255,255,.35);font-family:'DM Mono',monospace;font-size:13px;cursor:pointer;transition:all .2s;font-weight:400}
+.tok:hover{border-color:rgba(255,255,255,.15);color:rgba(255,255,255,.6)}
+.tok.on{background:rgba(30,144,255,.1);border-color:rgba(30,144,255,.35);color:#4da6ff}
 
-.fee-row{display:flex;justify-content:space-between;padding:9px 12px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.05);border-radius:8px;margin-bottom:18px}
-.fee-l{font-size:11px;color:rgba(255,255,255,.28)}
-.fee-v{font-size:11px;color:rgba(255,255,255,.45)}
+.fld{margin-bottom:14px}
+.fld label{display:block;font-size:10px;color:rgba(255,255,255,.28);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:7px}
+.fld input{width:100%;padding:13px 14px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07);border-radius:10px;color:#fff;font-family:'DM Mono',monospace;font-size:14px;outline:none;transition:border-color .2s}
+.fld input:focus{border-color:rgba(30,144,255,.35);background:rgba(30,144,255,.04)}
+.fld input::placeholder{color:rgba(255,255,255,.15)}
 
-.send-btn{width:100%;padding:15px;background:linear-gradient(135deg,#1E90FF,#0062cc);border:none;border-radius:12px;color:#fff;font-family:'Syne',sans-serif;font-size:15px;font-weight:700;cursor:pointer;transition:all .2s;box-shadow:0 4px 24px rgba(30,144,255,.22);letter-spacing:.2px}
-.send-btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 6px 32px rgba(30,144,255,.35)}
-.send-btn:disabled{opacity:.5;cursor:not-allowed}
+.divider{height:1px;background:rgba(255,255,255,.05);margin:18px 0}
 
-.status-box{margin-top:15px;padding:13px;background:rgba(30,144,255,.06);border:1px solid rgba(30,144,255,.16);border-radius:10px}
-.status-box pre{font-family:'DM Mono',monospace;font-size:12px;color:#1E90FF;white-space:pre-wrap;margin:0;line-height:1.65}
+.fee-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+.fee-l{font-size:12px;color:rgba(255,255,255,.25)}
+.fee-v{font-size:12px;color:rgba(255,255,255,.4)}
 
-@media(max-width:760px){
+.send-btn{width:100%;padding:15px;background:linear-gradient(135deg,#1a7fe8,#0055bb);border:none;border-radius:11px;color:#fff;font-family:'Syne',sans-serif;font-size:15px;font-weight:700;cursor:pointer;transition:all .2s;letter-spacing:.2px;box-shadow:0 2px 20px rgba(30,144,255,.18)}
+.send-btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 4px 28px rgba(30,144,255,.28)}
+.send-btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+
+.status-box{margin-top:14px;padding:12px 14px;background:rgba(30,144,255,.05);border:1px solid rgba(30,144,255,.14);border-radius:10px}
+.status-box pre{font-family:'DM Mono',monospace;font-size:12px;color:#4da6ff;white-space:pre-wrap;margin:0;line-height:1.6}
+.status-box.ok{background:rgba(0,220,100,.05);border-color:rgba(0,220,100,.14)}
+.status-box.ok pre{color:#00dc64}
+.status-box.err{background:rgba(255,80,80,.05);border-color:rgba(255,80,80,.14)}
+.status-box.err pre{color:#ff6b6b}
+
+@media(max-width:740px){
   .grid{grid-template-columns:1fr}
   .form-card{position:static}
+  .hdr{padding:20px 0 32px;margin-bottom:32px}
 }
 `;
 
 export default function App() {
-  const [account, setAccount] = useState(null);
-  const [amount, setAmount]   = useState("");
+  const [account, setAccount]     = useState(null);
+  const [amount, setAmount]       = useState("");
   const [recipient, setRecipient] = useState("");
-  const [token, setToken]     = useState("ETH");
-  const [status, setStatus]   = useState("");
-  const [loading, setLoading] = useState(false);
-  const [history, setHistory] = useState([]);
+  const [token, setToken]         = useState("ETH");
+  const [status, setStatus]       = useState("");
+  const [statusType, setStatusType] = useState(""); // "", "ok", "err"
+  const [loading, setLoading]     = useState(false);
+  const [history, setHistory]     = useState([]);
   const [pendingId, setPendingId] = useState(null);
-  const [logoErr, setLogoErr] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   useEffect(() => {
     const s = document.createElement("style");
@@ -139,11 +143,14 @@ export default function App() {
         const r = await fetch(`${BACKEND_URL}/status/${pendingId}`);
         const d = await r.json();
         if (d.concluido) {
-          setStatus("✅ Concluído! Todos os hops entregues.");
+          setStatus("Transação entregue com sucesso.");
+          setStatusType("ok");
           clearInterval(iv);
           setPendingId(null);
+          setHistory(h => h.map(t => t.id === pendingId ? { ...t, done: true } : t));
         } else {
-          setStatus(`⏳ Processando...\n${d.hopsFeitos}/${d.hopsTotal} hops · ~${d.minutosRestantes}min restantes`);
+          setStatus(`Processando... ${d.hopsFeitos}/${d.hopsTotal} etapas · ~${d.minutosRestantes} min`);
+          setStatusType("");
         }
       } catch (_) {}
     }, 15000);
@@ -158,10 +165,11 @@ export default function App() {
   };
 
   const send = async () => {
-    if (!account)            return alert("Conecte sua carteira.");
+    if (!account)              return alert("Conecte sua carteira.");
     if (!amount || !recipient) return alert("Preencha todos os campos.");
     setLoading(true);
-    setStatus("🔒 Iniciando pipeline de privacidade...");
+    setStatus("Iniciando envio seguro...");
+    setStatusType("");
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer   = await provider.getSigner();
@@ -172,7 +180,7 @@ export default function App() {
         const tx = await contract.depositETH(recipient, { value: ethers.parseEther(amount) });
         await tx.wait(); txHash = tx.hash;
       } else {
-        const t = TOKENS[token];
+        const t  = TOKENS[token];
         const tc = new ethers.Contract(t.address, ERC20_ABI, signer);
         const val = ethers.parseUnits(amount, t.decimals);
         const allow = await tc.allowance(account, CONTRACT_ADDRESS);
@@ -192,19 +200,23 @@ export default function App() {
       setHistory(h => [{
         id: data.id, hash: txHash, amount, token,
         recipient: recipient.slice(0,6) + "..." + recipient.slice(-4),
-        splits: data.splits, hops: data.hopsTotal,
         time: new Date().toLocaleTimeString("pt-BR"),
+        done: false,
       }, ...h]);
 
-      setStatus(`👻 Pipeline iniciado!\n${data.splits} splits · ${data.hopsTotal} hops\nEstimativa: ~${data.estimativaMinutos} min`);
+      setStatus(`Enviando ${amount} ${token} com privacidade.\nEstimativa: ~${data.estimativaMinutos} minutos.`);
+      setStatusType("");
       setAmount(""); setRecipient("");
     } catch (e) {
-      setStatus("❌ " + (e.reason || e.message));
+      setStatus(e.reason || e.message || "Erro desconhecido.");
+      setStatusType("err");
     }
     setLoading(false);
   };
 
-  const fee = amount ? `≈ ${(parseFloat(amount)*0.002).toFixed(6)} ${token}` : "—";
+  const fee = amount && !isNaN(parseFloat(amount))
+    ? `${(parseFloat(amount) * 0.002).toFixed(6)} ${token}`
+    : "—";
 
   return (
     <>
@@ -213,11 +225,8 @@ export default function App() {
 
         <header className="hdr">
           <div className="logo">
-            {!logoErr
-              ? <img src={LOGO_URL} alt="SilentFlow" onError={() => setLogoErr(true)} />
-              : <div className="logo-fb">👻</div>}
-            <span className="logo-name">Silent<b>Flow</b></span>
-            <span className="net-tag">SEPOLIA</span>
+            <img src="/logo.png" alt="SilentFlow" />
+            <span className="net">SEPOLIA TESTNET</span>
           </div>
           <button className={`conn-btn${account ? " on" : ""}`} onClick={connect}>
             {account ? `● ${account.slice(0,6)}...${account.slice(-4)}` : "Conectar Carteira"}
@@ -228,62 +237,63 @@ export default function App() {
 
           {/* LEFT */}
           <div className="left">
-            <span className="sec-label">Privacidade</span>
 
-            <div className="pipe-card">
-              <div className="pipe-hdr">
-                <span className="pipe-title">Pipeline Ativo</span>
-                <span className="pipe-badge">🔒 v2</span>
-              </div>
-              {[
-                ["✂️","Split automático",    "2–4 partes aleatórias"],
-                ["🔀","Multi-hop por parte", "2–3 endereços efêmeros"],
-                ["⏱","Delay por hop",       "1–10 minutos"],
-                ["🎭","Dummy transactions",  "ruído entre hops"],
-              ].map(([ico, lbl, val]) => (
-                <div className="pipe-row" key={lbl}>
-                  <div className="row-l">
-                    <div className="row-ico">{ico}</div>
-                    <span className="row-lbl">{lbl}</span>
-                  </div>
-                  <span className="row-val">{val}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="stats">
-              {[["0.2%","Taxa"],["≤10m","Estimativa"],["3","Tokens"]].map(([n,l]) => (
-                <div className="stat" key={l}>
-                  <span className="stat-n">{n}</span>
-                  <span className="stat-l">{l}</span>
-                </div>
-              ))}
-            </div>
-
-            <span className="sec-label" style={{marginTop:4}}>Histórico</span>
+            {/* History */}
             <div className="hist-card">
+              <div className="hist-title">Histórico</div>
               {history.length === 0
                 ? <div className="hist-empty">Nenhuma transação ainda</div>
                 : history.map(tx => (
                   <div className="hist-item" key={tx.id}>
-                    <div className="hist-top">
-                      <span className="hist-tag">👻 {tx.splits} splits · {tx.hops} hops</span>
+                    <div className="hist-row">
+                      <span className="hist-amt">{tx.amount} {tx.token}</span>
                       <span className="hist-time">{tx.time}</span>
                     </div>
-                    <div className="hist-det">{tx.amount} {tx.token} → {tx.recipient}</div>
+                    <div className="hist-to">→ {tx.recipient}</div>
+                    <span className={`hist-status ${tx.done ? "done" : "proc"}`}>
+                      {tx.done ? "Entregue" : "Processando"}
+                    </span>
                     <a className="hist-link" href={`https://sepolia.etherscan.io/tx/${tx.hash}`} target="_blank" rel="noreferrer">
-                      Ver no Etherscan ↗
+                      Etherscan ↗
                     </a>
                   </div>
                 ))
               }
             </div>
+
+            {/* Privacy details — collapsed */}
+            <div>
+              <div
+                className="details-toggle"
+                onClick={() => setDetailsOpen(o => !o)}
+              >
+                <span className="details-toggle-label">Como funciona a privacidade</span>
+                <span className={`details-toggle-icon${detailsOpen ? " open" : ""}`}>▼</span>
+              </div>
+              <div className={`details-body ${detailsOpen ? "open" : "closed"}`}>
+                <div className="details-inner">
+                  {[
+                    ["Split automático",    "2–4 partes aleatórias"],
+                    ["Multi-hop",           "2–3 endereços efêmeros por parte"],
+                    ["Delay",               "1–10 minutos por hop"],
+                    ["Dummy transactions",  "ruído entre hops reais"],
+                    ["Taxa",                "0.2% por transação"],
+                  ].map(([k, v]) => (
+                    <div className="detail-row" key={k}>
+                      <span className="detail-k">{k}</span>
+                      <span className="detail-v">{v}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
           </div>
 
           {/* FORM */}
           <div className="form-card">
             <div className="form-title">Envio Privado</div>
-            <div className="form-sub">Sem rastreabilidade · Non-custodial</div>
+            <div className="form-sub">Non-custodial · Sepolia testnet</div>
 
             <div className="toks">
               {Object.keys(TOKENS).map(t => (
@@ -293,24 +303,40 @@ export default function App() {
 
             <div className="fld">
               <label>Valor</label>
-              <input type="number" placeholder={`0.00 ${token}`} value={amount} onChange={e=>setAmount(e.target.value)} />
+              <input
+                type="number"
+                placeholder={`0.00`}
+                value={amount}
+                onChange={e => setAmount(e.target.value)}
+              />
             </div>
 
             <div className="fld">
               <label>Destinatário</label>
-              <input type="text" placeholder="0x..." value={recipient} onChange={e=>setRecipient(e.target.value)} />
+              <input
+                type="text"
+                placeholder="0x..."
+                value={recipient}
+                onChange={e => setRecipient(e.target.value)}
+              />
             </div>
 
+            <div className="divider" />
+
             <div className="fee-row">
-              <span className="fee-l">Taxa de privacidade · 0.2%</span>
+              <span className="fee-l">Taxa de privacidade</span>
               <span className="fee-v">{fee}</span>
             </div>
 
             <button className="send-btn" onClick={send} disabled={loading || !account}>
-              {loading ? "⏳ Processando..." : "👻 Enviar com Privacidade"}
+              {loading ? "Processando..." : "Enviar"}
             </button>
 
-            {status && <div className="status-box"><pre>{status}</pre></div>}
+            {status && (
+              <div className={`status-box${statusType ? " "+statusType : ""}`}>
+                <pre>{status}</pre>
+              </div>
+            )}
           </div>
 
         </div>
