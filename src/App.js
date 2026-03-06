@@ -1,13 +1,31 @@
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 
-const CONTRACT_ADDRESS = "0x3b1958ee8e636d69E868CaFCad3e7dB2eE8B4755";
+const CONTRACT_ADDRESS = "0xd7977Ff9b1876C1F8792599FA11994C3a5571AB3";
 const BACKEND_URL = "https://silentflow-production.up.railway.app";
 
 const ABI = [
-  "function depositETH(address recipient) external payable",
-  "function depositToken(address token, uint256 amount, address recipient) external",
+  "function depositETH(address stealthAddress, bytes calldata ephemeralPubKey, uint8 viewTag) external payable",
+  "function depositToken(address token, uint256 amount, address stealthAddress, bytes calldata ephemeralPubKey, uint8 viewTag) external",
+  "function withdraw(address token) external",
+  "function balanceOf(address stealthAddress, address token) external view returns (uint256)",
 ];
+
+// Derive a one-time stealth address from recipient address
+function deriveStealthAddress(recipientAddress) {
+  const ephemeralWallet  = ethers.Wallet.createRandom();
+  const ephemeralPrivKey = ephemeralWallet.privateKey;
+  const ephemeralPubKey  = ethers.SigningKey.computePublicKey(ephemeralPrivKey, true);
+  const sharedSecret     = ethers.keccak256(
+    ethers.concat([
+      ethers.getBytes(ephemeralPrivKey),
+      ethers.getBytes(ethers.zeroPadValue(recipientAddress, 32))
+    ])
+  );
+  const stealthAddress = ethers.getAddress("0x" + ethers.keccak256(sharedSecret).slice(-40));
+  const viewTag        = parseInt(sharedSecret.slice(2, 4), 16);
+  return { stealthAddress, ephemeralPubKey, viewTag };
+}
 const ERC20_ABI = [
   "function approve(address spender, uint256 amount) external returns (bool)",
   "function allowance(address owner, address spender) external view returns (uint256)",
@@ -200,8 +218,16 @@ export default function App() {
       const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
       let txHash;
 
+      // Derive one-time stealth address from recipient
+      const { stealthAddress, ephemeralPubKey, viewTag } = deriveStealthAddress(recipient);
+
       if (token === "ETH") {
-        const tx = await contract.depositETH(recipient, { value: ethers.parseEther(amount) });
+        const tx = await contract.depositETH(
+          stealthAddress,
+          ephemeralPubKey,
+          viewTag,
+          { value: ethers.parseEther(amount) }
+        );
         await tx.wait(); txHash = tx.hash;
       } else {
         const t   = TOKENS[token];
@@ -209,7 +235,12 @@ export default function App() {
         const val = ethers.parseUnits(amount, t.decimals);
         const allow = await tc.allowance(account, CONTRACT_ADDRESS);
         if (allow < val) { const a = await tc.approve(CONTRACT_ADDRESS, val); await a.wait(); }
-        const tx = await contract.depositToken(t.address, val, recipient);
+        const tx = await contract.depositToken(
+          t.address, val,
+          stealthAddress,
+          ephemeralPubKey,
+          viewTag
+        );
         await tx.wait(); txHash = tx.hash;
       }
 
