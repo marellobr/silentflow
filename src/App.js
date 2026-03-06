@@ -396,7 +396,16 @@ export default function App() {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
       const filter   = contract.filters.StealthDeposit();
-      const events   = await contract.queryFilter(filter, -10000);
+      // Get current block and scan last 50000 blocks in chunks to avoid RPC limits
+      const currentBlock = await provider.getBlockNumber();
+      const fromBlock    = Math.max(0, currentBlock - 50000);
+      const CHUNK        = 2000;
+      const events       = [];
+      for (let start = fromBlock; start < currentBlock; start += CHUNK) {
+        const end    = Math.min(start + CHUNK - 1, currentBlock);
+        const chunk  = await contract.queryFilter(filter, start, end);
+        events.push(...chunk);
+      }
 
       const found = [];
       for (const ev of events) {
