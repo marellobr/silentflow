@@ -39,7 +39,7 @@ body{background:#04060e;color:#d8dce8;font-family:'DM Mono',monospace;min-height
   margin-bottom:52px;
 }
 .logo-group{display:flex;align-items:center;gap:16px}
-.logo-main{height:70px;width:auto;object-fit:contain;filter:drop-shadow(0 0 20px rgba(30,144,255,.35))}
+.logo-main{height:48px;width:auto;object-fit:contain;filter:drop-shadow(0 0 16px rgba(30,144,255,.35))}
 
 .hdr-right{display:flex;align-items:center;gap:12px}
 .net-dot{position:relative;display:flex;align-items:center;gap:7px;padding:7px 13px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:8px;font-size:11px;color:rgba(255,255,255,.35);letter-spacing:.5px}
@@ -253,8 +253,6 @@ export default function App() {
         <header className="hdr">
           <div className="logo-group">
             <img className="logo-main" src="/logo.png" alt="SilentFlow" />
-            <div className="logo-divider" />
-            <img className="logo-secondary" src="/logo2.png" alt="" />
           </div>
           <div className="hdr-right">
             <div className="net-dot">SEPOLIA</div>
