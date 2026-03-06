@@ -369,7 +369,7 @@ export default function App() {
 
         {/* FOOTER */}
         <footer className="footer">
-          <div style={{display:"flex",alignItems:"center",gap:"12px"}}><img src="/logo2.png" alt="SilentFlow" style={{height:"24px",width:"auto",opacity:.35}} /><span className="footer-left">v2 · Privacy Layer for Web3</span></div>
+          <div style={{display:"flex",alignItems:"center",gap:"12px"}}><img src="/logo2.png" alt="SilentFlow" style={{height:"24px",width:"auto",opacity:.55}} /><span className="footer-left">v2 · Privacy Layer for Web3</span></div>
           <div className="footer-right">
             <a className="footer-link" href={`https://sepolia.etherscan.io/address/${CONTRACT_ADDRESS}`} target="_blank" rel="noreferrer">Contrato ↗</a>
             <a className="footer-link" href="https://silentflow-landing-wine.vercel.app" target="_blank" rel="noreferrer">Landing page ↗</a>
