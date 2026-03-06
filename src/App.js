@@ -396,8 +396,10 @@ export default function App() {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
       const filter   = contract.filters.StealthDeposit();
+      console.log("Iniciando scan - chaves:", myKeys.spendingPrivKey.slice(0,10), myKeys.viewingPrivKey.slice(0,10));
       // Get current block and scan last 50000 blocks in chunks to avoid RPC limits
       const currentBlock = await provider.getBlockNumber();
+      console.log("Bloco atual:", currentBlock);
       const fromBlock    = Math.max(0, currentBlock - 50000);
       const CHUNK        = 2000;
       const events       = [];
@@ -405,6 +407,7 @@ export default function App() {
         const end    = Math.min(start + CHUNK - 1, currentBlock);
         const chunk  = await contract.queryFilter(filter, start, end);
         events.push(...chunk);
+      console.log("Eventos encontrados ate agora:", events.length);
       }
 
       const found = [];
@@ -416,6 +419,7 @@ export default function App() {
         const viewTag            = Number(ev.args[4]);
 
         const result = tryDecryptDeposit(
+        console.log("Testando evento:", stealthAddressOnChain, "viewTag:", viewTag);
           ephemeralPubKey, stealthAddressOnChain, viewTag,
           myKeys.spendingPrivKey, myKeys.viewingPrivKey
         );
@@ -439,8 +443,10 @@ export default function App() {
         }
       }
       setDeposits(found);
+      console.log("Scan completo. Depositos:", found.length);
     } catch (e) {
       alert("Erro ao escanear: " + e.message);
+      console.error("Erro scanner:", e);
     }
     setScanning(false);
   }, [myKeys, account]);
