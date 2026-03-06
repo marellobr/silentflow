@@ -49,30 +49,36 @@ function deriveStealthAddress(metaAddress) {
   const ephemeralPrivKey = ephemeralWallet.privateKey;
   const ephemeralPubKey  = ethers.SigningKey.computePublicKey(ephemeralPrivKey, true);
 
-  // sharedSecret = keccak256(ephemeralPrivKey + viewingPubKey)
+  // sharedSecret = keccak256(ephemeralPubKey + viewingPubKey)
+  // Both sides use public keys so scanner can replicate with viewingPrivKey
   const sharedSecret = ethers.keccak256(
-    ethers.concat([ethers.getBytes(ephemeralPrivKey), ethers.getBytes(viewingPubKey)])
+    ethers.concat([ethers.getBytes(ephemeralPubKey), ethers.getBytes(viewingPubKey)])
   );
 
-  // stealthAddress = keccak256(sharedSecret + spendingPubKey) → last 20 bytes
+  // stealthAddress = last 20 bytes of keccak256(sharedSecret + spendingPubKey)
   const stealthHash = ethers.keccak256(
     ethers.concat([ethers.getBytes(sharedSecret), ethers.getBytes(spendingPubKey)])
   );
   const stealthAddress = ethers.getAddress("0x" + stealthHash.slice(-40));
   const viewTag = parseInt(sharedSecret.slice(2, 4), 16);
 
-  return { stealthAddress, ephemeralPubKey, viewTag, sharedSecret };
+  return { stealthAddress, ephemeralPubKey, viewTag };
 }
 
 // Scan: check if a StealthDeposit event belongs to this viewer
 // Returns { stealthAddress, stealthPrivKey, amount, token } or null
 function tryDecryptDeposit(ephemeralPubKeyHex, stealthAddressOnChain, viewTagOnChain, spendingPrivKey, viewingPrivKey) {
   try {
+    const viewingPubKey = ethers.SigningKey.computePublicKey(viewingPrivKey, true);
+
+    // Must match derivation: keccak256(ephemeralPubKey + viewingPubKey)
     const sharedSecret = ethers.keccak256(
-      ethers.concat([ethers.getBytes(viewingPrivKey), ethers.getBytes(ephemeralPubKeyHex)])
+      ethers.concat([ethers.getBytes(ephemeralPubKeyHex), ethers.getBytes(viewingPubKey)])
     );
+
+    // Fast reject via viewTag
     const myViewTag = parseInt(sharedSecret.slice(2, 4), 16);
-    if (myViewTag !== viewTagOnChain) return null; // fast reject
+    if (myViewTag !== viewTagOnChain) return null;
 
     const spendingPubKey = ethers.SigningKey.computePublicKey(spendingPrivKey, true);
     const stealthHash = ethers.keccak256(
@@ -347,6 +353,31 @@ export default function App() {
     else alert("Nenhuma chave salva neste navegador.");
   };
 
+  const exportKeys = () => {
+    if (!myKeys) return;
+    const blob = new Blob([JSON.stringify(myKeys, null, 2)], { type: "application/json" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = "silentflow-keys.json"; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importKeys = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const keys = JSON.parse(ev.target.result);
+        if (!keys.spendingPrivKey || !keys.viewingPrivKey || !keys.metaAddress)
+          throw new Error("Arquivo inválido");
+        setMyKeys(keys);
+        setDeposits([]);
+      } catch { alert("Arquivo de chaves inválido."); }
+    };
+    reader.readAsText(file);
+  };
+
   useEffect(() => {
     if (myKeys) localStorage.setItem("sf_keys", JSON.stringify(myKeys));
   }, [myKeys]);
@@ -594,8 +625,12 @@ export default function App() {
                     Gerar minhas chaves de privacidade
                   </button>
                   <button className="ghost-btn" onClick={loadKeysFromStorage}>
-                    Recuperar chaves salvas
+                    Recuperar chaves do navegador
                   </button>
+                  <label className="ghost-btn" style={{display:"block",textAlign:"center",cursor:"pointer",marginTop:"8px"}}>
+                    Importar arquivo de chaves (.json)
+                    <input type="file" accept=".json" style={{display:"none"}} onChange={importKeys} />
+                  </label>
                 </>
               ) : (
                 <>
@@ -615,7 +650,10 @@ export default function App() {
                   <button className="primary-btn" onClick={scan} disabled={scanning || !account}>
                     {scanning ? "Escaneando..." : "Escanear blockchain"}
                   </button>
-                  <button className="ghost-btn" onClick={generateKeys}>
+                  <button className="ghost-btn" onClick={exportKeys}>
+                    Baixar backup das chaves (.json)
+                  </button>
+                  <button className="ghost-btn" onClick={generateKeys} style={{marginTop:"6px",color:"rgba(255,100,100,.5)",borderColor:"rgba(255,100,100,.15)"}}>
                     Gerar novas chaves
                   </button>
 
