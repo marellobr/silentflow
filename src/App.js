@@ -372,7 +372,7 @@ export default function App() {
         const ephemeralPubKey    = ev.args[0];
         const stealthAddressOnChain = ev.args[1];
         const tokenAddr          = ev.args[2];
-        const amount             = ev.args[3];
+
         const viewTag            = Number(ev.args[4]);
 
         const result = tryDecryptDeposit(
