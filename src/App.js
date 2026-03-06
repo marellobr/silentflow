@@ -418,8 +418,8 @@ export default function App() {
 
         const viewTag            = Number(ev.args[4]);
 
-        const result = tryDecryptDeposit(
         console.log("Testando evento:", stealthAddressOnChain, "viewTag:", viewTag);
+        const result = tryDecryptDeposit(
           ephemeralPubKey, stealthAddressOnChain, viewTag,
           myKeys.spendingPrivKey, myKeys.viewingPrivKey
         );
