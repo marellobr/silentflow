@@ -1,341 +1,447 @@
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 
-const CONTRATO_ENDERECO = "0x3b1958ee8e636d69E868CaFCad3e7dB2eE8B4755";
+const CONTRACT_ADDRESS = "0x3b1958ee8e636d69E868CaFCad3e7dB2eE8B4755";
 const BACKEND_URL = "https://silentflow-production.up.railway.app";
-const CONTRATO_ABI = [
-  "function enviar(address payable destinatario) external payable",
-  "function enviarToken(address token, address destinatario, uint256 valor) external"
+
+const ABI = [
+  "function depositETH(address recipient) external payable",
+  "function depositToken(address token, uint256 amount, address recipient) external",
+  "function withdraw(address token, uint256 amount) external",
+  "event Deposit(address indexed sender, address indexed recipient, address token, uint256 amount)",
 ];
-const ERC20_ABI = [
-  "function approve(address spender, uint256 amount) external returns (bool)",
-  "function decimals() external view returns (uint8)"
-];
+
 const TOKENS = {
-  ETH:  { symbol:"ETH",  address:null, decimals:18, icon:"⟠" },
-  USDC: { symbol:"USDC", address:"0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", decimals:6, icon:"◎" },
-  USDT: { symbol:"USDT", address:"0xaA8E23Fb1079EA71e0a56F48a2aA51851D8433D0", decimals:6, icon:"₮" },
+  ETH: { address: null, decimals: 18, symbol: "ETH" },
+  USDC: { address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", decimals: 6, symbol: "USDC" },
+  USDT: { address: "0xaA8E23Fb1079EA71e0a56F48a2aA51851D8433D0", decimals: 6, symbol: "USDT" },
 };
 
-function loadHistory() {
-  try { return JSON.parse(localStorage.getItem("sf_history") || "[]"); }
-  catch { return []; }
-}
-function saveHistory(h) {
-  localStorage.setItem("sf_history", JSON.stringify(h.slice(0, 50)));
-}
+const ERC20_ABI = [
+  "function approve(address spender, uint256 amount) external returns (bool)",
+  "function allowance(address owner, address spender) external view returns (uint256)",
+  "function balanceOf(address account) external view returns (uint256)",
+];
 
 export default function App() {
-  const [dest, setDest] = useState("");
-  const [valor, setValor] = useState("");
-  const [token, setToken] = useState("ETH");
-  const [modo, setModo] = useState("padrao");
-  const [status, setStatus] = useState(null);
+  const [account, setAccount] = useState(null);
+  const [amount, setAmount] = useState("");
+  const [recipient, setRecipient] = useState("");
+  const [selectedToken, setSelectedToken] = useState("ETH");
+  const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
-  const [txHash, setTxHash] = useState(null);
-  const [ok, setOk] = useState(false);
-  const [tab, setTab] = useState("send");
-  const [history, setHistory] = useState(loadHistory());
+  const [txHistory, setTxHistory] = useState([]);
+  const [pendingId, setPendingId] = useState(null);
 
   useEffect(() => {
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = "https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Mono:wght@300;400&display=swap";
-    document.head.appendChild(link);
-    document.body.style.cssText = "margin:0;background:#010408;font-family:'DM Mono',monospace";
-  }, []);
-
-  async function enviarPadrao(signer, contrato) {
-    if (token === "ETH") {
-      setStatus("Aguardando confirmacao na MetaMask...");
-      const tx = await contrato.enviar(dest, { value: ethers.parseEther(valor), gasLimit: 60000 });
-      setStatus("Confirmando na blockchain...");
-      await tx.wait();
-      return tx.hash;
-    } else {
-      const tokenInfo = TOKENS[token];
-      const tokenContract = new ethers.Contract(tokenInfo.address, ERC20_ABI, signer);
-      const valorParsed = ethers.parseUnits(valor, tokenInfo.decimals);
-      setStatus("Passo 1/2 — Aprovando " + token + " no contrato...");
-      const approveTx = await tokenContract.approve(CONTRATO_ENDERECO, valorParsed);
-      await approveTx.wait();
-      setStatus("Passo 2/2 — Enviando " + token + "...");
-      const tx = await contrato.enviarToken(tokenInfo.address, dest, valorParsed, { gasLimit: 120000 });
-      setStatus("Confirmando na blockchain...");
-      await tx.wait();
-      return tx.hash;
+    if (pendingId) {
+      const interval = setInterval(async () => {
+        try {
+          const res = await fetch(`${BACKEND_URL}/status/${pendingId}`);
+          const data = await res.json();
+          if (data.concluido) {
+            setStatus("✅ Transação concluída! Todos os hops entregues.");
+            clearInterval(interval);
+            setPendingId(null);
+          } else {
+            setStatus(`⏳ Processando... ${data.hopsFeitos}/${data.hopsTotal} hops (${data.minutosRestantes} min restantes)`);
+          }
+        } catch (e) {
+          // silently fail
+        }
+      }, 15000);
+      return () => clearInterval(interval);
     }
-  }
+  }, [pendingId]);
 
-  async function enviarSilencioso() {
-    setStatus("Preparando pipeline de privacidade...");
-    const tokenInfo = TOKENS[token];
-    const res = await fetch(BACKEND_URL + "/agendar", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        destinatario: dest,
-        valor,
-        token,
-        tokenAddress: tokenInfo.address,
-        decimals: tokenInfo.decimals
-      })
-    });
-    const data = await res.json();
-    if (data.sucesso) {
-      return { agendado: true, horas: data.horasEstimadas, splits: data.numSplits, id: data.id };
-    }
-    throw new Error("Erro ao agendar: " + (data.erro || "desconhecido"));
-  }
+  const connectWallet = async () => {
+    if (!window.ethereum) return alert("MetaMask não encontrada.");
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const accounts = await provider.send("eth_requestAccounts", []);
+    setAccount(accounts[0]);
+  };
 
-  async function enviar() {
+  const sendTransaction = async () => {
+    if (!account) return alert("Conecte sua carteira primeiro.");
+    if (!amount || !recipient) return alert("Preencha todos os campos.");
+
+    setLoading(true);
+    setStatus("🔒 Iniciando pipeline de privacidade...");
+
     try {
-      setLoading(true); setOk(false); setTxHash(null);
-      setStatus("Conectando carteira...");
       const provider = new ethers.BrowserProvider(window.ethereum);
-      await provider.send("eth_requestAccounts", []);
-      const net = await provider.getNetwork();
-      if (net.chainId !== 11155111n) {
-        setStatus("Trocando para Sepolia...");
-        try { await provider.send("wallet_switchEthereumChain", [{ chainId: "0xaa36a7" }]); }
-        catch(e) { setStatus("Troque para Sepolia na MetaMask."); setLoading(false); return; }
-      }
       const signer = await provider.getSigner();
-      const contrato = new ethers.Contract(CONTRATO_ENDERECO, CONTRATO_ABI, signer);
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
 
-      if (modo === "padrao") {
-        const hash = await enviarPadrao(signer, contrato);
-        setTxHash(hash); setOk(true);
-        setStatus("Enviado com sucesso via endereço efêmero.");
-        const newEntry = {
-          hash,
-          token, valor,
-          dest: dest.slice(0,6)+"..."+dest.slice(-4),
-          fee: (parseFloat(valor)*0.002).toFixed(token==="ETH"?6:2),
-          recebe: (parseFloat(valor)*0.998).toFixed(token==="ETH"?6:2),
-          date: new Date().toLocaleString("pt-BR"),
-          status: "Confirmado", modo: "padrao", splits: 1, hops: 1
-        };
-        const h = [newEntry, ...history]; setHistory(h); saveHistory(h);
+      let txHash;
+
+      if (selectedToken === "ETH") {
+        const value = ethers.parseEther(amount);
+        const tx = await contract.depositETH(recipient, { value });
+        await tx.wait();
+        txHash = tx.hash;
       } else {
-        const result = await enviarSilencioso();
-        setOk(true);
-        setStatus(
-          "Pipeline iniciado com sucesso!\n" +
-          "Valor dividido em " + result.splits + " partes.\n" +
-          "Cada parte passa por 2-3 endereços efêmeros.\n" +
-          "Estimativa de conclusão: ~" + result.horas + "h"
-        );
-        const newEntry = {
-          hash: "agendado-" + Date.now(),
-          token, valor,
-          dest: dest.slice(0,6)+"..."+dest.slice(-4),
-          fee: (parseFloat(valor)*0.002).toFixed(token==="ETH"?6:2),
-          recebe: (parseFloat(valor)*0.998).toFixed(token==="ETH"?6:2),
-          date: new Date().toLocaleString("pt-BR"),
-          status: "Agendado (~"+result.horas+"h)",
-          modo: "silencioso", splits: result.splits, hops: "2-3"
-        };
-        const h = [newEntry, ...history]; setHistory(h); saveHistory(h);
+        const token = TOKENS[selectedToken];
+        const tokenContract = new ethers.Contract(token.address, ERC20_ABI, signer);
+        const parsedAmount = ethers.parseUnits(amount, token.decimals);
+
+        const allowance = await tokenContract.allowance(account, CONTRACT_ADDRESS);
+        if (allowance < parsedAmount) {
+          const approveTx = await tokenContract.approve(CONTRACT_ADDRESS, parsedAmount);
+          await approveTx.wait();
+        }
+
+        const tx = await contract.depositToken(token.address, parsedAmount, recipient);
+        await tx.wait();
+        txHash = tx.hash;
       }
-    } catch(err) {
-      setStatus("Erro: " + err.message.slice(0, 100));
-    } finally { setLoading(false); }
-  }
 
-  const fee = valor && !isNaN(parseFloat(valor)) ? (parseFloat(valor)*0.002).toFixed(token==="ETH"?6:2) : null;
-  const fin = valor && !isNaN(parseFloat(valor)) ? (parseFloat(valor)*0.998).toFixed(token==="ETH"?6:2) : null;
+      // Agendamento no backend
+      const res = await fetch(`${BACKEND_URL}/agendar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          txHash,
+          destinatario: recipient,
+          valor: amount,
+          token: selectedToken,
+        }),
+      });
 
-  const S = {
-    wrap: { position:"relative", minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"24px 16px", background:"#010408" },
-    bgGlow: { position:"fixed", top:"-200px", left:"50%", transform:"translateX(-50%)", width:"800px", height:"800px", background:"radial-gradient(ellipse,rgba(30,144,255,0.07) 0%,transparent 70%)", pointerEvents:"none", zIndex:0 },
-    bgGrid: { position:"fixed", inset:0, backgroundImage:"linear-gradient(rgba(30,144,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(30,144,255,0.03) 1px,transparent 1px)", backgroundSize:"40px 40px", pointerEvents:"none", zIndex:0 },
-    nav: { position:"fixed", top:0, left:0, right:0, padding:"16px 32px", display:"flex", alignItems:"center", gap:"10px", borderBottom:"1px solid rgba(30,144,255,0.08)", background:"rgba(1,4,8,0.88)", backdropFilter:"blur(12px)", zIndex:10 },
-    navImg: { width:"26px", height:"26px", objectFit:"contain" },
-    navName: { fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:"14px", letterSpacing:"0.2em", background:"linear-gradient(135deg,#1E90FF,#00BFFF)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" },
-    navBadge: { marginLeft:"auto", fontSize:"10px", color:"rgba(30,144,255,0.4)", border:"1px solid rgba(30,144,255,0.15)", padding:"3px 10px", borderRadius:"20px", letterSpacing:"0.1em" },
-    card: { position:"relative", zIndex:1, width:"100%", maxWidth:"500px", background:"rgba(8,16,28,0.94)", border:"1px solid rgba(30,144,255,0.12)", borderRadius:"20px", padding:"36px", backdropFilter:"blur(20px)", boxShadow:"0 0 80px rgba(30,144,255,0.06),inset 0 1px 0 rgba(30,144,255,0.08)" },
-    hdr: { textAlign:"center", marginBottom:"28px" },
-    logoRow: { display:"flex", alignItems:"center", justifyContent:"center", gap:"12px", marginBottom:"8px" },
-    logoImg: { width:"36px", height:"36px", objectFit:"contain", filter:"drop-shadow(0 0 12px rgba(30,144,255,0.7))" },
-    logoTitle: { fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:"22px", letterSpacing:"0.22em", background:"linear-gradient(135deg,#1E90FF,#00BFFF)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" },
-    sub: { fontSize:"10px", color:"rgba(30,144,255,0.35)", letterSpacing:"0.18em" },
-    divider: { width:"50px", height:"1px", background:"linear-gradient(90deg,transparent,rgba(30,144,255,0.25),transparent)", margin:"12px auto 0" },
-    tabs: { display:"flex", gap:"8px", marginBottom:"24px" },
-    tab: (active) => ({ flex:1, padding:"10px", border: active ? "1px solid rgba(30,144,255,0.4)" : "1px solid rgba(30,144,255,0.08)", borderRadius:"10px", background: active ? "rgba(30,144,255,0.1)" : "transparent", color: active ? "#1E90FF" : "rgba(100,150,200,0.4)", fontFamily:"'Syne',sans-serif", fontWeight:700, fontSize:"11px", letterSpacing:"0.15em", cursor:"pointer", textTransform:"uppercase" }),
-    fieldWrap: { marginBottom:"14px" },
-    label: { display:"block", fontSize:"10px", color:"rgba(30,144,255,0.45)", letterSpacing:"0.2em", marginBottom:"7px", textTransform:"uppercase" },
-    input: { width:"100%", background:"rgba(30,144,255,0.04)", border:"1px solid rgba(30,144,255,0.1)", borderRadius:"10px", padding:"13px 15px", color:"#d8eeff", fontSize:"13px", fontFamily:"'DM Mono',monospace", outline:"none", boxSizing:"border-box" },
-    tokenRow: { display:"flex", gap:"8px", marginBottom:"14px" },
-    tokenBtn: (active) => ({ flex:1, padding:"10px", border: active ? "1px solid rgba(30,144,255,0.5)" : "1px solid rgba(30,144,255,0.1)", borderRadius:"10px", background: active ? "rgba(30,144,255,0.12)" : "rgba(30,144,255,0.03)", color: active ? "#1E90FF" : "rgba(100,150,200,0.5)", fontFamily:"'DM Mono',monospace", fontSize:"12px", cursor:"pointer", letterSpacing:"0.1em", transition:"all 0.2s" }),
-    modoRow: { display:"flex", gap:"10px", marginBottom:"18px" },
-    modoCard: (active) => ({ flex:1, padding:"14px", border: active ? "1px solid rgba(30,144,255,0.4)" : "1px solid rgba(30,144,255,0.08)", borderRadius:"12px", background: active ? "rgba(30,144,255,0.08)" : "rgba(30,144,255,0.02)", cursor:"pointer", transition:"all 0.2s" }),
-    modoTitle: (active) => ({ fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:"12px", color: active ? "#1E90FF" : "rgba(100,150,200,0.5)", letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:"6px" }),
-    modoDesc: { fontSize:"10px", color:"rgba(100,150,200,0.35)", lineHeight:"1.5" },
-    modoBullet: { fontSize:"10px", color:"rgba(30,144,255,0.35)", marginTop:"6px", lineHeight:"1.6" },
-    feeBox: { background:"rgba(30,144,255,0.03)", border:"1px solid rgba(30,144,255,0.08)", borderRadius:"10px", padding:"13px 15px", marginBottom:"18px" },
-    feeRow: { display:"flex", justifyContent:"space-between", fontSize:"11px", padding:"2px 0" },
-    feeSep: { height:"1px", background:"rgba(30,144,255,0.07)", margin:"7px 0" },
-    btn: (m) => ({ width:"100%", padding:"15px", background: m==="silencioso" ? "linear-gradient(135deg,#0a4a8a,#003d7a)" : "linear-gradient(135deg,#1E90FF,#005FCC)", border:"none", borderRadius:"11px", color:"#fff", fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:"13px", letterSpacing:"0.18em", cursor:"pointer", textTransform:"uppercase" }),
-    btnOff: { width:"100%", padding:"15px", background:"rgba(30,144,255,0.08)", border:"none", borderRadius:"11px", color:"rgba(30,144,255,0.3)", fontFamily:"'Syne',sans-serif", fontWeight:800, fontSize:"13px", letterSpacing:"0.18em", cursor:"not-allowed", textTransform:"uppercase" },
-    statusBox: { marginTop:"14px", padding:"13px 15px", background:"rgba(30,144,255,0.04)", border:"1px solid rgba(30,144,255,0.09)", borderRadius:"10px", fontSize:"11px", color:"rgba(140,190,255,0.6)", textAlign:"center", letterSpacing:"0.06em", whiteSpace:"pre-line", lineHeight:"1.7" },
-    statusOk: { marginTop:"14px", padding:"13px 15px", background:"rgba(30,144,255,0.07)", border:"1px solid rgba(30,144,255,0.25)", borderRadius:"10px", fontSize:"11px", color:"#1E90FF", textAlign:"center", letterSpacing:"0.06em", whiteSpace:"pre-line", lineHeight:"1.7" },
-    txLink: { display:"block", marginTop:"10px", textAlign:"center", fontSize:"11px", color:"rgba(30,144,255,0.45)", textDecoration:"none", letterSpacing:"0.08em" },
-    emptyHistory: { textAlign:"center", padding:"40px 0", color:"rgba(30,144,255,0.2)", fontSize:"12px", letterSpacing:"0.1em" },
-    historyItem: { background:"rgba(30,144,255,0.03)", border:"1px solid rgba(30,144,255,0.08)", borderRadius:"12px", padding:"14px 16px", marginBottom:"10px" },
-    histRow: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"5px" },
-    histBadge: (s) => ({ fontSize:"9px", color: s==="Confirmado" ? "rgba(30,255,100,0.6)" : "rgba(255,200,30,0.6)", border:"1px solid "+(s==="Confirmado"?"rgba(30,255,100,0.2)":"rgba(255,200,30,0.2)"), padding:"2px 8px", borderRadius:"10px" }),
-    histLink: { fontSize:"10px", color:"rgba(30,144,255,0.4)", textDecoration:"none" },
-    clearBtn: { width:"100%", padding:"10px", background:"transparent", border:"1px solid rgba(255,50,50,0.12)", borderRadius:"10px", color:"rgba(255,100,100,0.35)", fontFamily:"'DM Mono',monospace", fontSize:"11px", cursor:"pointer", marginTop:"8px", letterSpacing:"0.1em" },
+      const data = await res.json();
+      setPendingId(data.id);
+
+      const newTx = {
+        id: data.id,
+        hash: txHash,
+        amount,
+        token: selectedToken,
+        recipient: recipient.slice(0, 6) + "..." + recipient.slice(-4),
+        splits: data.splits,
+        hops: data.hopsTotal,
+        estimativa: data.estimativaMinutos,
+        time: new Date().toLocaleTimeString("pt-BR"),
+        status: "processando",
+      };
+
+      setTxHistory((prev) => [newTx, ...prev]);
+      setStatus(
+        `👻 Pipeline iniciado!\nValor dividido em ${data.splits} partes.\nCada parte: 2–3 hops efêmeros.\nEstimativa: ~${data.estimativaMinutos} minutos`
+      );
+      setAmount("");
+      setRecipient("");
+    } catch (err) {
+      console.error(err);
+      setStatus("❌ Erro: " + (err.reason || err.message));
+    }
+
+    setLoading(false);
   };
 
   return (
-    <div style={S.wrap}>
-      <div style={S.bgGlow}/><div style={S.bgGrid}/>
-      <nav style={S.nav}>
-        <img src="/logo.png" alt="logo" style={S.navImg}/>
-        <span style={S.navName}>SILENTFLOW</span>
-        <span style={S.navBadge}>TESTNET</span>
-      </nav>
-      <div style={S.card}>
-        <div style={S.hdr}>
-          <div style={S.logoRow}>
-            <img src="/logo.png" alt="logo" style={S.logoImg}/>
-            <span style={S.logoTitle}>SILENTFLOW</span>
+    <div style={styles.container}>
+      {/* Header */}
+      <div style={styles.header}>
+        <div style={styles.logo}>
+          <span style={styles.logoIcon}>👻</span>
+          <span style={styles.logoText}>SilentFlow</span>
+          <span style={styles.badge}>v2 · Sepolia</span>
+        </div>
+        <button onClick={connectWallet} style={styles.connectBtn}>
+          {account ? account.slice(0, 6) + "..." + account.slice(-4) : "Conectar Carteira"}
+        </button>
+      </div>
+
+      {/* Main Card */}
+      <div style={styles.card}>
+        <div style={styles.cardHeader}>
+          <span style={styles.cardTitle}>Envio Privado</span>
+          <div style={styles.privacyBadge}>
+            <span style={{ fontSize: 12 }}>🔒</span>
+            <span style={{ fontSize: 12, marginLeft: 4 }}>Split + Multi-hop + Dummy Tx</span>
           </div>
-          <p style={S.sub}>PRIVACY LAYER FOR WEB3</p>
-          <div style={S.divider}/>
         </div>
 
-        <div style={S.tabs}>
-          <button style={S.tab(tab==="send")} onClick={()=>setTab("send")}>Enviar</button>
-          <button style={S.tab(tab==="history")} onClick={()=>setTab("history")}>
-            Historico {history.length>0&&"("+history.length+")"}
-          </button>
+        {/* Privacy info box */}
+        <div style={styles.infoBox}>
+          <div style={styles.infoRow}>
+            <span style={styles.infoLabel}>✂️ Split automático</span>
+            <span style={styles.infoValue}>2–4 partes aleatórias</span>
+          </div>
+          <div style={styles.infoRow}>
+            <span style={styles.infoLabel}>🔀 Multi-hop por parte</span>
+            <span style={styles.infoValue}>2–3 endereços efêmeros</span>
+          </div>
+          <div style={styles.infoRow}>
+            <span style={styles.infoLabel}>⏱ Delay estimado</span>
+            <span style={styles.infoValue}>1–10 minutos</span>
+          </div>
+          <div style={styles.infoRow}>
+            <span style={styles.infoLabel}>🎭 Dummy transactions</span>
+            <span style={styles.infoValue}>ruído entre hops</span>
+          </div>
         </div>
 
-        {tab==="send" && (
-          <div>
-            {/* MODO */}
-            <div style={S.fieldWrap}>
-              <label style={S.label}>Modo de privacidade</label>
-              <div style={S.modoRow}>
-                <div style={S.modoCard(modo==="padrao")} onClick={()=>setModo("padrao")}>
-                  <div style={S.modoTitle(modo==="padrao")}>⚡ Padrão</div>
-                  <div style={S.modoDesc}>Envio instantâneo</div>
-                  <div style={S.modoBullet}>→ 1 endereço efêmero{"\n"}→ Confirmação imediata{"\n"}→ Sem delay</div>
-                </div>
-                <div style={S.modoCard(modo==="silencioso")} onClick={()=>setModo("silencioso")}>
-                  <div style={S.modoTitle(modo==="silencioso")}>👻 Silencioso</div>
-                  <div style={S.modoDesc}>Máxima privacidade</div>
-                  <div style={S.modoBullet}>→ Split em 2–4 partes{"\n"}→ 2–3 hops por parte{"\n"}→ Delay 1–6h + dummy tx</div>
-                </div>
-              </div>
-            </div>
-
-            {/* TOKEN */}
-            <div style={S.fieldWrap}>
-              <label style={S.label}>Token</label>
-              <div style={S.tokenRow}>
-                {Object.keys(TOKENS).map(t=>(
-                  <button key={t} style={S.tokenBtn(token===t)} onClick={()=>setToken(t)}>
-                    {TOKENS[t].icon} {t}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* DESTINATARIO */}
-            <div style={S.fieldWrap}>
-              <label style={S.label}>Destinatário</label>
-              <input style={S.input} value={dest} onChange={e=>setDest(e.target.value)} placeholder="0x..."/>
-            </div>
-
-            {/* VALOR */}
-            <div style={S.fieldWrap}>
-              <label style={S.label}>Valor ({token})</label>
-              <input style={S.input} value={valor} onChange={e=>setValor(e.target.value)} placeholder={token==="ETH"?"0.01":"10.00"} type="number"/>
-            </div>
-
-            {/* FEE BOX */}
-            {fee && (
-              <div style={S.feeBox}>
-                <div style={S.feeRow}>
-                  <span style={{color:"rgba(100,150,200,0.45)"}}>Fee SilentFlow (0.2%)</span>
-                  <span style={{color:"rgba(30,144,255,0.55)"}}>{fee} {token}</span>
-                </div>
-                <div style={S.feeSep}/>
-                <div style={S.feeRow}>
-                  <span style={{color:"rgba(200,230,255,0.65)"}}>Destinatário recebe</span>
-                  <span style={{color:"#1E90FF"}}>{fin} {token}</span>
-                </div>
-                {modo==="silencioso" && (
-                  <>
-                    <div style={S.feeSep}/>
-                    <div style={S.feeRow}>
-                      <span style={{color:"rgba(0,191,255,0.4)"}}>Split automático</span>
-                      <span style={{color:"rgba(0,191,255,0.6)"}}>2–4 partes aleatórias</span>
-                    </div>
-                    <div style={S.feeRow}>
-                      <span style={{color:"rgba(0,191,255,0.4)"}}>Multi-hop por parte</span>
-                      <span style={{color:"rgba(0,191,255,0.6)"}}>2–3 endereços efêmeros</span>
-                    </div>
-                    <div style={S.feeRow}>
-                      <span style={{color:"rgba(0,191,255,0.4)"}}>Delay estimado</span>
-                      <span style={{color:"rgba(0,191,255,0.6)"}}>1–6 horas</span>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
-            <button style={loading||!dest||!valor ? S.btnOff : S.btn(modo)} onClick={enviar} disabled={loading||!dest||!valor}>
-              {loading ? "Processando..." : modo==="silencioso" ? "👻 Enviar Modo Silencioso" : "⚡ Enviar com Privacidade"}
+        {/* Token selector */}
+        <div style={styles.tokenRow}>
+          {Object.keys(TOKENS).map((token) => (
+            <button
+              key={token}
+              onClick={() => setSelectedToken(token)}
+              style={{
+                ...styles.tokenBtn,
+                ...(selectedToken === token ? styles.tokenBtnActive : {}),
+              }}
+            >
+              {token}
             </button>
+          ))}
+        </div>
 
-            {status && <div style={ok?S.statusOk:S.statusBox}>{status}</div>}
-            {txHash && (
-              <a style={S.txLink} href={"https://sepolia.etherscan.io/tx/"+txHash} target="_blank" rel="noreferrer">
-                Ver transação no Etherscan →
-              </a>
-            )}
-          </div>
-        )}
+        {/* Amount */}
+        <div style={styles.inputGroup}>
+          <label style={styles.label}>Valor</label>
+          <input
+            type="number"
+            placeholder={`0.0 ${selectedToken}`}
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            style={styles.input}
+          />
+        </div>
 
-        {tab==="history" && (
-          <div>
-            {history.length===0 ? (
-              <div style={S.emptyHistory}>Nenhuma transação ainda</div>
-            ) : history.map((tx,i)=>(
-              <div key={i} style={S.historyItem}>
-                <div style={S.histRow}>
-                  <span style={{fontSize:"13px",color:"#1E90FF",fontFamily:"'Syne',sans-serif",fontWeight:700}}>
-                    {TOKENS[tx.token]?.icon} {tx.token}
-                  </span>
-                  <span style={{fontSize:"13px",color:"#d8eeff"}}>{tx.recebe} {tx.token}</span>
-                </div>
-                <div style={S.histRow}>
-                  <span style={{fontSize:"11px",color:"rgba(100,150,200,0.5)"}}>Para: {tx.dest}</span>
-                  <span style={S.histBadge(tx.status)}>{tx.status}</span>
-                </div>
-                <div style={S.histRow}>
-                  <span style={{fontSize:"10px",color:"rgba(100,150,200,0.3)"}}>
-                    {tx.date} · {tx.modo==="silencioso" ? "👻 "+tx.splits+" splits · "+tx.hops+" hops" : "⚡ padrão"}
-                  </span>
-                  {tx.hash && !tx.hash.startsWith("agendado") && (
-                    <a style={S.histLink} href={"https://sepolia.etherscan.io/tx/"+tx.hash} target="_blank" rel="noreferrer">Ver TX →</a>
-                  )}
-                </div>
-              </div>
-            ))}
-            {history.length>0 && (
-              <button style={S.clearBtn} onClick={()=>{setHistory([]);saveHistory([]);}}>
-                Limpar histórico
-              </button>
-            )}
+        {/* Recipient */}
+        <div style={styles.inputGroup}>
+          <label style={styles.label}>Destinatário</label>
+          <input
+            type="text"
+            placeholder="0x..."
+            value={recipient}
+            onChange={(e) => setRecipient(e.target.value)}
+            style={styles.input}
+          />
+        </div>
+
+        {/* Fee */}
+        <div style={styles.feeBox}>
+          <span style={styles.feeText}>Taxa de privacidade: <strong>0,2%</strong></span>
+          {amount && (
+            <span style={styles.feeValue}>
+              ≈ {(parseFloat(amount) * 0.002).toFixed(6)} {selectedToken}
+            </span>
+          )}
+        </div>
+
+        {/* Send button */}
+        <button
+          onClick={sendTransaction}
+          disabled={loading || !account}
+          style={{ ...styles.sendBtn, opacity: loading || !account ? 0.6 : 1 }}
+        >
+          {loading ? "⏳ Processando..." : "👻 Enviar com Privacidade"}
+        </button>
+
+        {/* Status */}
+        {status && (
+          <div style={styles.statusBox}>
+            <pre style={styles.statusText}>{status}</pre>
           </div>
         )}
       </div>
+
+      {/* History */}
+      {txHistory.length > 0 && (
+        <div style={styles.historyCard}>
+          <div style={styles.historyTitle}>Histórico</div>
+          {txHistory.map((tx) => (
+            <div key={tx.id} style={styles.historyItem}>
+              <div style={styles.historyRow}>
+                <span style={styles.historyBadge}>
+                  👻 {tx.splits} splits · {tx.hops} hops
+                </span>
+                <span style={styles.historyTime}>{tx.time}</span>
+              </div>
+              <div style={styles.historyDetails}>
+                {tx.amount} {tx.token} → {tx.recipient}
+              </div>
+              <a
+                href={`https://sepolia.etherscan.io/tx/${tx.hash}`}
+                target="_blank"
+                rel="noreferrer"
+                style={styles.historyLink}
+              >
+                Ver no Etherscan ↗
+              </a>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
+
+const styles = {
+  container: {
+    minHeight: "100vh",
+    backgroundColor: "#010408",
+    color: "#fff",
+    fontFamily: "'DM Mono', monospace",
+    padding: "20px",
+    maxWidth: "480px",
+    margin: "0 auto",
+  },
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: "32px",
+    paddingTop: "8px",
+  },
+  logo: { display: "flex", alignItems: "center", gap: "8px" },
+  logoIcon: { fontSize: "24px" },
+  logoText: { fontSize: "20px", fontWeight: "700", color: "#1E90FF" },
+  badge: {
+    fontSize: "10px",
+    padding: "2px 8px",
+    backgroundColor: "rgba(30,144,255,0.15)",
+    border: "1px solid rgba(30,144,255,0.3)",
+    borderRadius: "20px",
+    color: "#1E90FF",
+  },
+  connectBtn: {
+    padding: "8px 16px",
+    backgroundColor: "rgba(30,144,255,0.1)",
+    border: "1px solid rgba(30,144,255,0.3)",
+    borderRadius: "8px",
+    color: "#1E90FF",
+    cursor: "pointer",
+    fontSize: "13px",
+    fontFamily: "'DM Mono', monospace",
+  },
+  card: {
+    backgroundColor: "rgba(255,255,255,0.03)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    borderRadius: "16px",
+    padding: "24px",
+    marginBottom: "16px",
+  },
+  cardHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: "20px",
+  },
+  cardTitle: { fontSize: "18px", fontWeight: "700" },
+  privacyBadge: {
+    display: "flex",
+    alignItems: "center",
+    padding: "4px 10px",
+    backgroundColor: "rgba(30,144,255,0.1)",
+    border: "1px solid rgba(30,144,255,0.2)",
+    borderRadius: "20px",
+    color: "#1E90FF",
+  },
+  infoBox: {
+    backgroundColor: "rgba(30,144,255,0.05)",
+    border: "1px solid rgba(30,144,255,0.15)",
+    borderRadius: "10px",
+    padding: "14px",
+    marginBottom: "20px",
+  },
+  infoRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingBottom: "8px",
+    marginBottom: "8px",
+    borderBottom: "1px solid rgba(255,255,255,0.05)",
+  },
+  infoLabel: { fontSize: "12px", color: "rgba(255,255,255,0.5)" },
+  infoValue: { fontSize: "12px", color: "#1E90FF" },
+  tokenRow: { display: "flex", gap: "8px", marginBottom: "20px" },
+  tokenBtn: {
+    flex: 1,
+    padding: "10px",
+    backgroundColor: "rgba(255,255,255,0.05)",
+    border: "1px solid rgba(255,255,255,0.1)",
+    borderRadius: "8px",
+    color: "rgba(255,255,255,0.5)",
+    cursor: "pointer",
+    fontSize: "13px",
+    fontFamily: "'DM Mono', monospace",
+    transition: "all 0.2s",
+  },
+  tokenBtnActive: {
+    backgroundColor: "rgba(30,144,255,0.15)",
+    border: "1px solid rgba(30,144,255,0.4)",
+    color: "#1E90FF",
+  },
+  inputGroup: { marginBottom: "16px" },
+  label: { display: "block", fontSize: "12px", color: "rgba(255,255,255,0.4)", marginBottom: "8px" },
+  input: {
+    width: "100%",
+    padding: "12px",
+    backgroundColor: "rgba(255,255,255,0.05)",
+    border: "1px solid rgba(255,255,255,0.1)",
+    borderRadius: "8px",
+    color: "#fff",
+    fontSize: "14px",
+    fontFamily: "'DM Mono', monospace",
+    outline: "none",
+    boxSizing: "border-box",
+  },
+  feeBox: {
+    display: "flex",
+    justifyContent: "space-between",
+    padding: "10px 12px",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderRadius: "8px",
+    marginBottom: "20px",
+  },
+  feeText: { fontSize: "12px", color: "rgba(255,255,255,0.4)" },
+  feeValue: { fontSize: "12px", color: "rgba(255,255,255,0.6)" },
+  sendBtn: {
+    width: "100%",
+    padding: "14px",
+    backgroundColor: "#1E90FF",
+    border: "none",
+    borderRadius: "10px",
+    color: "#fff",
+    fontSize: "15px",
+    fontWeight: "600",
+    cursor: "pointer",
+    fontFamily: "'DM Mono', monospace",
+    transition: "all 0.2s",
+  },
+  statusBox: {
+    marginTop: "16px",
+    padding: "12px",
+    backgroundColor: "rgba(30,144,255,0.08)",
+    border: "1px solid rgba(30,144,255,0.2)",
+    borderRadius: "8px",
+  },
+  statusText: {
+    fontSize: "12px",
+    color: "#1E90FF",
+    margin: 0,
+    whiteSpace: "pre-wrap",
+    fontFamily: "'DM Mono', monospace",
+  },
+  historyCard: {
+    backgroundColor: "rgba(255,255,255,0.03)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    borderRadius: "16px",
+    padding: "20px",
+  },
+  historyTitle: { fontSize: "14px", color: "rgba(255,255,255,0.4)", marginBottom: "16px" },
+  historyItem: {
+    paddingBottom: "14px",
+    marginBottom: "14px",
+    borderBottom: "1px solid rgba(255,255,255,0.05)",
+  },
+  historyRow: { display: "flex", justifyContent: "space-between", marginBottom: "4px" },
+  historyBadge: { fontSize: "12px", color: "#1E90FF" },
+  historyTime: { fontSize: "11px", color: "rgba(255,255,255,0.3)" },
+  historyDetails: { fontSize: "12px", color: "rgba(255,255,255,0.5)", marginBottom: "6px" },
+  historyLink: { fontSize: "11px", color: "rgba(30,144,255,0.6)", textDecoration: "none" },
+};
