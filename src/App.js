@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { ethers } from "ethers";
 
-const CONTRACT_ADDRESS = "0xd7977Ff9b1876C1F8792599FA11994C3a5571AB3";
+const CONTRACT_ADDRESS = "0x7737DC1716680742E659B3fC97c85807089240e9";
 const BACKEND_URL = "https://silentflow-production.up.railway.app";
 
 const ABI = [
@@ -9,7 +9,7 @@ const ABI = [
   "function depositToken(address token, uint256 amount, address stealthAddress, bytes calldata ephemeralPubKey, uint8 viewTag) external",
   "function withdraw(address token) external",
   "function balanceOf(address stealthAddress, address token) external view returns (uint256)",
-  "event StealthDeposit(bytes indexed ephemeralPubKey, address indexed stealthAddress, address token, uint256 amount, uint8 viewTag)",
+  "event StealthDeposit(bytes ephemeralPubKey, address indexed stealthAddress, address token, uint256 amount, uint8 viewTag)",
 ];
 
 const ERC20_ABI = [
