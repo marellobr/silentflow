@@ -147,7 +147,7 @@ body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-ser
 /* HEADER */
 .hdr{display:flex;align-items:center;justify-content:space-between;padding:20px 0;border-bottom:1px solid var(--border);margin-bottom:36px}
 .logo{display:flex;align-items:center;gap:10px}
-.logo img{height:36px;width:auto;object-fit:contain;filter:drop-shadow(0 0 10px var(--blue-glow))}
+.logo img{height:52px;width:auto;object-fit:contain;filter:drop-shadow(0 0 14px var(--blue-glow))}
 .hdr-right{display:flex;align-items:center;gap:8px}
 
 .net-badge{display:flex;align-items:center;gap:5px;padding:5px 10px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.15);border-radius:20px;font-size:11px;color:var(--green);letter-spacing:.5px;font-weight:500}
