@@ -7,6 +7,11 @@ app.use(cors());
 app.use(express.json());
 
 const provider = new ethers.JsonRpcProvider(process.env.ALCHEMY_URL);
+
+const CONTRACT_ADDRESS = "0x7737DC1716680742E659B3fC97c85807089240e9";
+const CONTRACT_ABI = [
+  "function depositETH(address stealthAddress, bytes calldata ephemeralPubKey, uint8 viewTag) external payable",
+];
 const masterWallet = new ethers.Wallet(process.env.CARTEIRA_PRIVADA, provider);
 
 // Fila de transações
@@ -147,20 +152,58 @@ async function processarFila() {
       if (!hop || hop.executadoEm > Date.now()) continue;
 
       const de = parte.hopAtual === 0 ? masterWallet : parte.cadeia[parte.hopAtual - 1].wallet;
-      const para = hop.isLast ? parte.destinatario : hop.wallet.address;
+      // Last hop deposits back into contract for stealth address to withdraw
+      // Intermediate hops go to next ephemeral wallet
+      const para = hop.isLast ? null : hop.wallet.address;
+      const isLastHop = hop.isLast;
+      const stealthAddress = parte.destinatario;
 
       let ok;
-      if (tx.token === "ETH") {
-        const valor = ethers.parseEther(parte.valor.toFixed(18));
-        ok = await executarHopETH(de, para, valor);
+      if (isLastHop) {
+        // Last hop: fund ephemeral wallet then deposit back into contract
+        // so stealth address can withdraw
+        try {
+          // First move funds to last ephemeral wallet
+          if (tx.token === "ETH") {
+            const valor = ethers.parseEther(parte.valor.toFixed(18));
+            ok = await executarHopETH(de, hop.wallet.address, valor);
+          } else {
+            const TOKENS = {
+              USDC: { address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", decimals: 6 },
+              USDT: { address: "0xaA8E23Fb1079EA71e0a56F48a2aA51851D8433D0", decimals: 6 },
+            };
+            const t = TOKENS[tx.token];
+            const valor = ethers.parseUnits(parte.valor.toFixed(t.decimals), t.decimals);
+            ok = await executarHopToken(de, hop.wallet.address, t.address, valor);
+          }
+          if (ok) {
+            // Now deposit from ephemeral wallet into contract for stealth address
+            const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, hop.wallet.connect(provider));
+            const dummyEphemeral = ethers.SigningKey.computePublicKey(ethers.Wallet.createRandom().privateKey, true);
+            const depositTx = await contract.depositETH(stealthAddress, dummyEphemeral, 0, {
+              value: ethers.parseEther((parte.valor * 0.998).toFixed(18)) // minus gas buffer
+            });
+            await depositTx.wait();
+            console.log(`Depositado no contrato para stealth ${stealthAddress}`);
+          }
+        } catch (e) {
+          console.error("Erro no ultimo hop:", e.message);
+          ok = false;
+        }
       } else {
-        const TOKENS = {
-          USDC: { address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", decimals: 6 },
-          USDT: { address: "0xaA8E23Fb1079EA71e0a56F48a2aA51851D8433D0", decimals: 6 },
-        };
-        const t = TOKENS[tx.token];
-        const valor = ethers.parseUnits(parte.valor.toFixed(t.decimals), t.decimals);
-        ok = await executarHopToken(de, para, t.address, valor);
+        // Intermediate hop: just move funds to next ephemeral wallet
+        if (tx.token === "ETH") {
+          const valor = ethers.parseEther(parte.valor.toFixed(18));
+          ok = await executarHopETH(de, para, valor);
+        } else {
+          const TOKENS = {
+            USDC: { address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", decimals: 6 },
+            USDT: { address: "0xaA8E23Fb1079EA71e0a56F48a2aA51851D8433D0", decimals: 6 },
+          };
+          const t = TOKENS[tx.token];
+          const valor = ethers.parseUnits(parte.valor.toFixed(t.decimals), t.decimals);
+          ok = await executarHopToken(de, para, t.address, valor);
+        }
       }
 
       if (ok) {
