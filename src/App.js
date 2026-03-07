@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
 import { ethers } from "ethers";
 
-const CONTRACT_ADDRESS = "0x0351ee78F2E85c13ED2600455b14F3B60db048Bc";
+const CONTRACT_ADDRESS = "0x6b9bf3550139012D126FEFb074949560c3d47689";
 const BACKEND_URL = "https://silentflow-production.up.railway.app";
 
 const ABI = [
   "function depositETH(address stealthAddress, bytes calldata ephemeralPubKey, uint8 viewTag) external payable",
   "function depositToken(address token, uint256 amount, address stealthAddress, bytes calldata ephemeralPubKey, uint8 viewTag) external",
   "function withdraw(address token, address recipient) external",
+  "function withdrawFor(address stealthAddress, address token, address recipient, bytes calldata sig) external",
+  "function withdrawNonces(address) external view returns (uint256)",
   "function balanceOf(address stealthAddress, address token) external view returns (uint256)",
   "event StealthDeposit(bytes ephemeralPubKey, address indexed stealthAddress, address token, uint256 amount, uint8 viewTag)",
 ];
@@ -405,10 +407,8 @@ export default function App() {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
       const filter   = contract.filters.StealthDeposit();
-      console.log("Iniciando scan - chaves:", myKeys.spendingPrivKey.slice(0,10), myKeys.viewingPrivKey.slice(0,10));
       // Get current block and scan last 50000 blocks in chunks to avoid RPC limits
       const currentBlock = await provider.getBlockNumber();
-      console.log("Bloco atual:", currentBlock);
       const fromBlock    = Math.max(0, currentBlock - 50000);
       const CHUNK        = 2000;
       const events       = [];
@@ -416,7 +416,6 @@ export default function App() {
         const end    = Math.min(start + CHUNK - 1, currentBlock);
         const chunk  = await contract.queryFilter(filter, start, end);
         events.push(...chunk);
-      console.log("Eventos encontrados ate agora:", events.length);
       }
 
       const found = [];
@@ -427,7 +426,6 @@ export default function App() {
 
         const viewTag            = Number(ev.args[4]);
 
-        console.log("Testando evento:", stealthAddressOnChain, "viewTag:", viewTag);
         const result = tryDecryptDeposit(
           ephemeralPubKey, stealthAddressOnChain, viewTag,
           myKeys.spendingPrivKey, myKeys.viewingPrivKey
@@ -438,7 +436,6 @@ export default function App() {
           const tokenAddrNorm = (!tokenAddr || tokenAddr === ethers.ZeroAddress || tokenAddr === "0x0000000000000000000000000000000000000000")
             ? ethers.ZeroAddress : tokenAddr;
           const bal = await contract.balanceOf(stealthAddressOnChain, tokenAddrNorm);
-          console.log("Saldo no contrato para", stealthAddressOnChain, ":", bal.toString(), "token:", tokenAddrNorm);
           if (bal > 0n) {
             const tokenSymbol = tokenAddr === ethers.ZeroAddress ? "ETH"
               : Object.keys(TOKENS).find(k => TOKENS[k].address?.toLowerCase() === tokenAddr.toLowerCase()) || tokenAddr.slice(0,6);
@@ -455,41 +452,37 @@ export default function App() {
         }
       }
       setDeposits(found);
-      console.log("Scan completo. Depositos:", found.length);
     } catch (e) {
       alert("Erro ao escanear: " + e.message);
-      console.error("Erro scanner:", e);
     }
     setScanning(false);
   }, [myKeys, account]);
 
   const withdraw = async (deposit) => {
     if (!account) return alert("Conecte sua carteira.");
-    if (withdrawing) return; // prevent double execution
+    if (withdrawing) return;
     setWithdrawing(deposit.stealthAddress);
     try {
-      const provider      = new ethers.BrowserProvider(window.ethereum);
-      const signer        = await provider.getSigner();
-      const stealthSigner = new ethers.Wallet(deposit.stealthPrivKey, provider);
-      console.log("Stealth address no deposito:", deposit.stealthAddress);
-      console.log("Endereco do stealthSigner:", stealthSigner.address);
-      console.log("Sao iguais?", stealthSigner.address.toLowerCase() === deposit.stealthAddress.toLowerCase());
+      const provider  = new ethers.BrowserProvider(window.ethereum);
+      const signer    = await provider.getSigner();
+      const contract  = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+      const tokenAddr = TOKENS[deposit.token]?.address || ethers.ZeroAddress;
 
-      // Check if stealth wallet already has ETH for gas
-      const stealthBal = await provider.getBalance(deposit.stealthAddress);
-      if (stealthBal < ethers.parseEther("0.0005")) {
-        // Fund stealth wallet for gas — only once
-        const fundTx = await signer.sendTransaction({
-          to: deposit.stealthAddress,
-          value: ethers.parseEther("0.001"),
-        });
-        await fundTx.wait();
-      }
+      // Gasless withdraw: stealthSigner signs, connected wallet pays gas
+      const nonce   = await contract.withdrawNonces(deposit.stealthAddress);
+      const chainId = (await provider.getNetwork()).chainId;
 
-      // Withdraw from contract using stealth private key, send to real wallet
-      const contract    = new ethers.Contract(CONTRACT_ADDRESS, ABI, stealthSigner);
-      const tokenAddr   = TOKENS[deposit.token]?.address || ethers.ZeroAddress;
-      const tx          = await contract.withdraw(tokenAddr, account);
+      const msgHash = ethers.keccak256(
+        ethers.AbiCoder.defaultAbiCoder().encode(
+          ["address","address","address","uint256","uint256"],
+          [deposit.stealthAddress, tokenAddr, account, nonce, chainId]
+        )
+      );
+
+      const stealthSigner = new ethers.Wallet(deposit.stealthPrivKey);
+      const sig = await stealthSigner.signMessage(ethers.getBytes(msgHash));
+
+      const tx = await contract.withdrawFor(deposit.stealthAddress, tokenAddr, account, sig);
       await tx.wait();
 
       setDeposits(d => d.filter(x => x.stealthAddress !== deposit.stealthAddress));
