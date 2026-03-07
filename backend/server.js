@@ -45,37 +45,23 @@ function shuffle(arr) {
 }
 
 function numHops() {
-  return Math.random() < 0.5 ? 2 : 3;
+  return 2; // fixed 2 hops for speed
 }
 
 // ─── Planejamento ─────────────────────────────────────────────────────────────
 
-function montarPlano(destinatario, splits) {
-  return splits.map((valor, i) => {
+function montarPlano(numSplits) {
+  // Creates dummy hop chains for noise — does NOT move real funds
+  // Real funds stay in the contract until recipient withdraws
+  return Array.from({ length: numSplits }, (_, i) => {
     const hops = numHops();
-    const cadeia = [];
-
-    for (let h = 0; h < hops; h++) {
-      const efemero = ethers.Wallet.createRandom();
-      cadeia.push({
-        hopIndex: h,
-        wallet: efemero,
-        isLast: h === hops - 1,
-      });
-    }
-
-    return {
-      splitIndex: i,
-      valor,
-      destinatario,
-      cadeia: shuffle(cadeia.map((c, idx) => ({
-        ...c,
-        hopIndex: idx,
-        isLast: idx === cadeia.length - 1,
-      }))),
-      concluido: false,
-      hopAtual: 0,
-    };
+    const cadeia = Array.from({ length: hops }, (_, h) => ({
+      hopIndex: h,
+      wallet: ethers.Wallet.createRandom(),
+      isLast: h === hops - 1,
+      executadoEm: 0,
+    }));
+    return { splitIndex: i, cadeia, concluido: false, hopAtual: 0 };
   });
 }
 
@@ -151,65 +137,12 @@ async function processarFila() {
       const hop = parte.cadeia[parte.hopAtual];
       if (!hop || hop.executadoEm > Date.now()) continue;
 
-      const de = parte.hopAtual === 0 ? masterWallet : parte.cadeia[parte.hopAtual - 1].wallet;
-      // Last hop deposits back into contract for stealth address to withdraw
-      // Intermediate hops go to next ephemeral wallet
-      const para = hop.isLast ? null : hop.wallet.address;
-      const isLastHop = hop.isLast;
-      const stealthAddress = parte.destinatario;
-
-      let ok;
-      if (isLastHop) {
-        // Last hop: fund ephemeral wallet then deposit back into contract
-        // so stealth address can withdraw
-        try {
-          // First move funds to last ephemeral wallet
-          if (tx.token === "ETH") {
-            const valor = ethers.parseEther(parte.valor.toFixed(18));
-            ok = await executarHopETH(de, hop.wallet.address, valor);
-          } else {
-            const TOKENS = {
-              USDC: { address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", decimals: 6 },
-              USDT: { address: "0xaA8E23Fb1079EA71e0a56F48a2aA51851D8433D0", decimals: 6 },
-            };
-            const t = TOKENS[tx.token];
-            const valor = ethers.parseUnits(parte.valor.toFixed(t.decimals), t.decimals);
-            ok = await executarHopToken(de, hop.wallet.address, t.address, valor);
-          }
-          if (ok) {
-            // Now deposit from ephemeral wallet into contract for stealth address
-            const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, hop.wallet.connect(provider));
-            const dummyEphemeral = ethers.SigningKey.computePublicKey(ethers.Wallet.createRandom().privateKey, true);
-            const depositTx = await contract.depositETH(stealthAddress, dummyEphemeral, 0, {
-              value: ethers.parseEther((parte.valor * 0.998).toFixed(18)) // minus gas buffer
-            });
-            await depositTx.wait();
-            console.log(`Depositado no contrato para stealth ${stealthAddress}`);
-          }
-        } catch (e) {
-          console.error("Erro no ultimo hop:", e.message);
-          ok = false;
-        }
-      } else {
-        // Intermediate hop: just move funds to next ephemeral wallet
-        if (tx.token === "ETH") {
-          const valor = ethers.parseEther(parte.valor.toFixed(18));
-          ok = await executarHopETH(de, para, valor);
-        } else {
-          const TOKENS = {
-            USDC: { address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", decimals: 6 },
-            USDT: { address: "0xaA8E23Fb1079EA71e0a56F48a2aA51851D8433D0", decimals: 6 },
-          };
-          const t = TOKENS[tx.token];
-          const valor = ethers.parseUnits(parte.valor.toFixed(t.decimals), t.decimals);
-          ok = await executarHopToken(de, para, t.address, valor);
-        }
-      }
-
-      if (ok) {
-        await enviarDummy(de);
+      // Dummy hop: just send tiny ETH between ephemeral wallets for noise
+      // Real funds stay in the contract until recipient calls withdraw()
+      try {
+        await enviarDummy(masterWallet);
+        console.log(`Dummy hop ${parte.hopAtual + 1}/${parte.cadeia.length} para tx ${id}`);
         parte.hopAtual++;
-        parte.hopsFeitos++;
         tx.hopsFeitos++;
 
         if (parte.hopAtual >= parte.cadeia.length) {
@@ -217,18 +150,17 @@ async function processarFila() {
         } else {
           parte.cadeia[parte.hopAtual].executadoEm = Date.now() + delayAleatorio();
         }
-      } else {
+      } catch (e) {
+        console.error("Erro no dummy hop:", e.message);
         hop.tentativas = (hop.tentativas || 0) + 1;
-        if (hop.tentativas >= 3) {
-          parte.concluido = true; // abandona essa parte após 3 falhas
-        }
+        if (hop.tentativas >= 3) parte.concluido = true;
       }
     }
 
     const todasConcluidas = tx.partes.every((p) => p.concluido);
     if (todasConcluidas) {
       tx.concluido = true;
-      console.log(`✅ Transação ${id} concluída.`);
+      console.log(`✅ Transação ${id} concluída (fundos no contrato prontos para saque).`);
     }
   }
 }
@@ -242,9 +174,8 @@ app.post("/agendar", async (req, res) => {
     const { txHash, destinatario, valor, token } = req.body;
     const id = `sf_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
-    const numSplits = 2 + Math.floor(Math.random() * 3); // 2-4
-    const splits = splitAleatorio(parseFloat(valor), numSplits);
-    const partes = montarPlano(destinatario, splits);
+    const numSplits = 2; // fixed 2 splits for speed
+    const partes = montarPlano(numSplits);
 
     // Agenda primeiro hop de cada parte com delay
     partes.forEach((p) => {
@@ -265,8 +196,8 @@ app.post("/agendar", async (req, res) => {
       criadoEm: Date.now(),
     });
 
-    // Estimativa: hopsTotal * 3 min max
-    const estimativaMinutos = hopsTotal * 3;
+    // Estimativa: hopsTotal * delay max (3 min each)
+    const estimativaMinutos = Math.min(hopsTotal * 3, 10);
 
     console.log(`📥 Nova tx agendada: ${id} — ${numSplits} splits, ${hopsTotal} hops`);
 
