@@ -192,9 +192,11 @@ async function depositarTokenNoContrato(wallet, tokenAddress, valor, stealthAddr
 }
 
 // ─── Dummy: transações de ruído ───────────────────────────────────────────────
+let pipelineAtivo = false;
 
 async function enviarDummy() {
-  if (Math.random() > 0.5) return; // 50% de chance
+  if (pipelineAtivo) return; // não interferir com nonces durante funding
+  if (Math.random() > 0.5) return;
   try {
     const efemero = ethers.Wallet.createRandom();
     const gasPrice = await getGasPrice();
@@ -238,29 +240,36 @@ async function executarPipelineETH(txId, valorTotal, stealthAddress, ephemeralPu
 
   console.log(`\n🔀 Pipeline ETH [${txId}]: ${partes.length} splits, ${numHopsPerSplit} hops cada`);
 
-  // Executa todos os splits em paralelo (chegam em momentos diferentes = timing break)
+  // Cria todas as cadeias de wallets efêmeras
+  const cadeias = partes.map(() =>
+    Array.from({ length: numHopsPerSplit }, () =>
+      ethers.Wallet.createRandom().connect(provider)
+    )
+  );
+
+  // FASE 1: Financia wallets iniciais EM SÉRIE (evita conflito de nonce na master)
+  pipelineAtivo = true;
+  const gasDeposit = await estimarCustoGasDeposit();
+  const gasHops = (await estimarCustoGasETH()) * BigInt(numHopsPerSplit);
+  const gasExtra = await estimarCustoGasETH();
+
+  for (let i = 0; i < partes.length; i++) {
+    const valorComGas = partes[i] + gasDeposit + gasHops + gasExtra;
+    console.log(`  Split ${i + 1}: ${ethers.formatEther(partes[i])} ETH`);
+    const txInicial = await masterWallet.sendTransaction({
+      to: cadeias[i][0].address,
+      value: valorComGas,
+      gasLimit: 21000n,
+    });
+    await txInicial.wait();
+    console.log(`  → Funded E${i+1}[0]: ${cadeias[i][0].address.slice(0,10)}...`);
+  }
+
+  // FASE 2: Hops em paralelo (cada split já tem seu ETH, sem depender da master)
+  pipelineAtivo = false;
   const promessas = partes.map(async (valorParte, i) => {
+    const cadeia = cadeias[i];
     try {
-      // Cria cadeia de wallets efêmeras para este split
-      const cadeia = Array.from({ length: numHopsPerSplit }, () =>
-        ethers.Wallet.createRandom().connect(provider)
-      );
-
-      console.log(`  Split ${i + 1}: ${ethers.formatEther(valorParte)} ETH, cadeia de ${cadeia.length} wallets`);
-
-      // Envia ETH da master para primeira wallet efêmera
-      const gasDeposit = await estimarCustoGasDeposit();
-      const gasHops = (await estimarCustoGasETH()) * BigInt(numHopsPerSplit);
-      const gasTotal = gasDeposit + gasHops + (await estimarCustoGasETH()); // margem
-      const valorComGas = valorParte + gasTotal;
-
-      const txInicial = await masterWallet.sendTransaction({
-        to: cadeia[0].address,
-        value: valorComGas,
-        gasLimit: 21000n,
-      });
-      await txInicial.wait();
-      console.log(`  → Funded E${i+1}[0]: ${cadeia[0].address.slice(0,10)}...`);
 
       // Hops intermediários com delays
       for (let h = 0; h < cadeia.length - 1; h++) {
