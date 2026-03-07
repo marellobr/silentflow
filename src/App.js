@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { ethers } from "ethers";
 
-const CONTRACT_ADDRESS = "0x7737DC1716680742E659B3fC97c85807089240e9";
+const CONTRACT_ADDRESS = "0x0351ee78F2E85c13ED2600455b14F3B60db048Bc";
 const BACKEND_URL = "https://silentflow-production.up.railway.app";
 
 const ABI = [
   "function depositETH(address stealthAddress, bytes calldata ephemeralPubKey, uint8 viewTag) external payable",
   "function depositToken(address token, uint256 amount, address stealthAddress, bytes calldata ephemeralPubKey, uint8 viewTag) external",
-  "function withdraw(address token) external",
+  "function withdraw(address token, address recipient) external",
   "function balanceOf(address stealthAddress, address token) external view returns (uint256)",
   "event StealthDeposit(bytes ephemeralPubKey, address indexed stealthAddress, address token, uint256 amount, uint8 viewTag)",
 ];
@@ -486,10 +486,10 @@ export default function App() {
         await fundTx.wait();
       }
 
-      // Withdraw from contract using stealth private key
-      const contract  = new ethers.Contract(CONTRACT_ADDRESS, ABI, stealthSigner);
-      const tokenAddr = TOKENS[deposit.token]?.address || ethers.ZeroAddress;
-      const tx        = await contract.withdraw(tokenAddr);
+      // Withdraw from contract using stealth private key, send to real wallet
+      const contract    = new ethers.Contract(CONTRACT_ADDRESS, ABI, stealthSigner);
+      const tokenAddr   = TOKENS[deposit.token]?.address || ethers.ZeroAddress;
+      const tx          = await contract.withdraw(tokenAddr, account);
       await tx.wait();
 
       setDeposits(d => d.filter(x => x.stealthAddress !== deposit.stealthAddress));
