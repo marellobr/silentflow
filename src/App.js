@@ -426,7 +426,10 @@ export default function App() {
 
         if (result) {
           // Check if still has balance
-          const bal = await contract.balanceOf(stealthAddressOnChain, tokenAddr || ethers.ZeroAddress);
+          const tokenAddrNorm = (!tokenAddr || tokenAddr === ethers.ZeroAddress || tokenAddr === "0x0000000000000000000000000000000000000000")
+            ? ethers.ZeroAddress : tokenAddr;
+          const bal = await contract.balanceOf(stealthAddressOnChain, tokenAddrNorm);
+          console.log("Saldo no contrato para", stealthAddressOnChain, ":", bal.toString(), "token:", tokenAddrNorm);
           if (bal > 0n) {
             const tokenSymbol = tokenAddr === ethers.ZeroAddress ? "ETH"
               : Object.keys(TOKENS).find(k => TOKENS[k].address?.toLowerCase() === tokenAddr.toLowerCase()) || tokenAddr.slice(0,6);
