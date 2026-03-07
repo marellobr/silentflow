@@ -679,7 +679,7 @@ export default function App() {
                     <div className="key-box">
                       <div className="key-label">Compartilhe com quem vai te enviar fundos:</div>
                       <div className="key-value" onClick={copyMeta}>
-                        {myKeys.metaAddress.slice(0, 30)}...{myKeys.metaAddress.slice(-20)}
+                        {myKeys.metaAddress}
                       </div>
                       <div className="copy-hint">{copied ? "✓ Copiado!" : "Clique para copiar"}</div>
                     </div>
