@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { ethers } from "ethers";
 
-const CONTRACT_ADDRESS = "0x6b9bf3550139012D126FEFb074949560c3d47689";
+const CONTRACT_ADDRESS = "0xAdcBABf7CB3cE55559b2A3ca81f75bbBC147565b";
 const BACKEND_URL = "https://silentflow-production.up.railway.app";
 
 const ABI = [
@@ -472,15 +472,15 @@ export default function App() {
       const nonce   = await contract.withdrawNonces(deposit.stealthAddress);
       const chainId = (await provider.getNetwork()).chainId;
 
-      const msgHash = ethers.keccak256(
-        ethers.AbiCoder.defaultAbiCoder().encode(
-          ["address","address","address","uint256","uint256"],
-          [deposit.stealthAddress, tokenAddr, account, nonce, chainId]
-        )
+      // Must match contract: keccak256(abi.encodePacked(stealthAddress, token, recipient, nonce, chainId))
+      const dataHash = ethers.solidityPackedKeccak256(
+        ["address","address","address","uint256","uint256"],
+        [deposit.stealthAddress, tokenAddr, account, nonce, chainId]
       );
 
+      // stealthSigner.signMessage adds the "\x19Ethereum Signed Message:\n32" prefix — matches contract
       const stealthSigner = new ethers.Wallet(deposit.stealthPrivKey);
-      const sig = await stealthSigner.signMessage(ethers.getBytes(msgHash));
+      const sig = await stealthSigner.signMessage(ethers.getBytes(dataHash));
 
       const tx = await contract.withdrawFor(deposit.stealthAddress, tokenAddr, account, sig);
       await tx.wait();
