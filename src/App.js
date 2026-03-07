@@ -342,32 +342,66 @@ export default function App() {
 
   // ── SEND ──────────────────────────────────────────────────────────────────
   const send = async () => {
-    if (!account)            return alert("Conecte sua carteira.");
+    if (!account)             return alert("Conecte sua carteira.");
     if (!amount || !metaAddr) return alert("Preencha todos os campos.");
-    setLoading(true); setStatus("Derivando stealth address..."); setStatusType("");
+    setLoading(true); setStatus("Iniciando envio privado..."); setStatusType("");
     try {
+      // 1. Deriva stealth address para o destinatário
       const { stealthAddress, ephemeralPubKey, viewTag } = deriveStealthAddress(metaAddr);
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer   = await provider.getSigner();
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+
+      // 2. Busca endereço da master wallet do backend
+      setStatus("Conectando ao pipeline de privacidade...");
+      const masterRes = await fetch(`${BACKEND_URL}/master`);
+      const { address: masterAddress } = await masterRes.json();
+
       let txHash;
+      let valorWei;
 
       if (token === "ETH") {
-        const tx = await contract.depositETH(stealthAddress, ephemeralPubKey, viewTag, { value: ethers.parseEther(amount) });
-        await tx.wait(); txHash = tx.hash;
+        // 3a. ETH: envia direto para master wallet do backend
+        valorWei = ethers.parseEther(amount);
+        setStatus("Aguardando confirmação na carteira...\n(Você está enviando para o mixer — os hops reais serão executados automaticamente)");
+        const tx = await signer.sendTransaction({
+          to: masterAddress,
+          value: valorWei,
+        });
+        setStatus("Confirmando transação na blockchain...");
+        await tx.wait();
+        txHash = tx.hash;
       } else {
+        // 3b. Token: transfere token para master wallet
         const t = TOKENS[token];
+        valorWei = ethers.parseUnits(amount, t.decimals);
         const tc = new ethers.Contract(t.address, ERC20_ABI, signer);
-        const val = ethers.parseUnits(amount, t.decimals);
-        const allow = await tc.allowance(account, CONTRACT_ADDRESS);
-        if (allow < val) { const a = await tc.approve(CONTRACT_ADDRESS, val); await a.wait(); }
-        const tx = await contract.depositToken(t.address, val, stealthAddress, ephemeralPubKey, viewTag);
-        await tx.wait(); txHash = tx.hash;
+
+        setStatus("Aguardando aprovação do token...");
+        const allow = await tc.allowance(account, masterAddress);
+        if (allow < valorWei) {
+          const approveTx = await tc.approve(masterAddress, valorWei);
+          await approveTx.wait();
+        }
+
+        setStatus("Transferindo tokens para o mixer...");
+        const transferTx = await tc.transfer(masterAddress, valorWei);
+        await transferTx.wait();
+        txHash = transferTx.hash;
       }
 
-      const res  = await fetch(`${BACKEND_URL}/agendar`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ txHash, destinatario: stealthAddress, valor: amount, token }),
+      // 4. Agenda pipeline no backend — passa stealthAddress, ephemeralPubKey, viewTag
+      setStatus("Agendando pipeline de hops...");
+      const res = await fetch(`${BACKEND_URL}/agendar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          txHash,
+          token,
+          valor: valorWei.toString(),
+          stealthAddress,
+          ephemeralPubKey,
+          viewTag,
+        }),
       });
       const data = await res.json();
       setPendingId(data.id);
@@ -378,7 +412,12 @@ export default function App() {
         time: new Date().toLocaleTimeString("pt-BR"), done: false,
       }, ...h]);
 
-      setStatus(`Enviando ${amount} ${token}.\nStealth address derivado — destinatário invisível on-chain.\nEstimativa: ~${data.estimativaMinutos} min`);
+      setStatus(
+        `Pipeline iniciado ✓\n` +
+        `Stealth address derivado — destinatário invisível on-chain.\n` +
+        `O backend vai executar os hops reais e depositar no contrato.\n` +
+        `Estimativa: ~${data.estimativaMinutos} min`
+      );
       setAmount(""); setMetaAddr("");
     } catch (e) {
       setStatus(e.reason || e.message || "Erro desconhecido.");
