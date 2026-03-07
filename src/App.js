@@ -113,137 +113,173 @@ function tryDecryptDeposit(ephemeralPubKeyHex, stealthAddressOnChain, viewTagOnC
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const STYLE = `
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap');
+
+:root {
+  --bg: #080b12;
+  --surface: #0d1117;
+  --surface2: #111820;
+  --border: rgba(255,255,255,.06);
+  --border2: rgba(255,255,255,.1);
+  --blue: #3b82f6;
+  --blue-dim: rgba(59,130,246,.12);
+  --blue-glow: rgba(59,130,246,.25);
+  --green: #22c55e;
+  --green-dim: rgba(34,197,94,.1);
+  --amber: #f59e0b;
+  --text: #e2e8f0;
+  --text2: rgba(226,232,240,.5);
+  --text3: rgba(226,232,240,.25);
+  --r: 14px;
+}
+
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
-body{background:#04060e;color:#d8dce8;font-family:'DM Mono',monospace;min-height:100vh}
+body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased}
 
+/* BG EFFECTS */
 .bg{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
-.bg::before{content:'';position:absolute;width:1000px;height:600px;top:-280px;left:50%;transform:translateX(-50%);background:radial-gradient(ellipse,rgba(30,144,255,.06) 0%,transparent 65%);border-radius:50%}
-.bg::after{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:55%;height:1px;background:linear-gradient(90deg,transparent,rgba(30,144,255,.28),transparent)}
+.bg::before{content:'';position:absolute;width:800px;height:800px;top:-300px;left:50%;transform:translateX(-50%);background:radial-gradient(ellipse,rgba(59,130,246,.05) 0%,transparent 60%);border-radius:50%}
+.bg::after{content:'';position:absolute;bottom:-200px;right:-100px;width:600px;height:600px;background:radial-gradient(ellipse,rgba(59,130,246,.03) 0%,transparent 60%);border-radius:50%}
 
-.wrap{position:relative;z-index:1;max-width:1020px;margin:0 auto;padding:0 28px 80px}
+.wrap{position:relative;z-index:1;max-width:1060px;margin:0 auto;padding:0 24px 80px}
 
 /* HEADER */
-.hdr{display:flex;align-items:center;justify-content:space-between;padding:26px 0;border-bottom:1px solid rgba(255,255,255,.04);margin-bottom:40px}
-.logo{display:flex;align-items:center;gap:12px}
-.logo img{height:48px;width:auto;object-fit:contain;filter:drop-shadow(0 0 14px rgba(30,144,255,.4))}
-.hdr-right{display:flex;align-items:center;gap:10px}
-.net-dot{display:flex;align-items:center;gap:6px;padding:6px 12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:8px;font-size:11px;color:rgba(255,255,255,.3);letter-spacing:.5px}
-.net-dot::before{content:'';width:7px;height:7px;border-radius:50%;background:#00dc64;box-shadow:0 0 6px #00dc64;animation:pulse 2s ease-in-out infinite;flex-shrink:0}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-.conn-btn{padding:9px 18px;background:transparent;border:1px solid rgba(255,255,255,.1);border-radius:9px;color:rgba(255,255,255,.4);font-family:'DM Mono',monospace;font-size:13px;cursor:pointer;transition:all .2s}
-.conn-btn:hover{border-color:rgba(255,255,255,.2);color:rgba(255,255,255,.7)}
-.conn-btn.on{border-color:rgba(0,220,100,.22);color:#00dc64;background:rgba(0,220,100,.05)}
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:20px 0;border-bottom:1px solid var(--border);margin-bottom:36px}
+.logo{display:flex;align-items:center;gap:10px}
+.logo img{height:36px;width:auto;object-fit:contain;filter:drop-shadow(0 0 10px var(--blue-glow))}
+.hdr-right{display:flex;align-items:center;gap:8px}
+
+.net-badge{display:flex;align-items:center;gap:5px;padding:5px 10px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.15);border-radius:20px;font-size:11px;color:var(--green);letter-spacing:.5px;font-weight:500}
+.net-badge::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:blink 2s ease-in-out infinite;flex-shrink:0}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
+
+.conn-btn{padding:8px 16px;background:var(--surface2);border:1px solid var(--border2);border-radius:20px;color:var(--text2);font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .2s}
+.conn-btn:hover{border-color:var(--blue);color:var(--text)}
+.conn-btn.on{border-color:rgba(34,197,94,.3);color:var(--green);background:var(--green-dim)}
 
 /* TABS */
-.tabs{display:flex;gap:4px;margin-bottom:32px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.05);border-radius:12px;padding:4px}
-.tab{flex:1;padding:11px;background:transparent;border:none;border-radius:9px;color:rgba(255,255,255,.3);font-family:'DM Mono',monospace;font-size:13px;cursor:pointer;transition:all .2s;letter-spacing:.3px}
-.tab:hover{color:rgba(255,255,255,.6)}
-.tab.on{background:rgba(255,255,255,.06);color:#fff;border:1px solid rgba(255,255,255,.08)}
+.tabs{display:flex;gap:2px;margin-bottom:28px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:3px;width:fit-content}
+.tab{padding:9px 28px;background:transparent;border:none;border-radius:10px;color:var(--text3);font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:500;cursor:pointer;transition:all .2s}
+.tab:hover{color:var(--text2)}
+.tab.on{background:var(--surface2);color:var(--text);border:1px solid var(--border2);box-shadow:0 1px 8px rgba(0,0,0,.3)}
 
 /* GRID */
-.grid{display:grid;grid-template-columns:1fr 368px;gap:24px;align-items:start}
+.grid{display:grid;grid-template-columns:1fr 380px;gap:20px;align-items:start}
+.left{display:flex;flex-direction:column;gap:16px}
+.sec-label{font-size:11px;font-weight:600;color:var(--text3);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px}
 
-/* LEFT PANELS */
-.left{display:flex;flex-direction:column;gap:18px}
-.sec-label{font-family:'Syne',sans-serif;font-size:11px;font-weight:600;color:rgba(255,255,255,.22);letter-spacing:2px;text-transform:uppercase}
-
-.card{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:16px;overflow:hidden}
-.card-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.04)}
-.card-title{font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:rgba(255,255,255,.28);letter-spacing:2px;text-transform:uppercase}
+/* CARDS */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
 .card-body{padding:6px 0}
+.hist-empty{text-align:center;padding:32px 0;color:var(--text3);font-size:13px}
 
-.hist-empty{text-align:center;padding:28px 0;color:rgba(255,255,255,.14);font-size:13px}
-.hist-item{padding:13px 20px;border-bottom:1px solid rgba(255,255,255,.03);transition:background .15s}
+/* HISTORY ITEMS */
+.hist-item{padding:14px 18px;border-bottom:1px solid var(--border);transition:background .15s;cursor:default}
 .hist-item:hover{background:rgba(255,255,255,.015)}
 .hist-item:last-child{border-bottom:none}
-.hist-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
-.hist-amt{font-size:15px;font-weight:500;color:#d8dce8}
-.hist-time{font-size:11px;color:rgba(255,255,255,.18)}
-.hist-to{font-size:12px;color:rgba(255,255,255,.28);margin-bottom:7px}
+.hist-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
+.hist-amt{font-size:15px;font-weight:600;color:var(--text)}
+.hist-time{font-size:11px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+.hist-to{font-size:12px;color:var(--text3);margin-bottom:8px;font-family:'JetBrains Mono',monospace}
 .hist-foot{display:flex;align-items:center;justify-content:space-between}
-.pill{font-size:11px;padding:2px 10px;border-radius:20px}
-.pill.done{background:rgba(0,220,100,.06);border:1px solid rgba(0,220,100,.15);color:#00dc64}
-.pill.proc{background:rgba(30,144,255,.06);border:1px solid rgba(30,144,255,.15);color:#4da6ff}
-.hist-link{font-size:11px;color:rgba(255,255,255,.2);text-decoration:none;transition:color .2s}
-.hist-link:hover{color:rgba(255,255,255,.5)}
+.pill{font-size:11px;padding:3px 10px;border-radius:20px;font-weight:500}
+.pill.done{background:var(--green-dim);border:1px solid rgba(34,197,94,.2);color:var(--green)}
+.pill.proc{background:var(--blue-dim);border:1px solid rgba(59,130,246,.2);color:var(--blue)}
+.hist-link{font-size:11px;color:var(--text3);text-decoration:none;transition:color .2s;font-weight:500}
+.hist-link:hover{color:var(--blue)}
 
-/* ACCORDION */
-.accord{background:rgba(255,255,255,.015);border:1px solid rgba(255,255,255,.05);border-radius:14px;overflow:hidden}
-.accord-toggle{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;cursor:pointer;user-select:none;transition:background .15s}
-.accord-toggle:hover{background:rgba(255,255,255,.02)}
-.accord-label{font-size:12px;color:rgba(255,255,255,.26)}
-.accord-arrow{font-size:10px;color:rgba(255,255,255,.16);transition:transform .25s}
-.accord-arrow.open{transform:rotate(180deg)}
-.accord-body{max-height:0;overflow:hidden;transition:max-height .3s ease,opacity .3s;opacity:0}
-.accord-body.open{max-height:300px;opacity:1}
-.accord-row{display:flex;justify-content:space-between;padding:10px 18px;border-top:1px solid rgba(255,255,255,.03)}
-.accord-k{font-size:12px;color:rgba(255,255,255,.26)}
-.accord-v{font-size:12px;color:rgba(255,255,255,.42)}
+/* PRIVACY INFO */
+.info-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.info-toggle{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;cursor:pointer;user-select:none;transition:background .15s}
+.info-toggle:hover{background:rgba(255,255,255,.02)}
+.info-label{font-size:13px;color:var(--text2);font-weight:500}
+.info-arrow{font-size:10px;color:var(--text3);transition:transform .25s}
+.info-arrow.open{transform:rotate(180deg)}
+.info-body{max-height:0;overflow:hidden;transition:max-height .35s ease,opacity .35s;opacity:0}
+.info-body.open{max-height:400px;opacity:1}
+.info-row{display:flex;justify-content:space-between;align-items:center;padding:10px 18px;border-top:1px solid var(--border)}
+.info-k{font-size:12px;color:var(--text3);font-weight:500}
+.info-v{font-size:12px;color:var(--text2);font-family:'JetBrains Mono',monospace}
 
 /* FORM CARD */
-.form-card{background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.07);border-radius:20px;padding:26px;position:sticky;top:24px}
-.form-title{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:#fff;margin-bottom:2px;letter-spacing:-.3px}
-.form-sub{font-size:11px;color:rgba(255,255,255,.22);margin-bottom:22px}
+.form-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;position:sticky;top:20px}
+.form-title{font-size:18px;font-weight:700;color:var(--text);margin-bottom:2px}
+.form-sub{font-size:12px;color:var(--text3);margin-bottom:20px;font-weight:400}
 
-.toks{display:flex;gap:6px;margin-bottom:18px}
-.tok{flex:1;padding:9px 0;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:8px;color:rgba(255,255,255,.32);font-family:'DM Mono',monospace;font-size:13px;cursor:pointer;transition:all .2s}
-.tok:hover{border-color:rgba(255,255,255,.14);color:rgba(255,255,255,.6)}
-.tok.on{background:rgba(30,144,255,.1);border-color:rgba(30,144,255,.32);color:#4da6ff}
+/* TOKEN SELECTOR */
+.toks{display:flex;gap:6px;margin-bottom:16px}
+.tok{flex:1;padding:8px 0;background:transparent;border:1px solid var(--border);border-radius:8px;color:var(--text3);font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .2s}
+.tok:hover{border-color:var(--border2);color:var(--text2)}
+.tok.on{background:var(--blue-dim);border-color:rgba(59,130,246,.35);color:var(--blue)}
 
+/* INPUTS */
 .fld{margin-bottom:14px}
-.fld label{display:block;font-size:10px;color:rgba(255,255,255,.24);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:7px}
-.fld input,.fld textarea{width:100%;padding:12px 13px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07);border-radius:10px;color:#fff;font-family:'DM Mono',monospace;font-size:13px;outline:none;transition:all .2s;resize:none}
-.fld input:focus,.fld textarea:focus{border-color:rgba(30,144,255,.32);background:rgba(30,144,255,.04)}
-.fld input::placeholder,.fld textarea::placeholder{color:rgba(255,255,255,.14)}
+.fld label{display:block;font-size:11px;font-weight:600;color:var(--text3);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px}
+.fld input,.fld textarea{width:100%;padding:11px 13px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;outline:none;transition:all .2s;resize:none}
+.fld input:focus,.fld textarea:focus{border-color:rgba(59,130,246,.4);background:rgba(59,130,246,.02)}
+.fld input::placeholder,.fld textarea::placeholder{color:var(--text3)}
 
-.sep{height:1px;background:rgba(255,255,255,.05);margin:16px 0}
-
+.sep{height:1px;background:var(--border);margin:16px 0}
 .fee-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
-.fee-l{font-size:12px;color:rgba(255,255,255,.22)}
-.fee-v{font-size:12px;color:rgba(255,255,255,.36)}
+.fee-l{font-size:12px;color:var(--text3)}
+.fee-v{font-size:12px;color:var(--text2);font-family:'JetBrains Mono',monospace}
 
-.primary-btn{width:100%;padding:14px;background:linear-gradient(135deg,#1a7fe8,#0050b3);border:none;border-radius:11px;color:#fff;font-family:'Syne',sans-serif;font-size:15px;font-weight:700;cursor:pointer;transition:all .2s;letter-spacing:.2px;box-shadow:0 2px 18px rgba(30,144,255,.16)}
-.primary-btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 5px 28px rgba(30,144,255,.28)}
-.primary-btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+/* BUTTONS */
+.primary-btn{width:100%;padding:13px;background:var(--blue);border:none;border-radius:10px;color:#fff;font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;box-shadow:0 2px 16px rgba(59,130,246,.2)}
+.primary-btn:hover:not(:disabled){background:#2563eb;box-shadow:0 4px 24px rgba(59,130,246,.35);transform:translateY(-1px)}
+.primary-btn:active:not(:disabled){transform:translateY(0)}
+.primary-btn:disabled{opacity:.35;cursor:not-allowed;transform:none}
 
-.ghost-btn{width:100%;padding:12px;background:transparent;border:1px solid rgba(255,255,255,.1);border-radius:11px;color:rgba(255,255,255,.45);font-family:'DM Mono',monospace;font-size:13px;cursor:pointer;transition:all .2s;margin-top:8px}
-.ghost-btn:hover{border-color:rgba(255,255,255,.2);color:rgba(255,255,255,.7)}
+.ghost-btn{width:100%;padding:11px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text2);font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .2s;margin-top:8px}
+.ghost-btn:hover{border-color:var(--border2);color:var(--text)}
+.danger-btn{color:rgba(239,68,68,.5);border-color:rgba(239,68,68,.15)}
+.danger-btn:hover{color:rgba(239,68,68,.8);border-color:rgba(239,68,68,.3)}
 
-.status-box{margin-top:13px;padding:12px 13px;border-radius:10px;background:rgba(30,144,255,.05);border:1px solid rgba(30,144,255,.13)}
-.status-box pre{font-family:'DM Mono',monospace;font-size:12px;color:#4da6ff;white-space:pre-wrap;margin:0;line-height:1.6}
-.status-box.ok{background:rgba(0,220,100,.05);border-color:rgba(0,220,100,.13)}
-.status-box.ok pre{color:#00dc64}
-.status-box.err{background:rgba(255,90,90,.05);border-color:rgba(255,90,90,.13)}
-.status-box.err pre{color:#ff7070}
+/* STATUS */
+.status-box{margin-top:12px;padding:12px 14px;border-radius:10px;background:var(--blue-dim);border:1px solid rgba(59,130,246,.15)}
+.status-box pre{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--blue);white-space:pre-wrap;margin:0;line-height:1.7}
+.status-box.ok{background:var(--green-dim);border-color:rgba(34,197,94,.2)}
+.status-box.ok pre{color:var(--green)}
+.status-box.err{background:rgba(239,68,68,.06);border-color:rgba(239,68,68,.15)}
+.status-box.err pre{color:#f87171}
 
 /* RECEIVE TAB */
-.key-box{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:16px;margin-bottom:14px;word-break:break-all;font-size:11px;color:rgba(255,255,255,.5);line-height:1.7}
-.key-label{font-size:10px;color:rgba(255,255,255,.25);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px}
-.key-value{color:#4da6ff;font-size:11px;cursor:pointer;transition:color .2s}
-.key-value:hover{color:#1E90FF}
-.copy-hint{font-size:10px;color:rgba(255,255,255,.2);margin-top:4px}
+.meta-box{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;cursor:pointer;transition:border-color .2s}
+.meta-box:hover{border-color:rgba(59,130,246,.3)}
+.meta-label{font-size:10px;font-weight:600;color:var(--text3);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px}
+.meta-value{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--blue);word-break:break-all;line-height:1.7}
+.copy-hint{font-size:10px;color:var(--text3);margin-top:6px;display:flex;align-items:center;gap:4px}
 
-.deposit-item{padding:14px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.deposit-item{padding:16px 18px;border-bottom:1px solid var(--border)}
 .deposit-item:last-child{border-bottom:none}
-.deposit-amt{font-size:16px;font-weight:500;color:#00dc64;margin-bottom:4px}
-.deposit-addr{font-size:11px;color:rgba(255,255,255,.3);margin-bottom:8px}
+.deposit-header{display:flex;align-items:baseline;gap:8px;margin-bottom:4px}
+.deposit-amt{font-size:18px;font-weight:700;color:var(--green)}
+.deposit-token{font-size:12px;color:var(--text3);font-weight:600}
+.deposit-addr{font-size:11px;color:var(--text3);margin-bottom:10px;font-family:'JetBrains Mono',monospace}
 
-.warning-box{background:rgba(255,180,30,.05);border:1px solid rgba(255,180,30,.15);border-radius:10px;padding:12px 14px;margin-bottom:14px}
-.warning-box p{font-size:11px;color:rgba(255,180,30,.8);line-height:1.6}
+.warning-box{background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.15);border-radius:10px;padding:12px 14px}
+.warning-box p{font-size:12px;color:rgba(245,158,11,.8);line-height:1.6}
+
+/* EMPTY STATE - NO KEYS */
+.no-keys{text-align:center;padding:12px 0 6px}
+.no-keys-icon{font-size:32px;margin-bottom:12px;opacity:.4}
+.no-keys-title{font-size:15px;font-weight:600;color:var(--text2);margin-bottom:6px}
+.no-keys-sub{font-size:12px;color:var(--text3);margin-bottom:20px;line-height:1.6}
 
 /* FOOTER */
-.footer{margin-top:56px;padding-top:22px;border-top:1px solid rgba(255,255,255,.04);display:flex;justify-content:space-between;align-items:center}
-.footer-l{font-family:'Syne',sans-serif;font-size:14px;font-weight:800;color:#1E90FF;letter-spacing:1px}
-.footer-r{display:flex;gap:18px}
-.footer-link{font-size:11px;color:rgba(255,255,255,.2);text-decoration:none;transition:color .2s}
-.footer-link:hover{color:rgba(255,255,255,.5)}
+.footer{margin-top:60px;padding-top:20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.footer-l{font-size:13px;font-weight:700;color:var(--blue);letter-spacing:1px}
+.footer-r{display:flex;gap:20px}
+.footer-link{font-size:12px;color:var(--text3);text-decoration:none;transition:color .2s;font-weight:500}
+.footer-link:hover{color:var(--text2)}
 
 @media(max-width:760px){
   .grid{grid-template-columns:1fr}
   .form-card{position:static}
-  .hdr{padding:18px 0;margin-bottom:28px}
+  .hdr{padding:16px 0;margin-bottom:24px}
+  .tabs{width:100%}
+  .tab{flex:1;text-align:center}
 }
 `;
 
@@ -507,7 +543,7 @@ export default function App() {
             <img src="/logo.png" alt="SilentFlow" />
           </div>
           <div className="hdr-right">
-            <div className="net-dot">SEPOLIA</div>
+            <div className="net-badge">SÉPOLIA</div>
             <button className={`conn-btn${account ? " on" : ""}`} onClick={connect}>
               {account ? `● ${account.slice(0,6)}...${account.slice(-4)}` : "Conectar Carteira"}
             </button>
@@ -517,10 +553,10 @@ export default function App() {
         {/* TABS */}
         <div className="tabs">
           <button className={`tab${tab==="send"?" on":""}`} onClick={() => setTab("send")}>
-            Enviar
+            ↑ Enviar
           </button>
           <button className={`tab${tab==="receive"?" on":""}`} onClick={() => setTab("receive")}>
-            Receber
+            ↓ Receber
           </button>
         </div>
 
@@ -550,12 +586,12 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="accord">
-                <div className="accord-toggle" onClick={() => setAccordOpen(o => !o)}>
-                  <span className="accord-label">Como funciona a privacidade</span>
-                  <span className={`accord-arrow${accordOpen?" open":""}`}>▼</span>
+              <div className="info-card">
+                <div className="info-toggle" onClick={() => setAccordOpen(o => !o)}>
+                  <span className="info-label">Como funciona a privacidade</span>
+                  <span className={`info-arrow${accordOpen?" open":""}`}>▼</span>
                 </div>
-                <div className={`accord-body${accordOpen?" open":""}`}>
+                <div className={`info-body${accordOpen?" open":""}`}>
                   {[
                     ["Stealth address",    "destinatário invisível on-chain"],
                     ["Split automático",   "2–4 partes aleatórias"],
@@ -564,9 +600,9 @@ export default function App() {
                     ["Dummy transactions", "ruído entre hops"],
                     ["Taxa",               "0.2% por transação"],
                   ].map(([k,v]) => (
-                    <div className="accord-row" key={k}>
-                      <span className="accord-k">{k}</span>
-                      <span className="accord-v">{v}</span>
+                    <div className="info-row" key={k}>
+                      <span className="info-k">{k}</span>
+                      <span className="info-v">{v}</span>
                     </div>
                   ))}
                 </div>
@@ -622,19 +658,22 @@ export default function App() {
                 <div className="card-body" style={{padding:"0 4px"}}>
                   {deposits.length === 0
                     ? <div className="hist-empty">
-                        {scanning ? "Escaneando blockchain..." : "Nenhum depósito encontrado"}
+                        {scanning ? "⟳ Escaneando blockchain..." : "Nenhum depósito encontrado"}
                       </div>
                     : deposits.map(d => (
-                      <div className="deposit-item" key={d.stealthAddress} style={{padding:"14px 18px"}}>
-                        <div className="deposit-amt">{d.amount} {d.token}</div>
-                        <div className="deposit-addr">{d.stealthAddress}</div>
+                      <div className="deposit-item" key={d.stealthAddress}>
+                        <div className="deposit-header">
+                          <span className="deposit-amt">{d.amount}</span>
+                          <span className="deposit-token">{d.token}</span>
+                        </div>
+                        <div className="deposit-addr">{d.stealthAddress.slice(0,10)}...{d.stealthAddress.slice(-8)}</div>
                         <button
                           className="primary-btn"
-                          style={{padding:"9px",fontSize:"13px"}}
+                          style={{padding:"10px",fontSize:"13px"}}
                           onClick={() => withdraw(d)}
                           disabled={withdrawing === d.stealthAddress}
                         >
-                          {withdrawing === d.stealthAddress ? "Sacando..." : "Sacar para minha carteira"}
+                          {withdrawing === d.stealthAddress ? "⟳ Sacando..." : "↓ Sacar para minha carteira"}
                         </button>
                       </div>
                     ))
@@ -643,7 +682,7 @@ export default function App() {
               </div>
 
               <div className="warning-box">
-                <p>⚠️ Guarde suas chaves em local seguro. Sem elas não é possível recuperar os fundos. Elas ficam salvas apenas neste navegador.</p>
+                <p>⚠️ Guarde suas chaves em local seguro. Sem elas não é possível recuperar os fundos. Salvas apenas neste navegador.</p>
               </div>
             </div>
 
@@ -654,39 +693,42 @@ export default function App() {
 
               {!myKeys ? (
                 <>
+                  <div className="no-keys">
+                    <div className="no-keys-icon">🔑</div>
+                    <div className="no-keys-title">Gere suas chaves de privacidade</div>
+                    <div className="no-keys-sub">Suas chaves ficam salvas apenas neste navegador. Sem elas não é possível receber fundos.</div>
+                  </div>
                   <button className="primary-btn" onClick={generateKeys}>
-                    Gerar minhas chaves de privacidade
+                    Gerar chaves de privacidade
                   </button>
                   <button className="ghost-btn" onClick={loadKeysFromStorage}>
-                    Recuperar chaves do navegador
+                    Recuperar chaves salvas
                   </button>
                   <label className="ghost-btn" style={{display:"block",textAlign:"center",cursor:"pointer",marginTop:"8px"}}>
-                    Importar arquivo de chaves (.json)
+                    Importar arquivo .json
                     <input type="file" accept=".json" style={{display:"none"}} onChange={importKeys} />
                   </label>
                 </>
               ) : (
                 <>
-                  <div className="fld">
-                    <div className="key-label">Sua Stealth Meta-Address</div>
-                    <div className="key-box">
-                      <div className="key-label">Compartilhe com quem vai te enviar fundos:</div>
-                      <div className="key-value" onClick={copyMeta}>
-                        {myKeys.metaAddress}
-                      </div>
-                      <div className="copy-hint">{copied ? "✓ Copiado!" : "Clique para copiar"}</div>
+                  <div className="meta-label">Seu endereço para receber</div>
+                  <div className="meta-box" onClick={copyMeta}>
+                    <div className="meta-label">Compartilhe com quem vai te enviar:</div>
+                    <div className="meta-value">{myKeys.metaAddress}</div>
+                    <div className="copy-hint">
+                      {copied ? "✓ Copiado!" : "📋 Clique para copiar"}
                     </div>
                   </div>
 
                   <div className="sep" />
 
                   <button className="primary-btn" onClick={scan} disabled={scanning || !account}>
-                    {scanning ? "Escaneando..." : "Escanear blockchain"}
+                    {scanning ? "⟳ Escaneando..." : "🔍 Escanear blockchain"}
                   </button>
                   <button className="ghost-btn" onClick={exportKeys}>
-                    Baixar backup das chaves (.json)
+                    ↓ Backup das chaves (.json)
                   </button>
-                  <button className="ghost-btn" onClick={generateKeys} style={{marginTop:"6px",color:"rgba(255,100,100,.5)",borderColor:"rgba(255,100,100,.15)"}}>
+                  <button className="ghost-btn danger-btn" onClick={generateKeys} style={{marginTop:"6px"}}>
                     Gerar novas chaves
                   </button>
 
@@ -706,7 +748,7 @@ export default function App() {
           <span className="footer-l">SILENTFLOW</span>
           <div className="footer-r">
             <a className="footer-link" href={`https://sepolia.etherscan.io/address/${CONTRACT_ADDRESS}`} target="_blank" rel="noreferrer">Contrato ↗</a>
-            <a className="footer-link" href="https://silentflow-landing-wine.vercel.app" target="_blank" rel="noreferrer">Landing page ↗</a>
+            <a className="footer-link" href="https://silentflow-landing-wine.vercel.app" target="_blank" rel="noreferrer">Página inicial ↗</a>
           </div>
         </footer>
 
