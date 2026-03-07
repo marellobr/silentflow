@@ -76,7 +76,8 @@ function tryDecryptDeposit(ephemeralPubKeyHex, stealthAddressOnChain, viewTagOnC
       ethers.concat([ethers.getBytes(ephemeralPubKeyHex), ethers.getBytes(viewingPubKey)])
     );
 
-    // Fast reject via viewTag
+    // Fast reject via viewTag (0 = backend dummy deposit, skip)
+    if (viewTagOnChain === 0) return null;
     const myViewTag = parseInt(sharedSecret.slice(2, 4), 16);
     if (myViewTag !== viewTagOnChain) return null;
 
@@ -93,6 +94,10 @@ function tryDecryptDeposit(ephemeralPubKeyHex, stealthAddressOnChain, viewTagOnC
     const skBytes  = new Uint8Array(32);
     for (let i = 0; i < 32; i++) skBytes[i] = ssBytes[i] ^ spBytes[i];
     const stealthPrivKey = ethers.hexlify(skBytes);
+
+    // Verify the derived key actually controls the stealth address
+    const derivedWallet = new ethers.Wallet(stealthPrivKey);
+    if (derivedWallet.address.toLowerCase() !== stealthAddressOnChain.toLowerCase()) return null;
 
     return { stealthAddress: expectedAddr, stealthPrivKey };
   } catch {
