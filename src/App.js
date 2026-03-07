@@ -467,6 +467,9 @@ export default function App() {
       const provider      = new ethers.BrowserProvider(window.ethereum);
       const signer        = await provider.getSigner();
       const stealthSigner = new ethers.Wallet(deposit.stealthPrivKey, provider);
+      console.log("Stealth address no deposito:", deposit.stealthAddress);
+      console.log("Endereco do stealthSigner:", stealthSigner.address);
+      console.log("Sao iguais?", stealthSigner.address.toLowerCase() === deposit.stealthAddress.toLowerCase());
 
       // Check if stealth wallet already has ETH for gas
       const stealthBal = await provider.getBalance(deposit.stealthAddress);
