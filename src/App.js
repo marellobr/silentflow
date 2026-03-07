@@ -453,22 +453,32 @@ export default function App() {
 
   const withdraw = async (deposit) => {
     if (!account) return alert("Conecte sua carteira.");
+    if (withdrawing) return; // prevent double execution
     setWithdrawing(deposit.stealthAddress);
     try {
-      const provider    = new ethers.BrowserProvider(window.ethereum);
+      const provider      = new ethers.BrowserProvider(window.ethereum);
+      const signer        = await provider.getSigner();
       const stealthSigner = new ethers.Wallet(deposit.stealthPrivKey, provider);
-      // Fund stealth wallet for gas first (from connected wallet)
-      const signer = await provider.getSigner();
-      const gasFund = ethers.parseEther("0.001");
-      const fundTx = await signer.sendTransaction({ to: deposit.stealthAddress, value: gasFund });
-      await fundTx.wait();
-      // Now withdraw from stealth wallet
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, stealthSigner);
+
+      // Check if stealth wallet already has ETH for gas
+      const stealthBal = await provider.getBalance(deposit.stealthAddress);
+      if (stealthBal < ethers.parseEther("0.0005")) {
+        // Fund stealth wallet for gas — only once
+        const fundTx = await signer.sendTransaction({
+          to: deposit.stealthAddress,
+          value: ethers.parseEther("0.001"),
+        });
+        await fundTx.wait();
+      }
+
+      // Withdraw from contract using stealth private key
+      const contract  = new ethers.Contract(CONTRACT_ADDRESS, ABI, stealthSigner);
       const tokenAddr = TOKENS[deposit.token]?.address || ethers.ZeroAddress;
-      const tx = await contract.withdraw(tokenAddr);
+      const tx        = await contract.withdraw(tokenAddr);
       await tx.wait();
+
       setDeposits(d => d.filter(x => x.stealthAddress !== deposit.stealthAddress));
-      alert(`✅ ${deposit.amount} ${deposit.token} sacado com sucesso!`);
+      alert("Saque realizado com sucesso!");
     } catch (e) {
       alert("Erro ao sacar: " + (e.reason || e.message));
     }
