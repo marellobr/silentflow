@@ -8,7 +8,7 @@ app.use(express.json());
 
 const provider = new ethers.JsonRpcProvider(process.env.ALCHEMY_URL);
 
-const CONTRACT_ADDRESS = "0x7737DC1716680742E659B3fC97c85807089240e9";
+const CONTRACT_ADDRESS = "0x0351ee78F2E85c13ED2600455b14F3B60db048Bc";
 const CONTRACT_ABI = [
   "function depositETH(address stealthAddress, bytes calldata ephemeralPubKey, uint8 viewTag) external payable",
 ];
