@@ -39,67 +39,71 @@ function generateStealthKeys() {
   };
 }
 
-// Derive stealth address from recipient's meta-address
+// ── Stealth Crypto (simple, consistent, hash-based) ─────────────────────────
+//
+// SEND side (knows ephemeralPrivKey, spendingPubKey, viewingPubKey):
+//   h = keccak256(ephemeralPrivKey || viewingPubKey)   <- uses privKey for ECDH-like scalar
+//   stealthPrivKey = (spendingPrivKey + h) mod n        <- receiver will compute this
+//   stealthAddress = address(stealthPrivKey * G)        <- sender derives address same way:
+//                  = address from keccak256(h || spendingPubKey) as a wallet seed
+//
+// But sender doesn't have spendingPrivKey. So we use a SYMMETRIC approach:
+//   h = keccak256(ephemeralPubKey || viewingPubKey)     <- both sides can compute
+//   stealthSeed = keccak256(h || spendingPubKey)        <- deterministic seed
+//   stealthPrivKey = stealthSeed                        <- treat seed as private key
+//   stealthAddress = new ethers.Wallet(stealthSeed).address
+//
+// RECEIVE side (knows viewingPrivKey, spendingPrivKey):
+//   viewingPubKey = computePublicKey(viewingPrivKey)
+//   h = keccak256(ephemeralPubKey || viewingPubKey)     <- same as sender
+//   stealthSeed = keccak256(h || spendingPubKey)        <- same as sender
+//   stealthPrivKey = stealthSeed
+//   stealthAddress = new ethers.Wallet(stealthSeed).address  <- must match on-chain
+//
+// This is FULLY CONSISTENT because both sides compute the same h and seed.
+
 function deriveStealthAddress(metaAddress) {
   const parts = metaAddress.replace("st:", "").split(":");
   if (parts.length !== 2) throw new Error("Stealth meta-address inválida");
   const [spendingPubKey, viewingPubKey] = parts;
 
-  const ephemeralWallet  = ethers.Wallet.createRandom();
-  const ephemeralPrivKey = ephemeralWallet.privateKey;
-  const ephemeralPubKey  = ethers.SigningKey.computePublicKey(ephemeralPrivKey, true);
+  const ephemeralWallet = ethers.Wallet.createRandom();
+  const ephemeralPubKey = ethers.SigningKey.computePublicKey(ephemeralWallet.privateKey, true);
 
-  // sharedSecret = keccak256(ephemeralPubKey + viewingPubKey)
-  // Both sides use public keys so scanner can replicate with viewingPrivKey
-  const sharedSecret = ethers.keccak256(
+  const h = ethers.keccak256(
     ethers.concat([ethers.getBytes(ephemeralPubKey), ethers.getBytes(viewingPubKey)])
   );
-
-  // stealthAddress = last 20 bytes of keccak256(sharedSecret + spendingPubKey)
-  const stealthHash = ethers.keccak256(
-    ethers.concat([ethers.getBytes(sharedSecret), ethers.getBytes(spendingPubKey)])
+  const stealthSeed = ethers.keccak256(
+    ethers.concat([ethers.getBytes(h), ethers.getBytes(spendingPubKey)])
   );
-  const stealthAddress = ethers.getAddress("0x" + stealthHash.slice(-40));
-  const viewTag = parseInt(sharedSecret.slice(2, 4), 16);
+  const stealthAddress = new ethers.Wallet(stealthSeed).address;
+  const viewTag = parseInt(h.slice(2, 4), 16);
 
   return { stealthAddress, ephemeralPubKey, viewTag };
 }
 
-// Scan: check if a StealthDeposit event belongs to this viewer
-// Returns { stealthAddress, stealthPrivKey, amount, token } or null
 function tryDecryptDeposit(ephemeralPubKeyHex, stealthAddressOnChain, viewTagOnChain, spendingPrivKey, viewingPrivKey) {
   try {
-    const viewingPubKey = ethers.SigningKey.computePublicKey(viewingPrivKey, true);
+    if (viewTagOnChain === 0) return null;
 
-    // Must match derivation: keccak256(ephemeralPubKey + viewingPubKey)
-    const sharedSecret = ethers.keccak256(
+    const viewingPubKey  = ethers.SigningKey.computePublicKey(viewingPrivKey, true);
+    const spendingPubKey = ethers.SigningKey.computePublicKey(spendingPrivKey, true);
+
+    const h = ethers.keccak256(
       ethers.concat([ethers.getBytes(ephemeralPubKeyHex), ethers.getBytes(viewingPubKey)])
     );
 
-    // Fast reject via viewTag (0 = backend dummy deposit, skip)
-    if (viewTagOnChain === 0) return null;
-    const myViewTag = parseInt(sharedSecret.slice(2, 4), 16);
-    if (myViewTag !== viewTagOnChain) return null;
+    // Fast reject via viewTag
+    if (parseInt(h.slice(2, 4), 16) !== viewTagOnChain) return null;
 
-    const spendingPubKey = ethers.SigningKey.computePublicKey(spendingPrivKey, true);
-    const stealthHash = ethers.keccak256(
-      ethers.concat([ethers.getBytes(sharedSecret), ethers.getBytes(spendingPubKey)])
+    const stealthSeed = ethers.keccak256(
+      ethers.concat([ethers.getBytes(h), ethers.getBytes(spendingPubKey)])
     );
-    const expectedAddr = ethers.getAddress("0x" + stealthHash.slice(-40));
-    if (expectedAddr.toLowerCase() !== stealthAddressOnChain.toLowerCase()) return null;
+    const stealthWallet = new ethers.Wallet(stealthSeed);
 
-    // Derive stealth private key = keccak256(sharedSecret) XOR spendingPrivKey
-    const ssBytes  = ethers.getBytes(ethers.keccak256(sharedSecret));
-    const spBytes  = ethers.getBytes(spendingPrivKey);
-    const skBytes  = new Uint8Array(32);
-    for (let i = 0; i < 32; i++) skBytes[i] = ssBytes[i] ^ spBytes[i];
-    const stealthPrivKey = ethers.hexlify(skBytes);
+    if (stealthWallet.address.toLowerCase() !== stealthAddressOnChain.toLowerCase()) return null;
 
-    // Verify the derived key actually controls the stealth address
-    const derivedWallet = new ethers.Wallet(stealthPrivKey);
-    if (derivedWallet.address.toLowerCase() !== stealthAddressOnChain.toLowerCase()) return null;
-
-    return { stealthAddress: expectedAddr, stealthPrivKey };
+    return { stealthAddress: stealthWallet.address, stealthPrivKey: stealthSeed };
   } catch {
     return null;
   }
