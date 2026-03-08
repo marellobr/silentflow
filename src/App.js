@@ -25,9 +25,8 @@ const TOKENS = {
   USDT: { address: "0xaA8E23Fb1079EA71e0a56F48a2aA51851D8433D0", decimals: 6 },
 };
 
-// ── Stealth crypto helpers ────────────────────────────────────────────────────
+// ── Stealth crypto helpers ─────────────────────────────────────────────────────
 
-// Generate a stealth meta-address: spendingKey + viewingKey
 function generateStealthKeys() {
   const spendingWallet = ethers.Wallet.createRandom();
   const viewingWallet  = ethers.Wallet.createRandom();
@@ -36,79 +35,87 @@ function generateStealthKeys() {
     spendingPubKey:  ethers.SigningKey.computePublicKey(spendingWallet.privateKey, true),
     viewingPrivKey:  viewingWallet.privateKey,
     viewingPubKey:   ethers.SigningKey.computePublicKey(viewingWallet.privateKey, true),
-    // Meta-address = spendingPubKey:viewingPubKey (hex, separated by :)
     metaAddress: `st:${ethers.SigningKey.computePublicKey(spendingWallet.privateKey, true)}:${ethers.SigningKey.computePublicKey(viewingWallet.privateKey, true)}`,
   };
 }
 
-// ── Stealth Crypto (simple, consistent, hash-based) ─────────────────────────
-//
-// SEND side (knows ephemeralPrivKey, spendingPubKey, viewingPubKey):
-//   h = keccak256(ephemeralPrivKey || viewingPubKey)   <- uses privKey for ECDH-like scalar
-//   stealthPrivKey = (spendingPrivKey + h) mod n        <- receiver will compute this
-//   stealthAddress = address(stealthPrivKey * G)        <- sender derives address same way:
-//                  = address from keccak256(h || spendingPubKey) as a wallet seed
-//
-// But sender doesn't have spendingPrivKey. So we use a SYMMETRIC approach:
-//   h = keccak256(ephemeralPubKey || viewingPubKey)     <- both sides can compute
-//   stealthSeed = keccak256(h || spendingPubKey)        <- deterministic seed
-//   stealthPrivKey = stealthSeed                        <- treat seed as private key
-//   stealthAddress = new ethers.Wallet(stealthSeed).address
-//
-// RECEIVE side (knows viewingPrivKey, spendingPrivKey):
-//   viewingPubKey = computePublicKey(viewingPrivKey)
-//   h = keccak256(ephemeralPubKey || viewingPubKey)     <- same as sender
-//   stealthSeed = keccak256(h || spendingPubKey)        <- same as sender
-//   stealthPrivKey = stealthSeed
-//   stealthAddress = new ethers.Wallet(stealthSeed).address  <- must match on-chain
-//
-// This is FULLY CONSISTENT because both sides compute the same h and seed.
-
 function deriveStealthAddress(metaAddress) {
   const parts = metaAddress.replace("st:", "").split(":");
-  if (parts.length !== 2) throw new Error("Stealth meta-address inválida");
+  if (parts.length !== 2) throw new Error("Link de pagamento invalido");
   const [spendingPubKey, viewingPubKey] = parts;
-
   const ephemeralWallet = ethers.Wallet.createRandom();
   const ephemeralPubKey = ethers.SigningKey.computePublicKey(ephemeralWallet.privateKey, true);
-
-  const h = ethers.keccak256(
-    ethers.concat([ethers.getBytes(ephemeralPubKey), ethers.getBytes(viewingPubKey)])
-  );
-  const stealthSeed = ethers.keccak256(
-    ethers.concat([ethers.getBytes(h), ethers.getBytes(spendingPubKey)])
-  );
+  const h = ethers.keccak256(ethers.concat([ethers.getBytes(ephemeralPubKey), ethers.getBytes(viewingPubKey)]));
+  const stealthSeed = ethers.keccak256(ethers.concat([ethers.getBytes(h), ethers.getBytes(spendingPubKey)]));
   const stealthAddress = new ethers.Wallet(stealthSeed).address;
   const viewTag = parseInt(h.slice(2, 4), 16);
-
   return { stealthAddress, ephemeralPubKey, viewTag };
 }
 
 function tryDecryptDeposit(ephemeralPubKeyHex, stealthAddressOnChain, viewTagOnChain, spendingPrivKey, viewingPrivKey) {
   try {
     if (viewTagOnChain === 0) return null;
-
     const viewingPubKey  = ethers.SigningKey.computePublicKey(viewingPrivKey, true);
     const spendingPubKey = ethers.SigningKey.computePublicKey(spendingPrivKey, true);
-
-    const h = ethers.keccak256(
-      ethers.concat([ethers.getBytes(ephemeralPubKeyHex), ethers.getBytes(viewingPubKey)])
-    );
-
-    // Fast reject via viewTag
+    const h = ethers.keccak256(ethers.concat([ethers.getBytes(ephemeralPubKeyHex), ethers.getBytes(viewingPubKey)]));
     if (parseInt(h.slice(2, 4), 16) !== viewTagOnChain) return null;
-
-    const stealthSeed = ethers.keccak256(
-      ethers.concat([ethers.getBytes(h), ethers.getBytes(spendingPubKey)])
-    );
+    const stealthSeed = ethers.keccak256(ethers.concat([ethers.getBytes(h), ethers.getBytes(spendingPubKey)]));
     const stealthWallet = new ethers.Wallet(stealthSeed);
-
     if (stealthWallet.address.toLowerCase() !== stealthAddressOnChain.toLowerCase()) return null;
-
     return { stealthAddress: stealthWallet.address, stealthPrivKey: stealthSeed };
-  } catch {
-    return null;
-  }
+  } catch { return null; }
+}
+
+// ── Crypto backup helpers (senha) ─────────────────────────────────────────────
+
+async function encryptKeys(keys, password) {
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const aesKey = await crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" },
+    keyMaterial, { name: "AES-GCM", length: 256 }, false, ["encrypt"]
+  );
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const data = enc.encode(JSON.stringify(keys));
+  const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, aesKey, data);
+  return {
+    v: 1,
+    salt: Array.from(salt),
+    iv: Array.from(iv),
+    data: Array.from(new Uint8Array(encrypted)),
+  };
+}
+
+async function decryptKeys(payload, password) {
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
+  const salt = new Uint8Array(payload.salt);
+  const aesKey = await crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" },
+    keyMaterial, { name: "AES-GCM", length: 256 }, false, ["decrypt"]
+  );
+  const iv = new Uint8Array(payload.iv);
+  const data = new Uint8Array(payload.data);
+  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, aesKey, data);
+  return JSON.parse(new TextDecoder().decode(decrypted));
+}
+
+// ── Link de pagamento ─────────────────────────────────────────────────────────
+
+function buildPayLink(metaAddress) {
+  return `${window.location.origin}/p/${encodeURIComponent(metaAddress)}`;
+}
+
+function parsePayLink(href) {
+  // Aceita: URL /p/st:..., ou o meta-address direto
+  try {
+    const url = new URL(href);
+    const parts = url.pathname.split("/p/");
+    if (parts[1]) return decodeURIComponent(parts[1]);
+  } catch {}
+  if (href.startsWith("st:")) return href;
+  return null;
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
@@ -132,12 +139,10 @@ const STYLE = `
   --text3: rgba(226,232,240,.25);
   --r: 14px;
 }
-
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
 body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased}
 
-/* BG EFFECTS */
 .bg{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
 .bg::before{content:'';position:absolute;width:800px;height:800px;top:-300px;left:50%;transform:translateX(-50%);background:radial-gradient(ellipse,rgba(59,130,246,.05) 0%,transparent 60%);border-radius:50%}
 .bg::after{content:'';position:absolute;bottom:-200px;right:-100px;width:600px;height:600px;background:radial-gradient(ellipse,rgba(59,130,246,.03) 0%,transparent 60%);border-radius:50%}
@@ -149,11 +154,9 @@ body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-ser
 .logo{display:flex;align-items:center;gap:10px}
 .logo img{height:52px;width:auto;object-fit:contain;filter:drop-shadow(0 0 14px var(--blue-glow))}
 .hdr-right{display:flex;align-items:center;gap:8px}
-
 .net-badge{display:flex;align-items:center;gap:5px;padding:5px 10px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.15);border-radius:20px;font-size:11px;color:var(--green);letter-spacing:.5px;font-weight:500}
 .net-badge::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:blink 2s ease-in-out infinite;flex-shrink:0}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
-
 .conn-btn{padding:8px 16px;background:var(--surface2);border:1px solid var(--border2);border-radius:20px;color:var(--text2);font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .2s}
 .conn-btn:hover{border-color:var(--blue);color:var(--text)}
 .conn-btn.on{border-color:rgba(34,197,94,.3);color:var(--green);background:var(--green-dim)}
@@ -173,9 +176,7 @@ body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-ser
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
 .card-body{padding:6px 0}
 .hist-empty{text-align:center;padding:32px 0;color:var(--text3);font-size:13px}
-
-/* HISTORY ITEMS */
-.hist-item{padding:14px 18px;border-bottom:1px solid var(--border);transition:background .15s;cursor:default}
+.hist-item{padding:14px 18px;border-bottom:1px solid var(--border);transition:background .15s}
 .hist-item:hover{background:rgba(255,255,255,.015)}
 .hist-item:last-child{border-bottom:none}
 .hist-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
@@ -189,7 +190,7 @@ body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-ser
 .hist-link{font-size:11px;color:var(--text3);text-decoration:none;transition:color .2s;font-weight:500}
 .hist-link:hover{color:var(--blue)}
 
-/* PRIVACY INFO */
+/* INFO ACCORDION */
 .info-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
 .info-toggle{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;cursor:pointer;user-select:none;transition:background .15s}
 .info-toggle:hover{background:rgba(255,255,255,.02)}
@@ -230,7 +231,6 @@ body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-ser
 .primary-btn:hover:not(:disabled){background:#2563eb;box-shadow:0 4px 24px rgba(59,130,246,.35);transform:translateY(-1px)}
 .primary-btn:active:not(:disabled){transform:translateY(0)}
 .primary-btn:disabled{opacity:.35;cursor:not-allowed;transform:none}
-
 .ghost-btn{width:100%;padding:11px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text2);font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .2s;margin-top:8px}
 .ghost-btn:hover{border-color:var(--border2);color:var(--text)}
 .danger-btn{color:rgba(239,68,68,.5);border-color:rgba(239,68,68,.15)}
@@ -244,13 +244,17 @@ body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-ser
 .status-box.err{background:rgba(239,68,68,.06);border-color:rgba(239,68,68,.15)}
 .status-box.err pre{color:#f87171}
 
-/* RECEIVE TAB */
-.meta-box{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;cursor:pointer;transition:border-color .2s}
-.meta-box:hover{border-color:rgba(59,130,246,.3)}
-.meta-label{font-size:10px;font-weight:600;color:var(--text3);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px}
-.meta-value{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--blue);word-break:break-all;line-height:1.7}
-.copy-hint{font-size:10px;color:var(--text3);margin-top:6px;display:flex;align-items:center;gap:4px}
+/* RECEIVE — LINK BOX */
+.link-box{background:var(--bg);border:1px solid rgba(59,130,246,.25);border-radius:12px;padding:16px;margin-bottom:14px}
+.link-box-label{font-size:10px;font-weight:600;color:var(--text3);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px}
+.link-url{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--blue);word-break:break-all;line-height:1.7;cursor:pointer;transition:color .2s}
+.link-url:hover{color:#60a5fa}
+.link-actions{display:flex;gap:8px;margin-top:10px}
+.link-btn{flex:1;padding:8px;background:var(--blue-dim);border:1px solid rgba(59,130,246,.2);border-radius:8px;color:var(--blue);font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;text-align:center}
+.link-btn:hover{background:rgba(59,130,246,.2)}
+.link-copied{color:var(--green);border-color:rgba(34,197,94,.2);background:var(--green-dim)}
 
+/* RECEIVE — DEPOSITS */
 .deposit-item{padding:16px 18px;border-bottom:1px solid var(--border)}
 .deposit-item:last-child{border-bottom:none}
 .deposit-header{display:flex;align-items:baseline;gap:8px;margin-bottom:4px}
@@ -258,10 +262,22 @@ body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-ser
 .deposit-token{font-size:12px;color:var(--text3);font-weight:600}
 .deposit-addr{font-size:11px;color:var(--text3);margin-bottom:10px;font-family:'JetBrains Mono',monospace}
 
+/* MODAL — BACKUP */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;display:flex;align-items:center;justify-content:center;padding:24px}
+.modal{background:var(--surface);border:1px solid var(--border2);border-radius:20px;padding:28px;width:100%;max-width:420px}
+.modal-title{font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px}
+.modal-sub{font-size:12px;color:var(--text3);margin-bottom:20px;line-height:1.6}
+.modal-close{float:right;background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;margin-top:-4px}
+.modal-actions{display:flex;gap:8px;margin-top:16px}
+.modal-actions .primary-btn{margin:0}
+.modal-actions .ghost-btn{margin:0}
+.modal-err{font-size:12px;color:#f87171;margin-top:8px}
+
+/* WARNING */
 .warning-box{background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.15);border-radius:10px;padding:12px 14px}
 .warning-box p{font-size:12px;color:rgba(245,158,11,.8);line-height:1.6}
 
-/* EMPTY STATE - NO KEYS */
+/* NO KEYS */
 .no-keys{text-align:center;padding:12px 0 6px}
 .no-keys-icon{font-size:32px;margin-bottom:12px;opacity:.4}
 .no-keys-title{font-size:15px;font-weight:600;color:var(--text2);margin-bottom:6px}
@@ -283,28 +299,48 @@ body{background:var(--bg);color:var(--text);font-family:'Space Grotesk',sans-ser
 }
 `;
 
-// ── App ───────────────────────────────────────────────────────────────────────
+// ── App ────────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [account, setAccount]       = useState(null);
-  const [tab, setTab]               = useState("send"); // "send" | "receive"
+  const [account, setAccount]         = useState(null);
+  const [tab, setTab]                 = useState("send");
 
-  // Send state
-  const [amount, setAmount]         = useState("");
-  const [metaAddr, setMetaAddr]     = useState("");
-  const [token, setToken]           = useState("ETH");
-  const [status, setStatus]         = useState("");
-  const [statusType, setStatusType] = useState("");
-  const [loading, setLoading]       = useState(false);
-  const [history, setHistory]       = useState([]);
-  const [pendingId, setPendingId]   = useState(null);
-  const [accordOpen, setAccordOpen] = useState(false);
+  // Send
+  const [amount, setAmount]           = useState("");
+  const [payLink, setPayLink]         = useState(""); // recebe link ou meta-address
+  const [token, setToken]             = useState("ETH");
+  const [status, setStatus]           = useState("");
+  const [statusType, setStatusType]   = useState("");
+  const [loading, setLoading]         = useState(false);
+  const [history, setHistory]         = useState([]);
+  const [pendingId, setPendingId]     = useState(null);
+  const [accordOpen, setAccordOpen]   = useState(false);
 
-  // Receive state
-  const [myKeys, setMyKeys]         = useState(null); // { spendingPrivKey, viewingPrivKey, metaAddress }
-  const [scanning, setScanning]     = useState(false);
-  const [deposits, setDeposits]     = useState([]);
+  // Receive
+  const [myKeys, setMyKeys]           = useState(null);
+  const [scanning, setScanning]       = useState(false);
+  const [deposits, setDeposits]       = useState([]);
   const [withdrawing, setWithdrawing] = useState(null);
-  const [copied, setCopied]         = useState(false);
+  const [linkCopied, setLinkCopied]   = useState(false);
+
+  // Backup modal
+  const [modal, setModal]             = useState(null); // "export" | "import"
+  const [modalPwd, setModalPwd]       = useState("");
+  const [modalPwd2, setModalPwd2]     = useState("");
+  const [modalErr, setModalErr]       = useState("");
+  const [modalFile, setModalFile]     = useState(null);
+
+  // Detecta link de pagamento na URL (/p/st:...)
+  useEffect(() => {
+    const path = window.location.pathname;
+    const match = path.match(/^\/p\/(.+)$/);
+    if (match) {
+      const meta = decodeURIComponent(match[1]);
+      if (meta.startsWith("st:")) {
+        setPayLink(meta);
+        setTab("send");
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const s = document.createElement("style");
@@ -313,44 +349,52 @@ export default function App() {
     return () => document.head.removeChild(s);
   }, []);
 
+  // Carrega chaves do localStorage ao iniciar
+  useEffect(() => {
+    const saved = localStorage.getItem("sf_keys");
+    if (saved) {
+      try { setMyKeys(JSON.parse(saved)); } catch {}
+    }
+  }, []);
+
+  // Salva chaves no localStorage sempre que mudam
+  useEffect(() => {
+    if (myKeys) localStorage.setItem("sf_keys", JSON.stringify(myKeys));
+  }, [myKeys]);
+
   // Poll status
   useEffect(() => {
     if (!pendingId) return;
-    // Se for um id de entrada descartável ainda sem pipeline, faz polling diferente
     if (pendingId.startsWith("entrada_")) {
       const endereco = pendingId.replace("entrada_", "");
       const iv = setInterval(async () => {
         try {
           const r = await fetch(`${BACKEND_URL}/aguardar/${endereco}`);
           const d = await r.json();
-          if (d.recebido && d.id) {
-            setPendingId(d.id);
-            clearInterval(iv);
-          }
-        } catch (_) {}
+          if (d.recebido && d.id) { setPendingId(d.id); clearInterval(iv); }
+        } catch {}
       }, 12000);
       return () => clearInterval(iv);
     }
-    // Pipeline normal
     const iv = setInterval(async () => {
       try {
         const r = await fetch(`${BACKEND_URL}/status/${pendingId}`);
         const d = await r.json();
         if (d.concluido) {
-          setStatus("Transação entregue com sucesso. ✓");
+          setStatus("Enviado com sucesso. O destinatario pode sacar a qualquer momento.");
           setStatusType("ok");
           clearInterval(iv); setPendingId(null);
           setHistory(h => h.map(t => t.id === pendingId ? { ...t, done: true } : t));
         } else {
-          setStatus(`Processando... ${d.hopsFeitos}/${d.hopsTotal} etapas · ~${d.minutosRestantes} min`);
+          setStatus(`Processando... ${d.hopsFeitos}/${d.hopsTotal} etapas - ~${d.minutosRestantes} min restantes`);
         }
-      } catch (_) {}
+      } catch {}
     }, 15000);
     return () => clearInterval(iv);
   }, [pendingId]);
 
   const connect = async () => {
-    if (!window.ethereum) return alert("MetaMask não encontrada.");
+    if (!window.ethereum) return alert("MetaMask nao encontrada.");
     const p = new ethers.BrowserProvider(window.ethereum);
     const [acc] = await p.send("eth_requestAccounts", []);
     setAccount(acc);
@@ -358,90 +402,67 @@ export default function App() {
 
   // ── SEND ──────────────────────────────────────────────────────────────────
   const send = async () => {
-    if (!account)             return alert("Conecte sua carteira.");
-    if (!amount || !metaAddr) return alert("Preencha todos os campos.");
+    if (!account) return alert("Conecte sua carteira.");
+    if (!amount || !payLink) return alert("Preencha o valor e o link de pagamento.");
     setLoading(true); setStatus("Iniciando envio privado..."); setStatusType("");
     try {
-      // 1. Deriva stealth address
-      const { stealthAddress, ephemeralPubKey, viewTag } = deriveStealthAddress(metaAddr);
+      const metaAddress = parsePayLink(payLink);
+      if (!metaAddress) throw new Error("Link de pagamento invalido. Cole o link ou o endereco st:...");
+
+      const { stealthAddress, ephemeralPubKey, viewTag } = deriveStealthAddress(metaAddress);
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer   = await provider.getSigner();
 
-      // 2. Busca endereço de entrada descartável do backend
-      setStatus("Gerando endereço de entrada privado...");
+      setStatus("Gerando endereco de entrada privado...");
       const entradaRes = await fetch(
         `${BACKEND_URL}/entrada?token=${token}&stealthAddress=${stealthAddress}&ephemeralPubKey=${ephemeralPubKey}&viewTag=${viewTag}`
       );
       const entradaData = await entradaRes.json();
       if (entradaData.erro) throw new Error(entradaData.erro);
-      const { entradaAddress, minimoFormatado } = entradaData;
+      const { entradaAddress } = entradaData;
 
       let txHash;
       let valorWei;
 
       if (token === "ETH") {
         valorWei = ethers.parseEther(amount);
-        setStatus(
-          `Endereço de entrada gerado (único, descartável).
-` +
-          `Mínimo: ${minimoFormatado}
-` +
-          `Aguardando confirmação na carteira...`
-        );
+        setStatus("Aguardando confirmacao na carteira...");
         const tx = await signer.sendTransaction({ to: entradaAddress, value: valorWei });
-        setStatus("Confirmando transação...");
+        setStatus("Confirmando transacao...");
         await tx.wait();
         txHash = tx.hash;
       } else {
         const t = TOKENS[token];
         valorWei = ethers.parseUnits(amount, t.decimals);
         const tc = new ethers.Contract(t.address, ERC20_ABI, signer);
-        setStatus("Aguardando aprovação do token...");
+        setStatus("Aguardando aprovacao do token...");
         const allow = await tc.allowance(account, entradaAddress);
         if (allow < valorWei) { const a = await tc.approve(entradaAddress, valorWei); await a.wait(); }
-        setStatus("Transferindo tokens para endereço de entrada...");
+        setStatus("Transferindo tokens...");
         const transferTx = await tc.transfer(entradaAddress, valorWei);
         await transferTx.wait();
         txHash = transferTx.hash;
       }
 
-      // 3. Polling: aguarda backend detectar o recebimento e retornar o id do pipeline
-      setStatus("Aguardando detecção pelo pipeline...\n(O backend monitora o endereço de entrada a cada 10s)");
+      setStatus("Aguardando deteccao pelo pipeline...");
       let pipelineId = null;
-      for (let tentativa = 0; tentativa < 30; tentativa++) {
+      for (let i = 0; i < 30; i++) {
         await new Promise(r => setTimeout(r, 12000));
-        const pollRes = await fetch(`${BACKEND_URL}/aguardar/${entradaAddress}`);
+        const pollRes  = await fetch(`${BACKEND_URL}/aguardar/${entradaAddress}`);
         const pollData = await pollRes.json();
-        if (pollData.recebido && pollData.id) {
-          pipelineId = pollData.id;
-          break;
-        }
-        setStatus(`Aguardando detecção... (${tentativa + 1}/30)`);
+        if (pollData.recebido && pollData.id) { pipelineId = pollData.id; break; }
+        setStatus(`Aguardando deteccao... (${i + 1}/30)`);
       }
 
-      if (!pipelineId) {
-        // Tenta buscar pelo status do último pipeline
-        setStatus("Pipeline iniciado — monitorando...");
-        pipelineId = `entrada_${entradaAddress}`;
-      }
-
+      if (!pipelineId) pipelineId = `entrada_${entradaAddress}`;
       setPendingId(pipelineId);
       setHistory(h => [{
         id: pipelineId, hash: txHash, amount, token,
         recipient: stealthAddress.slice(0,6) + "..." + stealthAddress.slice(-4),
         time: new Date().toLocaleTimeString("pt-BR"), done: false,
       }, ...h]);
-
-      setStatus(
-        `Pipeline iniciado ✓
-` +
-        `Endereço de entrada descartável — sem vínculo com sua identidade on-chain.
-` +
-        `Stealth address derivado — destinatário invisível.
-` +
-        `Estimativa: ~8 min`
-      );
-      setAmount(""); setMetaAddr("");
+      setStatus("Envio iniciado com sucesso.\nSeu destinatario recebera os fundos em ~8 min de forma completamente privada.");
+      setAmount(""); setPayLink("");
     } catch (e) {
       setStatus(e.reason || e.message || "Erro desconhecido.");
       setStatusType("err");
@@ -456,46 +477,47 @@ export default function App() {
     setDeposits([]);
   };
 
-  const loadKeysFromStorage = () => {
-    const saved = localStorage.getItem("sf_keys");
-    if (saved) { setMyKeys(JSON.parse(saved)); setDeposits([]); }
-    else alert("Nenhuma chave salva neste navegador.");
-  };
-
-  const exportKeys = () => {
+  const copyLink = () => {
     if (!myKeys) return;
-    const blob = new Blob([JSON.stringify(myKeys, null, 2)], { type: "application/json" });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href = url; a.download = "silentflow-keys.json"; a.click();
-    URL.revokeObjectURL(url);
+    const link = buildPayLink(myKeys.metaAddress);
+    navigator.clipboard.writeText(link);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2500);
   };
 
-  const importKeys = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const keys = JSON.parse(ev.target.result);
-        if (!keys.spendingPrivKey || !keys.viewingPrivKey || !keys.metaAddress)
-          throw new Error("Arquivo inválido");
-        setMyKeys(keys);
-        setDeposits([]);
-      } catch { alert("Arquivo de chaves inválido."); }
-    };
-    reader.readAsText(file);
+  // Export com senha
+  const openExport = () => { setModal("export"); setModalPwd(""); setModalPwd2(""); setModalErr(""); };
+  const openImport = () => { setModal("import"); setModalPwd(""); setModalErr(""); setModalFile(null); };
+  const closeModal = () => { setModal(null); setModalPwd(""); setModalPwd2(""); setModalErr(""); setModalFile(null); };
+
+  const doExport = async () => {
+    if (!modalPwd) return setModalErr("Digite uma senha.");
+    if (modalPwd !== modalPwd2) return setModalErr("As senhas nao coincidem.");
+    if (modalPwd.length < 6) return setModalErr("Minimo 6 caracteres.");
+    try {
+      const encrypted = await encryptKeys(myKeys, modalPwd);
+      const blob = new Blob([JSON.stringify(encrypted)], { type: "application/json" });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href = url; a.download = "silentflow-backup.json"; a.click();
+      URL.revokeObjectURL(url);
+      closeModal();
+    } catch (e) { setModalErr("Erro ao criptografar: " + e.message); }
   };
 
-  useEffect(() => {
-    if (myKeys) localStorage.setItem("sf_keys", JSON.stringify(myKeys));
-  }, [myKeys]);
-
-  const copyMeta = () => {
-    if (!myKeys) return;
-    navigator.clipboard.writeText(myKeys.metaAddress);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const doImport = async () => {
+    if (!modalFile) return setModalErr("Selecione o arquivo.");
+    if (!modalPwd)  return setModalErr("Digite a senha.");
+    try {
+      const text    = await modalFile.text();
+      const payload = JSON.parse(text);
+      const keys    = await decryptKeys(payload, modalPwd);
+      if (!keys.spendingPrivKey || !keys.viewingPrivKey || !keys.metaAddress)
+        throw new Error("Arquivo invalido");
+      setMyKeys(keys);
+      setDeposits([]);
+      closeModal();
+    } catch (e) { setModalErr("Senha incorreta ou arquivo invalido."); }
   };
 
   const scan = useCallback(async () => {
@@ -505,54 +527,35 @@ export default function App() {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
       const filter   = contract.filters.StealthDeposit();
-      // Get current block and scan last 50000 blocks in chunks to avoid RPC limits
       const currentBlock = await provider.getBlockNumber();
       const fromBlock    = Math.max(0, currentBlock - 50000);
-      const CHUNK        = 2000;
-      const events       = [];
+      const CHUNK = 2000;
+      const events = [];
       for (let start = fromBlock; start < currentBlock; start += CHUNK) {
-        const end    = Math.min(start + CHUNK - 1, currentBlock);
-        const chunk  = await contract.queryFilter(filter, start, end);
+        const end   = Math.min(start + CHUNK - 1, currentBlock);
+        const chunk = await contract.queryFilter(filter, start, end);
         events.push(...chunk);
       }
-
       const found = [];
       for (const ev of events) {
-        const ephemeralPubKey    = ev.args[0];
+        const ephemeralPubKey       = ev.args[0];
         const stealthAddressOnChain = ev.args[1];
-        const tokenAddr          = ev.args[2];
-
-        const viewTag            = Number(ev.args[4]);
-
-        const result = tryDecryptDeposit(
-          ephemeralPubKey, stealthAddressOnChain, viewTag,
-          myKeys.spendingPrivKey, myKeys.viewingPrivKey
-        );
-
+        const tokenAddr             = ev.args[2];
+        const viewTag               = Number(ev.args[4]);
+        const result = tryDecryptDeposit(ephemeralPubKey, stealthAddressOnChain, viewTag, myKeys.spendingPrivKey, myKeys.viewingPrivKey);
         if (result) {
-          // Check if still has balance
-          const tokenAddrNorm = (!tokenAddr || tokenAddr === ethers.ZeroAddress || tokenAddr === "0x0000000000000000000000000000000000000000")
-            ? ethers.ZeroAddress : tokenAddr;
+          const tokenAddrNorm = (!tokenAddr || tokenAddr === ethers.ZeroAddress) ? ethers.ZeroAddress : tokenAddr;
           const bal = await contract.balanceOf(stealthAddressOnChain, tokenAddrNorm);
           if (bal > 0n) {
             const tokenSymbol = tokenAddr === ethers.ZeroAddress ? "ETH"
               : Object.keys(TOKENS).find(k => TOKENS[k].address?.toLowerCase() === tokenAddr.toLowerCase()) || tokenAddr.slice(0,6);
-            const decimals = tokenAddr === ethers.ZeroAddress ? 18
-              : (TOKENS[tokenSymbol]?.decimals || 18);
-            found.push({
-              stealthAddress: stealthAddressOnChain,
-              stealthPrivKey: result.stealthPrivKey,
-              amount: ethers.formatUnits(bal, decimals),
-              token: tokenSymbol,
-              txHash: ev.transactionHash,
-            });
+            const decimals = tokenAddr === ethers.ZeroAddress ? 18 : (TOKENS[tokenSymbol]?.decimals || 18);
+            found.push({ stealthAddress: stealthAddressOnChain, stealthPrivKey: result.stealthPrivKey, amount: ethers.formatUnits(bal, decimals), token: tokenSymbol, txHash: ev.transactionHash });
           }
         }
       }
       setDeposits(found);
-    } catch (e) {
-      alert("Erro ao escanear: " + e.message);
-    }
+    } catch (e) { alert("Erro ao escanear: " + e.message); }
     setScanning(false);
   }, [myKeys, account]);
 
@@ -565,47 +568,82 @@ export default function App() {
       const signer    = await provider.getSigner();
       const contract  = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
       const tokenAddr = TOKENS[deposit.token]?.address || ethers.ZeroAddress;
-
-      // Gasless withdraw: stealthSigner signs, connected wallet pays gas
-      const nonce   = await contract.withdrawNonces(deposit.stealthAddress);
-      const chainId = (await provider.getNetwork()).chainId;
-
-      // Must match contract: keccak256(abi.encodePacked(stealthAddress, token, recipient, nonce, chainId))
-      const dataHash = ethers.solidityPackedKeccak256(
+      const nonce     = await contract.withdrawNonces(deposit.stealthAddress);
+      const chainId   = (await provider.getNetwork()).chainId;
+      const dataHash  = ethers.solidityPackedKeccak256(
         ["address","address","address","uint256","uint256"],
         [deposit.stealthAddress, tokenAddr, account, nonce, chainId]
       );
-
-      // stealthSigner.signMessage adds the "\x19Ethereum Signed Message:\n32" prefix — matches contract
       const stealthSigner = new ethers.Wallet(deposit.stealthPrivKey);
       const sig = await stealthSigner.signMessage(ethers.getBytes(dataHash));
-
-      const tx = await contract.withdrawFor(deposit.stealthAddress, tokenAddr, account, sig);
+      const tx  = await contract.withdrawFor(deposit.stealthAddress, tokenAddr, account, sig);
       await tx.wait();
-
       setDeposits(d => d.filter(x => x.stealthAddress !== deposit.stealthAddress));
       alert("Saque realizado com sucesso!");
-    } catch (e) {
-      alert("Erro ao sacar: " + (e.reason || e.message));
-    }
+    } catch (e) { alert("Erro ao sacar: " + (e.reason || e.message)); }
     setWithdrawing(null);
   };
 
   const fee = amount && !isNaN(parseFloat(amount))
     ? `${(parseFloat(amount) * 0.002).toFixed(6)} ${token}` : "—";
 
+  const payLink_isValid = payLink && (payLink.startsWith("st:") || payLink.includes("/p/st:"));
+
   return (
     <>
       <div className="bg" />
-      <div className="wrap">
+      {/* BACKUP MODAL */}
+      {modal && (
+        <div className="modal-bg" onClick={closeModal}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <button className="modal-close" onClick={closeModal}>✕</button>
+            {modal === "export" ? (
+              <>
+                <div className="modal-title">Backup criptografado</div>
+                <div className="modal-sub">Suas chaves serao criptografadas com sua senha antes de salvar. Use uma senha forte que voce nao vai esquecer.</div>
+                <div className="fld">
+                  <label>Senha</label>
+                  <input type="password" placeholder="Minimo 6 caracteres" value={modalPwd} onChange={e => setModalPwd(e.target.value)} />
+                </div>
+                <div className="fld">
+                  <label>Confirmar senha</label>
+                  <input type="password" placeholder="Repita a senha" value={modalPwd2} onChange={e => setModalPwd2(e.target.value)} />
+                </div>
+                {modalErr && <div className="modal-err">{modalErr}</div>}
+                <div className="modal-actions">
+                  <button className="primary-btn" onClick={doExport}>Baixar backup</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="modal-title">Restaurar backup</div>
+                <div className="modal-sub">Selecione o arquivo de backup e digite a senha usada na criacao.</div>
+                <div className="fld">
+                  <label>Arquivo de backup</label>
+                  <input type="file" accept=".json" style={{fontFamily:"inherit",fontSize:"12px",color:"var(--text2)"}} onChange={e => setModalFile(e.target.files[0])} />
+                </div>
+                <div className="fld">
+                  <label>Senha</label>
+                  <input type="password" placeholder="Senha do backup" value={modalPwd} onChange={e => setModalPwd(e.target.value)} />
+                </div>
+                {modalErr && <div className="modal-err">{modalErr}</div>}
+                <div className="modal-actions">
+                  <button className="primary-btn" onClick={doImport}>Restaurar</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
+      <div className="wrap">
         {/* HEADER */}
         <header className="hdr">
           <div className="logo">
             <img src="/logo.png" alt="SilentFlow" />
           </div>
           <div className="hdr-right">
-            <div className="net-badge">SÉPOLIA</div>
+            <div className="net-badge">SEPOLIA</div>
             <button className={`conn-btn${account ? " on" : ""}`} onClick={connect}>
               {account ? `● ${account.slice(0,6)}...${account.slice(-4)}` : "Conectar Carteira"}
             </button>
@@ -614,23 +652,19 @@ export default function App() {
 
         {/* TABS */}
         <div className="tabs">
-          <button className={`tab${tab==="send"?" on":""}`} onClick={() => setTab("send")}>
-            ↑ Enviar
-          </button>
-          <button className={`tab${tab==="receive"?" on":""}`} onClick={() => setTab("receive")}>
-            ↓ Receber
-          </button>
+          <button className={`tab${tab==="send"?" on":""}`} onClick={() => setTab("send")}>↑ Enviar</button>
+          <button className={`tab${tab==="receive"?" on":""}`} onClick={() => setTab("receive")}>↓ Receber</button>
         </div>
 
         {/* ── SEND TAB ── */}
         {tab === "send" && (
           <div className="grid">
             <div className="left">
-              <span className="sec-label">Histórico</span>
+              <span className="sec-label">Historico</span>
               <div className="card">
                 <div className="card-body">
                   {history.length === 0
-                    ? <div className="hist-empty">Nenhuma transação ainda</div>
+                    ? <div className="hist-empty">Nenhuma transacao ainda</div>
                     : history.map(tx => (
                       <div className="hist-item" key={tx.id}>
                         <div className="hist-row">
@@ -647,7 +681,6 @@ export default function App() {
                   }
                 </div>
               </div>
-
               <div className="info-card">
                 <div className="info-toggle" onClick={() => setAccordOpen(o => !o)}>
                   <span className="info-label">Como funciona a privacidade</span>
@@ -655,12 +688,13 @@ export default function App() {
                 </div>
                 <div className={`info-body${accordOpen?" open":""}`}>
                   {[
-                    ["Stealth address",    "destinatário invisível on-chain"],
-                    ["Split automático",   "2–4 partes aleatórias"],
-                    ["Multi-hop",          "2–3 endereços efêmeros por parte"],
-                    ["Delay",              "30s–3 min por hop"],
-                    ["Dummy transactions", "ruído entre hops"],
-                    ["Taxa",               "0.2% por transação"],
+                    ["Entrada descartavel", "endereco novo por transacao"],
+                    ["Stealth address",     "destinatario invisivel on-chain"],
+                    ["Split automatico",    "2-3 partes aleatorias"],
+                    ["Multi-hop real",      "2 carteiras efemeras por parte"],
+                    ["Delays aleatorios",   "30s-2min por hop"],
+                    ["Dummy noise",         "ruido entre hops"],
+                    ["Taxa",                "0.2% por transacao"],
                   ].map(([k,v]) => (
                     <div className="info-row" key={k}>
                       <span className="info-k">{k}</span>
@@ -673,8 +707,8 @@ export default function App() {
 
             {/* SEND FORM */}
             <div className="form-card">
-              <div className="form-title">Envio Privado</div>
-              <div className="form-sub">Stealth address · non-custodial · 0.2% de taxa</div>
+              <div className="form-title">Enviar</div>
+              <div className="form-sub">Cole o link de pagamento do destinatario</div>
 
               <div className="toks">
                 {Object.keys(TOKENS).map(t => (
@@ -688,8 +722,14 @@ export default function App() {
               </div>
 
               <div className="fld">
-                <label>Stealth Meta-Address do Destinatário</label>
-                <textarea rows={3} placeholder="st:02abc...def:03ghi...jkl" value={metaAddr} onChange={e => setMetaAddr(e.target.value)} />
+                <label>Link de pagamento</label>
+                <input
+                  type="text"
+                  placeholder="silentflow.vercel.app/p/st:... ou st:..."
+                  value={payLink}
+                  onChange={e => setPayLink(e.target.value)}
+                  style={payLink_isValid ? {borderColor:"rgba(34,197,94,.3)"} : {}}
+                />
               </div>
 
               <div className="sep" />
@@ -699,7 +739,7 @@ export default function App() {
               </div>
 
               <button className="primary-btn" onClick={send} disabled={loading || !account}>
-                {loading ? "Processando..." : "Enviar"}
+                {loading ? "Processando..." : "Enviar com privacidade"}
               </button>
 
               {status && (
@@ -715,12 +755,12 @@ export default function App() {
         {tab === "receive" && (
           <div className="grid">
             <div className="left">
-              <span className="sec-label">Depósitos Detectados</span>
+              <span className="sec-label">Fundos recebidos</span>
               <div className="card">
                 <div className="card-body" style={{padding:"0 4px"}}>
                   {deposits.length === 0
                     ? <div className="hist-empty">
-                        {scanning ? "⟳ Escaneando blockchain..." : "Nenhum depósito encontrado"}
+                        {scanning ? "Escaneando blockchain..." : "Nenhum deposito encontrado"}
                       </div>
                     : deposits.map(d => (
                       <div className="deposit-item" key={d.stealthAddress}>
@@ -729,69 +769,62 @@ export default function App() {
                           <span className="deposit-token">{d.token}</span>
                         </div>
                         <div className="deposit-addr">{d.stealthAddress.slice(0,10)}...{d.stealthAddress.slice(-8)}</div>
-                        <button
-                          className="primary-btn"
-                          style={{padding:"10px",fontSize:"13px"}}
-                          onClick={() => withdraw(d)}
-                          disabled={withdrawing === d.stealthAddress}
-                        >
-                          {withdrawing === d.stealthAddress ? "⟳ Sacando..." : "↓ Sacar para minha carteira"}
+                        <button className="primary-btn" style={{padding:"10px",fontSize:"13px"}} onClick={() => withdraw(d)} disabled={withdrawing === d.stealthAddress}>
+                          {withdrawing === d.stealthAddress ? "Sacando..." : "Sacar para minha carteira"}
                         </button>
                       </div>
                     ))
                   }
                 </div>
               </div>
-
               <div className="warning-box">
-                <p>⚠️ Guarde suas chaves em local seguro. Sem elas não é possível recuperar os fundos. Salvas apenas neste navegador.</p>
+                <p>⚠️ Suas chaves ficam salvas neste navegador. Use o backup com senha para nao perder o acesso se trocar de dispositivo.</p>
               </div>
             </div>
 
             {/* RECEIVE FORM */}
             <div className="form-card">
-              <div className="form-title">Receber com Privacidade</div>
-              <div className="form-sub">Seu endereço real nunca aparece on-chain</div>
+              <div className="form-title">Receber</div>
+              <div className="form-sub">Compartilhe seu link — seu endereco real nunca aparece on-chain</div>
 
               {!myKeys ? (
                 <>
                   <div className="no-keys">
                     <div className="no-keys-icon">🔑</div>
-                    <div className="no-keys-title">Gere suas chaves de privacidade</div>
-                    <div className="no-keys-sub">Suas chaves ficam salvas apenas neste navegador. Sem elas não é possível receber fundos.</div>
+                    <div className="no-keys-title">Crie seu link de pagamento</div>
+                    <div className="no-keys-sub">Gere suas chaves uma vez e compartilhe o link com quem quiser te enviar fundos.</div>
                   </div>
                   <button className="primary-btn" onClick={generateKeys}>
-                    Gerar chaves de privacidade
+                    Gerar link de pagamento
                   </button>
-                  <button className="ghost-btn" onClick={loadKeysFromStorage}>
-                    Recuperar chaves salvas
+                  <button className="ghost-btn" onClick={openImport}>
+                    Restaurar backup
                   </button>
-                  <label className="ghost-btn" style={{display:"block",textAlign:"center",cursor:"pointer",marginTop:"8px"}}>
-                    Importar arquivo .json
-                    <input type="file" accept=".json" style={{display:"none"}} onChange={importKeys} />
-                  </label>
                 </>
               ) : (
                 <>
-                  <div className="meta-label">Seu endereço para receber</div>
-                  <div className="meta-box" onClick={copyMeta}>
-                    <div className="meta-label">Compartilhe com quem vai te enviar:</div>
-                    <div className="meta-value">{myKeys.metaAddress}</div>
-                    <div className="copy-hint">
-                      {copied ? "✓ Copiado!" : "📋 Clique para copiar"}
+                  <div className="link-box">
+                    <div className="link-box-label">Seu link de pagamento</div>
+                    <div className="link-url" onClick={copyLink}>
+                      {buildPayLink(myKeys.metaAddress)}
+                    </div>
+                    <div className="link-actions">
+                      <button className={`link-btn${linkCopied?" link-copied":""}`} onClick={copyLink}>
+                        {linkCopied ? "✓ Copiado!" : "Copiar link"}
+                      </button>
                     </div>
                   </div>
 
                   <div className="sep" />
 
                   <button className="primary-btn" onClick={scan} disabled={scanning || !account}>
-                    {scanning ? "⟳ Escaneando..." : "🔍 Escanear blockchain"}
+                    {scanning ? "Escaneando..." : "Verificar fundos recebidos"}
                   </button>
-                  <button className="ghost-btn" onClick={exportKeys}>
-                    ↓ Backup das chaves (.json)
+                  <button className="ghost-btn" onClick={openExport}>
+                    Backup com senha
                   </button>
                   <button className="ghost-btn danger-btn" onClick={generateKeys} style={{marginTop:"6px"}}>
-                    Gerar novas chaves
+                    Gerar novo link
                   </button>
 
                   {status && (
@@ -810,10 +843,9 @@ export default function App() {
           <span className="footer-l">SILENTFLOW</span>
           <div className="footer-r">
             <a className="footer-link" href={`https://sepolia.etherscan.io/address/${CONTRACT_ADDRESS}`} target="_blank" rel="noreferrer">Contrato ↗</a>
-            <a className="footer-link" href="https://silentflow-landing-wine.vercel.app" target="_blank" rel="noreferrer">Página inicial ↗</a>
+            <a className="footer-link" href="https://silentflow-landing-wine.vercel.app" target="_blank" rel="noreferrer">Pagina inicial ↗</a>
           </div>
         </footer>
-
       </div>
     </>
   );
