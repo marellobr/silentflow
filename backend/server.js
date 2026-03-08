@@ -378,6 +378,7 @@ async function monitorarEntradas() {
 
       fila.set(id, {
         id,
+        entradaAddress: endereco,
         token: entrada.token,
         valorTotal: valorRecebido.toString(),
         stealthAddress: entrada.stealthAddress,
@@ -466,22 +467,25 @@ app.get("/entrada", (req, res) => {
 });
 
 // GET /aguardar/:endereco
-// Frontend faz polling para saber se a entrada recebeu fundos e qual é o id do pipeline
+// Frontend faz polling para saber se a entrada foi processada
+// Guarda mapeamento entrada → pipeline id
 app.get("/aguardar/:endereco", (req, res) => {
-  const entrada = entradasPendentes.get(req.params.endereco);
+  const endereco = req.params.endereco;
 
-  if (!entrada) {
-    // Não está mais pendente — pode ter sido processada
-    // Busca na fila pelo stealthAddress mais recente
-    for (const [id, tx] of [...fila.entries()].reverse()) {
-      if (tx.stealthAddress === req.params.stealthAddress) {
-        return res.json({ recebido: true, id });
-      }
-    }
-    return res.json({ recebido: true, id: null });
+  // Ainda pendente — não processou
+  if (entradasPendentes.has(endereco)) {
+    return res.json({ recebido: false });
   }
 
-  res.json({ recebido: false });
+  // Não está mais pendente — busca pipeline na fila pelo entradaAddress
+  for (const [id, tx] of [...fila.entries()].reverse()) {
+    if (tx.entradaAddress === endereco) {
+      return res.json({ recebido: true, id });
+    }
+  }
+
+  // Processou mas não encontrou na fila ainda (race condition) — aguarda
+  return res.json({ recebido: false });
 });
 
 // GET /status/:id
