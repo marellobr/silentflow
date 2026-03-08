@@ -316,12 +316,28 @@ export default function App() {
   // Poll status
   useEffect(() => {
     if (!pendingId) return;
+    // Se for um id de entrada descartável ainda sem pipeline, faz polling diferente
+    if (pendingId.startsWith("entrada_")) {
+      const endereco = pendingId.replace("entrada_", "");
+      const iv = setInterval(async () => {
+        try {
+          const r = await fetch(`${BACKEND_URL}/aguardar/${endereco}`);
+          const d = await r.json();
+          if (d.recebido && d.id) {
+            setPendingId(d.id);
+            clearInterval(iv);
+          }
+        } catch (_) {}
+      }, 12000);
+      return () => clearInterval(iv);
+    }
+    // Pipeline normal
     const iv = setInterval(async () => {
       try {
         const r = await fetch(`${BACKEND_URL}/status/${pendingId}`);
         const d = await r.json();
         if (d.concluido) {
-          setStatus("Transação entregue com sucesso.");
+          setStatus("Transação entregue com sucesso. ✓");
           setStatusType("ok");
           clearInterval(iv); setPendingId(null);
           setHistory(h => h.map(t => t.id === pendingId ? { ...t, done: true } : t));
@@ -346,77 +362,84 @@ export default function App() {
     if (!amount || !metaAddr) return alert("Preencha todos os campos.");
     setLoading(true); setStatus("Iniciando envio privado..."); setStatusType("");
     try {
-      // 1. Deriva stealth address para o destinatário
+      // 1. Deriva stealth address
       const { stealthAddress, ephemeralPubKey, viewTag } = deriveStealthAddress(metaAddr);
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer   = await provider.getSigner();
 
-      // 2. Busca endereço da master wallet do backend
-      setStatus("Conectando ao pipeline de privacidade...");
-      const masterRes = await fetch(`${BACKEND_URL}/master`);
-      const { address: masterAddress } = await masterRes.json();
+      // 2. Busca endereço de entrada descartável do backend
+      setStatus("Gerando endereço de entrada privado...");
+      const entradaRes = await fetch(
+        `${BACKEND_URL}/entrada?token=${token}&stealthAddress=${stealthAddress}&ephemeralPubKey=${ephemeralPubKey}&viewTag=${viewTag}`
+      );
+      const entradaData = await entradaRes.json();
+      if (entradaData.erro) throw new Error(entradaData.erro);
+      const { entradaAddress, minimoFormatado } = entradaData;
 
       let txHash;
       let valorWei;
 
       if (token === "ETH") {
-        // 3a. ETH: envia direto para master wallet do backend
         valorWei = ethers.parseEther(amount);
-        setStatus("Aguardando confirmação na carteira...\n(Você está enviando para o mixer — os hops reais serão executados automaticamente)");
-        const tx = await signer.sendTransaction({
-          to: masterAddress,
-          value: valorWei,
-        });
-        setStatus("Confirmando transação na blockchain...");
+        setStatus(
+          `Endereço de entrada gerado (único, descartável).
+` +
+          `Mínimo: ${minimoFormatado}
+` +
+          `Aguardando confirmação na carteira...`
+        );
+        const tx = await signer.sendTransaction({ to: entradaAddress, value: valorWei });
+        setStatus("Confirmando transação...");
         await tx.wait();
         txHash = tx.hash;
       } else {
-        // 3b. Token: transfere token para master wallet
         const t = TOKENS[token];
         valorWei = ethers.parseUnits(amount, t.decimals);
         const tc = new ethers.Contract(t.address, ERC20_ABI, signer);
-
         setStatus("Aguardando aprovação do token...");
-        const allow = await tc.allowance(account, masterAddress);
-        if (allow < valorWei) {
-          const approveTx = await tc.approve(masterAddress, valorWei);
-          await approveTx.wait();
-        }
-
-        setStatus("Transferindo tokens para o mixer...");
-        const transferTx = await tc.transfer(masterAddress, valorWei);
+        const allow = await tc.allowance(account, entradaAddress);
+        if (allow < valorWei) { const a = await tc.approve(entradaAddress, valorWei); await a.wait(); }
+        setStatus("Transferindo tokens para endereço de entrada...");
+        const transferTx = await tc.transfer(entradaAddress, valorWei);
         await transferTx.wait();
         txHash = transferTx.hash;
       }
 
-      // 4. Agenda pipeline no backend — passa stealthAddress, ephemeralPubKey, viewTag
-      setStatus("Agendando pipeline de hops...");
-      const res = await fetch(`${BACKEND_URL}/agendar`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          txHash,
-          token,
-          valor: valorWei.toString(),
-          stealthAddress,
-          ephemeralPubKey,
-          viewTag,
-        }),
-      });
-      const data = await res.json();
-      setPendingId(data.id);
+      // 3. Polling: aguarda backend detectar o recebimento e retornar o id do pipeline
+      setStatus("Aguardando detecção pelo pipeline...\n(O backend monitora o endereço de entrada a cada 10s)");
+      let pipelineId = null;
+      for (let tentativa = 0; tentativa < 30; tentativa++) {
+        await new Promise(r => setTimeout(r, 12000));
+        const pollRes = await fetch(`${BACKEND_URL}/aguardar/${entradaAddress}`);
+        const pollData = await pollRes.json();
+        if (pollData.recebido && pollData.id) {
+          pipelineId = pollData.id;
+          break;
+        }
+        setStatus(`Aguardando detecção... (${tentativa + 1}/30)`);
+      }
 
+      if (!pipelineId) {
+        // Tenta buscar pelo status do último pipeline
+        setStatus("Pipeline iniciado — monitorando...");
+        pipelineId = `entrada_${entradaAddress}`;
+      }
+
+      setPendingId(pipelineId);
       setHistory(h => [{
-        id: data.id, hash: txHash, amount, token,
+        id: pipelineId, hash: txHash, amount, token,
         recipient: stealthAddress.slice(0,6) + "..." + stealthAddress.slice(-4),
         time: new Date().toLocaleTimeString("pt-BR"), done: false,
       }, ...h]);
 
       setStatus(
-        `Pipeline iniciado ✓\n` +
-        `Stealth address derivado — destinatário invisível on-chain.\n` +
-        `O backend vai executar os hops reais e depositar no contrato.\n` +
-        `Estimativa: ~${data.estimativaMinutos} min`
+        `Pipeline iniciado ✓
+` +
+        `Endereço de entrada descartável — sem vínculo com sua identidade on-chain.
+` +
+        `Stealth address derivado — destinatário invisível.
+` +
+        `Estimativa: ~8 min`
       );
       setAmount(""); setMetaAddr("");
     } catch (e) {
