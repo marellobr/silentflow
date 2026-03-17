@@ -543,6 +543,125 @@ body {
   0% { background-position: -200% 0 }
   100% { background-position: 200% 0 }
 }
+@keyframes spin {
+  to { transform: rotate(360deg) }
+}
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34,184,230,.3) }
+  50% { box-shadow: 0 0 0 6px rgba(34,184,230,0) }
+}
+
+/* ---- FIXED DENOMINATIONS ---- */
+.denom-toggle {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
+  padding: 10px 14px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--r2); cursor: pointer; transition: border-color .2s;
+}
+.denom-toggle:hover { border-color: var(--border2) }
+.denom-switch {
+  width: 36px; height: 20px; border-radius: 10px;
+  background: var(--surface2); border: 1px solid var(--border2);
+  position: relative; transition: all .25s; flex-shrink: 0;
+}
+.denom-switch.on { background: var(--accent-dim); border-color: var(--accent) }
+.denom-switch::after {
+  content: ''; position: absolute; top: 2px; left: 2px;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--text3); transition: all .25s;
+}
+.denom-switch.on::after { left: 18px; background: var(--accent) }
+.denom-label { font-size: 12px; color: var(--text2); font-weight: 500 }
+.denom-hint { font-size: 10px; color: var(--text3); margin-left: auto }
+.denom-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 16px;
+  animation: fade-up .25s ease;
+}
+.denom-btn {
+  padding: 10px 0; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text2); font-family: var(--mono);
+  font-size: 13px; font-weight: 500; cursor: pointer; transition: all .2s;
+  text-align: center;
+}
+.denom-btn:hover { border-color: var(--border2); color: var(--text) }
+.denom-btn.on {
+  background: var(--accent-dim); border-color: var(--accent);
+  color: var(--accent2); box-shadow: 0 0 10px rgba(34,184,230,.08);
+}
+
+/* ---- PIPELINE TIMELINE ---- */
+.timeline { margin-top: 16px; animation: fade-up .3s ease }
+.timeline-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px;
+}
+.timeline-title { font-size: 13px; font-weight: 600; color: var(--text) }
+.timeline-eta { font-size: 11px; color: var(--text3); font-family: var(--mono) }
+.timeline-bar {
+  height: 3px; background: var(--bg); border-radius: 2px;
+  overflow: hidden; margin-bottom: 18px;
+}
+.timeline-fill {
+  height: 100%; border-radius: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  transition: width 1.5s ease;
+}
+.timeline-steps { display: flex; flex-direction: column; gap: 0 }
+.tl-step {
+  display: flex; align-items: flex-start; gap: 12px; padding: 8px 0;
+  position: relative;
+}
+.tl-step:not(:last-child)::before {
+  content: ''; position: absolute; left: 11px; top: 28px;
+  width: 1px; height: calc(100% - 16px); background: var(--border);
+}
+.tl-step.done:not(:last-child)::before { background: rgba(34,184,230,.25) }
+.tl-dot {
+  width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; transition: all .3s;
+}
+.tl-dot.done { background: rgba(52,211,153,.12); color: var(--green) }
+.tl-dot.active {
+  background: var(--accent-dim); border: 1.5px solid var(--accent);
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+.tl-dot.active .tl-spinner {
+  width: 10px; height: 10px; border: 1.5px solid var(--border);
+  border-top-color: var(--accent2); border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+.tl-dot.pending { background: var(--surface2); }
+.tl-dot.pending::after {
+  content: ''; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--text3);
+}
+.tl-info { flex: 1; min-width: 0 }
+.tl-name { font-size: 12px; font-weight: 500; color: var(--text2) }
+.tl-step.done .tl-name { color: var(--text) }
+.tl-step.active .tl-name { color: var(--accent2) }
+.tl-detail { font-size: 10px; color: var(--text3); font-family: var(--mono); margin-top: 2px }
+
+/* ---- TIER BADGE ---- */
+.tier-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px }
+.tier-badge {
+  font-size: 10px; font-weight: 600; padding: 3px 9px; border-radius: 10px;
+  letter-spacing: .04em;
+}
+.tier-standard { background: var(--accent-dim); color: var(--accent2); border: 1px solid rgba(34,184,230,.15) }
+.tier-volume { background: rgba(52,211,153,.08); color: var(--green); border: 1px solid rgba(52,211,153,.15) }
+.tier-premium { background: rgba(251,191,36,.06); color: var(--amber); border: 1px solid rgba(251,191,36,.15) }
+
+/* ---- NOTIF BANNER ---- */
+.notif-banner {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; margin-bottom: 14px;
+  background: var(--accent-dim); border: 1px solid rgba(34,184,230,.12);
+  border-radius: var(--r2); cursor: pointer; transition: all .2s;
+  animation: fade-up .3s ease;
+}
+.notif-banner:hover { border-color: var(--accent) }
+.notif-text { font-size: 12px; color: var(--text2); flex: 1 }
+.notif-action { font-size: 11px; color: var(--accent2); font-weight: 600; white-space: nowrap }
 
 /* ---- RESPONSIVE ---- */
 @media (max-width: 760px) {
@@ -581,6 +700,28 @@ export default function App() {
   const [modalPwd2, setModalPwd2]     = useState("");
   const [modalErr, setModalErr]       = useState("");
   const [modalFile, setModalFile]     = useState(null);
+  const [useFixedDenom, setUseFixedDenom] = useState(false);
+  const [pipelineData, setPipelineData]   = useState(null); // { hopsFeitos, hopsTotal, splits, concluido }
+  const [notifPerm, setNotifPerm]         = useState(typeof Notification !== "undefined" ? Notification.permission : "denied");
+
+  // Denominacoes fixas por token (melhora anonymity set)
+  const DENOMS = {
+    ETH:  ["0.005", "0.01", "0.02", "0.05", "0.1", "0.5"],
+    USDC: ["5", "10", "25", "50", "100", "500"],
+    USDT: ["5", "10", "25", "50", "100", "500"],
+  };
+
+  const requestNotifPermission = () => {
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      Notification.requestPermission().then(p => setNotifPerm(p));
+    }
+  };
+
+  const sendNotification = (title, body) => {
+    if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+      try { new Notification(title, { body, icon: "/logo.png" }); } catch {}
+    }
+  };
 
   // Detecta link de pagamento na URL (/p/st:...)
   useEffect(() => {
@@ -633,13 +774,16 @@ export default function App() {
           setStatus("Enviado com sucesso. O destinatario pode sacar a qualquer momento.");
           setStatusType("ok");
           setErrorInfo(null);
+          setPipelineData({ ...d, concluido: true });
+          sendNotification("SilentFlow", "Transacao privada concluida com sucesso!");
           clearInterval(iv); setPendingId(null);
           setHistory(h => h.map(t => t.id === pendingId ? { ...t, done: true } : t));
         } else if (pollCount >= MAX_POLLS) {
           clearInterval(iv); setPendingId(null);
-          setStatus("");
+          setStatus(""); setPipelineData(null);
           setErrorInfo({ title: "Pipeline demorou mais que o esperado", desc: "Os fundos foram enviados com sucesso para o pipeline, mas o processo de hops esta demorando mais que o normal.", action: "Nao se preocupe — seus fundos estao seguros. Aguarde mais alguns minutos e escaneie a blockchain na aba Receber para verificar se chegaram.", type: "warn" });
         } else {
+          setPipelineData(d);
           setStatus(`Processando... ${d.hopsFeitos}/${d.hopsTotal} etapas - ~${d.minutosRestantes} min restantes`);
         }
       } catch (fetchErr) {
@@ -662,7 +806,7 @@ export default function App() {
   const send = async () => {
     if (!account) return alert("Conecte sua carteira.");
     if (!amount || !payLink) return alert("Preencha o valor e o link de pagamento.");
-    setLoading(true); setStatus("Iniciando envio privado..."); setStatusType(""); setErrorInfo(null);
+    setLoading(true); setStatus("Iniciando envio privado..."); setStatusType(""); setErrorInfo(null); setPipelineData(null);
     try {
       const metaAddress = parsePayLink(payLink);
       if (!metaAddress) throw new Error("Link de pagamento invalido. Cole o link ou o endereco st:...");
@@ -820,7 +964,22 @@ export default function App() {
     setWithdrawing(null);
   };
 
-  const fee = amount && !isNaN(parseFloat(amount)) ? `${(parseFloat(amount) * 0.002).toFixed(6)} ${token}` : "\u2014";
+  // Taxa por tier
+  const getTierInfo = (amt, tok) => {
+    const v = parseFloat(amt);
+    if (isNaN(v) || v <= 0) return { pct: 0.002, label: "Standard", cls: "tier-standard" };
+    if (tok === "ETH") {
+      if (v >= 1.5) return { pct: 0.001, label: "Premium", cls: "tier-premium" };
+      if (v >= 0.15) return { pct: 0.0015, label: "Volume", cls: "tier-volume" };
+    } else {
+      if (v >= 5000) return { pct: 0.001, label: "Premium", cls: "tier-premium" };
+      if (v >= 500) return { pct: 0.0015, label: "Volume", cls: "tier-volume" };
+    }
+    return { pct: 0.002, label: "Standard", cls: "tier-standard" };
+  };
+  const tierInfo = getTierInfo(amount, token);
+  const fee = amount && !isNaN(parseFloat(amount)) ? `${(parseFloat(amount) * tierInfo.pct).toFixed(6)} ${token}` : "\u2014";
+  const feePercent = amount && !isNaN(parseFloat(amount)) ? `${(tierInfo.pct * 100).toFixed(2)}%` : "0.20%";
   const payLink_isValid = payLink && (payLink.startsWith("st:") || payLink.includes("/p/st:"));
 
   return (
@@ -912,9 +1071,10 @@ export default function App() {
                     ["Stealth address",     "destinatario invisivel"],
                     ["Split automatico",    "2-3 partes aleatorias"],
                     ["Multi-hop real",      "2 wallets efemeras/parte"],
-                    ["Delays aleatorios",   "30s-2min por hop"],
-                    ["Dummy noise",         "ruido entre hops"],
-                    ["Taxa",                "0.2% por transacao"],
+                    ["Delays inteligentes", "5 perfis, 20s-200s por hop"],
+                    ["Dummy noise",         "ruido antes/durante/depois"],
+                    ["Denomin. fixas",      "anonymity set maior"],
+                    ["Taxa",                "0.10% - 0.20% por tier"],
                   ].map(([k,v]) => (
                     <div className="info-row" key={k}>
                       <span className="info-k">{k}</span>
@@ -929,27 +1089,128 @@ export default function App() {
             <div className="form-card">
               <div className="form-title">Enviar</div>
               <div className="form-sub">Cole o link de pagamento do destinatario</div>
+
+              {/* Notif permission */}
+              {notifPerm === "default" && (
+                <div className="notif-banner" onClick={requestNotifPermission}>
+                  <span className="notif-text">Receba alertas quando sua transacao for concluida</span>
+                  <span className="notif-action">Ativar</span>
+                </div>
+              )}
+
               <div className="toks">
                 {Object.keys(TOKENS).map(t => (
-                  <button key={t} className={`tok${token===t?" on":""}`} onClick={() => setToken(t)}>{t}</button>
+                  <button key={t} className={`tok${token===t?" on":""}`} onClick={() => { setToken(t); setAmount(""); }}>{t}</button>
                 ))}
               </div>
-              <div className="fld">
-                <label>Valor</label>
-                <input type="number" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} />
+
+              {/* Fixed denomination toggle */}
+              <div className="denom-toggle" onClick={() => setUseFixedDenom(d => !d)}>
+                <div className={`denom-switch${useFixedDenom?" on":""}`} />
+                <span className="denom-label">Valor fixo (mais privacidade)</span>
+                <span className="denom-hint">anonymity set</span>
               </div>
+
+              {useFixedDenom ? (
+                <div className="denom-grid">
+                  {DENOMS[token].map(d => (
+                    <button key={d} className={`denom-btn${amount===d?" on":""}`} onClick={() => setAmount(d)}>
+                      {d} {token}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="fld">
+                  <label>Valor</label>
+                  <input type="number" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} />
+                </div>
+              )}
+
               <div className="fld">
                 <label>Link de pagamento</label>
                 <input type="text" placeholder="silentflow.vercel.app/p/st:... ou st:..." value={payLink} onChange={e => setPayLink(e.target.value)} style={payLink_isValid ? {borderColor:"rgba(52,211,153,.35)"} : {}} />
               </div>
               <div className="sep" />
-              <div className="fee-row">
+
+              {/* Fee with tier */}
+              <div className="tier-row">
                 <span className="fee-l">Taxa de privacidade</span>
+                <span className={`tier-badge ${tierInfo.cls}`}>{tierInfo.label} {feePercent}</span>
+              </div>
+              <div className="fee-row">
+                <span className="fee-l">Custo estimado</span>
                 <span className="fee-v">{fee}</span>
               </div>
+
               <button className="primary-btn" onClick={send} disabled={loading || !account}>
                 {loading ? "Processando..." : "Enviar com privacidade"}
               </button>
+
+              {/* Pipeline Timeline Visual */}
+              {pipelineData && !pipelineData.concluido && !errorInfo && (
+                <div className="timeline">
+                  <div className="timeline-header">
+                    <span className="timeline-title">Pipeline ativo</span>
+                    <span className="timeline-eta">~{pipelineData.minutosRestantes || 0} min</span>
+                  </div>
+                  <div className="timeline-bar">
+                    <div className="timeline-fill" style={{width: `${pipelineData.hopsTotal > 0 ? Math.round((pipelineData.hopsFeitos / pipelineData.hopsTotal) * 100) : 0}%`}} />
+                  </div>
+                  <div className="timeline-steps">
+                    {/* Step 1: Entrada detectada */}
+                    <div className="tl-step done">
+                      <div className="tl-dot done">&#10003;</div>
+                      <div className="tl-info">
+                        <div className="tl-name">Entrada detectada</div>
+                        <div className="tl-detail">endereco descartavel verificado</div>
+                      </div>
+                    </div>
+                    {/* Step 2: Split */}
+                    <div className={`tl-step${pipelineData.hopsFeitos > 0 ? " done" : " done"}`}>
+                      <div className="tl-dot done">&#10003;</div>
+                      <div className="tl-info">
+                        <div className="tl-name">Split em {pipelineData.splits || 2} partes</div>
+                        <div className="tl-detail">valores aleatorios</div>
+                      </div>
+                    </div>
+                    {/* Step 3: Hops */}
+                    <div className={`tl-step${pipelineData.hopsFeitos >= pipelineData.hopsTotal ? " done" : " active"}`}>
+                      <div className={`tl-dot${pipelineData.hopsFeitos >= pipelineData.hopsTotal ? " done" : " active"}`}>
+                        {pipelineData.hopsFeitos >= pipelineData.hopsTotal ? "\u2713" : <span className="tl-spinner" />}
+                      </div>
+                      <div className="tl-info">
+                        <div className="tl-name">Hops em andamento ({pipelineData.hopsFeitos}/{pipelineData.hopsTotal})</div>
+                        <div className="tl-detail">wallets efemeras + delays aleatorios</div>
+                      </div>
+                    </div>
+                    {/* Step 4: Deposito */}
+                    <div className={`tl-step${pipelineData.hopsFeitos >= pipelineData.hopsTotal ? " active" : ""}`}>
+                      <div className={`tl-dot${pipelineData.hopsFeitos >= pipelineData.hopsTotal ? " active" : " pending"}`}>
+                        {pipelineData.hopsFeitos >= pipelineData.hopsTotal ? <span className="tl-spinner" /> : null}
+                      </div>
+                      <div className="tl-info">
+                        <div className="tl-name">Deposito no contrato</div>
+                        <div className="tl-detail">stealth address do destinatario</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Pipeline completed */}
+              {pipelineData && pipelineData.concluido && !errorInfo && (
+                <div className="timeline" style={{marginTop:"16px"}}>
+                  <div className="timeline-bar"><div className="timeline-fill" style={{width:"100%"}} /></div>
+                  <div className="tl-step done" style={{padding:"4px 0"}}>
+                    <div className="tl-dot done">&#10003;</div>
+                    <div className="tl-info">
+                      <div className="tl-name" style={{color:"var(--green)"}}>Transacao privada concluida</div>
+                      <div className="tl-detail">o destinatario pode sacar a qualquer momento</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {errorInfo && (
                 <div className={`error-card${errorInfo.type==="warn"?" warn":""}`}>
                   <div className="error-card-title">
@@ -961,7 +1222,7 @@ export default function App() {
                   {errorInfo.action && <div className="error-card-action">{errorInfo.action}</div>}
                 </div>
               )}
-              {status && !errorInfo && (
+              {status && !errorInfo && !pipelineData && (
                 <div className={`status-box${statusType?" "+statusType:""}`}>
                   <pre>{status}</pre>
                 </div>
