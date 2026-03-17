@@ -196,10 +196,14 @@ body {
   display: flex; align-items: center; justify-content: space-between;
   padding: 20px 0; border-bottom: 1px solid var(--border); margin-bottom: 36px;
 }
-.logo { display: flex; align-items: center; gap: 12px }
+.logo { display: flex; flex-direction: column; align-items: center; gap: 4px }
 .logo img {
-  height: 44px; width: auto; object-fit: contain;
-  filter: drop-shadow(0 0 14px rgba(34,184,230,.3));
+  height: 52px; width: auto; object-fit: contain;
+  filter: drop-shadow(0 0 16px rgba(34,184,230,.35));
+}
+.logo-name {
+  font-size: 11px; font-weight: 700; color: var(--accent);
+  letter-spacing: 3px; text-transform: uppercase;
 }
 .hdr-right { display: flex; align-items: center; gap: 10px }
 .net-badge {
@@ -266,7 +270,7 @@ body {
 
 /* ---- HISTORY (send tab) ---- */
 .hist-empty {
-  text-align: center; padding: 40px 0; color: var(--text3); font-size: 13px;
+  text-align: center; padding: 24px 16px; color: var(--text3); font-size: 13px;
 }
 .hist-item {
   padding: 16px 20px; border-bottom: 1px solid var(--border);
@@ -856,6 +860,7 @@ export default function App() {
         <header className="hdr">
           <div className="logo">
             <img src="/logo.png" alt="SilentFlow" />
+            <span className="logo-name">SilentFlow</span>
           </div>
           <div className="hdr-right">
             <div className="net-badge"><span className="net-dot" /> SEPOLIA</div>
