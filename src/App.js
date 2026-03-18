@@ -1,17 +1,21 @@
 import { useState, useEffect, useCallback } from "react";
 import { ethers } from "ethers";
 
-const CONTRACT_ADDRESS = "0xAdcBABf7CB3cE55559b2A3ca81f75bbBC147565b";
+const CONTRACT_ADDRESS = "0x9ce1b8a2344BB1891A6Ed9b2aBb782fb1B8C18E9";
 const BACKEND_URL = "https://silentflow-production.up.railway.app";
 
 const ABI = [
   "function depositETH(address stealthAddress, bytes calldata ephemeralPubKey, uint8 viewTag) external payable",
+  "function depositETHTimelocked(address stealthAddress, bytes calldata ephemeralPubKey, uint8 viewTag) external payable",
   "function depositToken(address token, uint256 amount, address stealthAddress, bytes calldata ephemeralPubKey, uint8 viewTag) external",
+  "function depositTokenTimelocked(address token, uint256 amount, address stealthAddress, bytes calldata ephemeralPubKey, uint8 viewTag) external",
   "function withdraw(address token, address recipient) external",
   "function withdrawFor(address stealthAddress, address token, address recipient, bytes calldata sig) external",
   "function withdrawNonces(address) external view returns (uint256)",
   "function balanceOf(address stealthAddress, address token) external view returns (uint256)",
-  "event StealthDeposit(bytes ephemeralPubKey, address indexed stealthAddress, address token, uint256 amount, uint8 viewTag)",
+  "function isUnlocked(address stealthAddress, address token) external view returns (bool)",
+  "function getUnlockTime(address stealthAddress, address token) external view returns (uint256)",
+  "event StealthDeposit(bytes ephemeralPubKey, address indexed stealthAddress, address token, uint256 amount, uint8 viewTag, bool timelocked, uint256 unlockAt)",
 ];
 
 const ERC20_ABI = [
@@ -701,6 +705,7 @@ export default function App() {
   const [modalErr, setModalErr]       = useState("");
   const [modalFile, setModalFile]     = useState(null);
   const [useFixedDenom, setUseFixedDenom] = useState(false);
+  const [useTimelocked, setUseTimelocked] = useState(false);
   const [pipelineData, setPipelineData]   = useState(null); // { hopsFeitos, hopsTotal, splits, concluido }
   const [notifPerm, setNotifPerm]         = useState(typeof Notification !== "undefined" ? Notification.permission : "denied");
 
@@ -815,7 +820,7 @@ export default function App() {
       const signer   = await provider.getSigner();
 
       setStatus("Gerando endereco de entrada privado...");
-      const entradaRes = await fetch(`${BACKEND_URL}/entrada?token=${token}&stealthAddress=${stealthAddress}&ephemeralPubKey=${ephemeralPubKey}&viewTag=${viewTag}`);
+      const entradaRes = await fetch(`${BACKEND_URL}/entrada?token=${token}&stealthAddress=${stealthAddress}&ephemeralPubKey=${ephemeralPubKey}&viewTag=${viewTag}&timelocked=${useTimelocked}`);
       const entradaData = await entradaRes.json();
       if (entradaData.erro) throw new Error(entradaData.erro);
       const { entradaAddress } = entradaData;
@@ -922,6 +927,8 @@ export default function App() {
         const stealthAddressOnChain = ev.args[1];
         const tokenAddr = ev.args[2];
         const viewTag = Number(ev.args[4]);
+        const timelocked = ev.args[5] || false;
+        const unlockAt = ev.args[6] ? Number(ev.args[6]) : 0;
         const result = tryDecryptDeposit(ephemeralPubKey, stealthAddressOnChain, viewTag, myKeys.spendingPrivKey, myKeys.viewingPrivKey);
         if (result) {
           const tokenAddrNorm = (!tokenAddr || tokenAddr === ethers.ZeroAddress) ? ethers.ZeroAddress : tokenAddr;
@@ -930,7 +937,23 @@ export default function App() {
             const tokenSymbol = tokenAddr === ethers.ZeroAddress ? "ETH"
               : Object.keys(TOKENS).find(k => TOKENS[k].address?.toLowerCase() === tokenAddr.toLowerCase()) || tokenAddr.slice(0,6);
             const decimals = tokenAddr === ethers.ZeroAddress ? 18 : (TOKENS[tokenSymbol]?.decimals || 18);
-            found.push({ stealthAddress: stealthAddressOnChain, stealthPrivKey: result.stealthPrivKey, amount: ethers.formatUnits(bal, decimals), token: tokenSymbol, txHash: ev.transactionHash });
+            // Verifica se esta unlocked
+            let isLocked = false;
+            if (timelocked && unlockAt > 0) {
+              try {
+                isLocked = !(await contract.isUnlocked(stealthAddressOnChain, tokenAddrNorm));
+              } catch { isLocked = false; }
+            }
+            found.push({
+              stealthAddress: stealthAddressOnChain,
+              stealthPrivKey: result.stealthPrivKey,
+              amount: ethers.formatUnits(bal, decimals),
+              token: tokenSymbol,
+              txHash: ev.transactionHash,
+              timelocked,
+              unlockAt,
+              isLocked,
+            });
           }
         }
       }
@@ -1111,6 +1134,13 @@ export default function App() {
                 <span className="denom-hint">anonymity set</span>
               </div>
 
+              {/* Time-lock toggle */}
+              <div className="denom-toggle" onClick={() => setUseTimelocked(t => !t)}>
+                <div className={`denom-switch${useTimelocked?" on":""}`} />
+                <span className="denom-label">Time-lock (privacidade maxima)</span>
+                <span className="denom-hint">saque na proxima janela</span>
+              </div>
+
               {useFixedDenom ? (
                 <div className="denom-grid">
                   {DENOMS[token].map(d => (
@@ -1245,11 +1275,18 @@ export default function App() {
                         <div className="deposit-header">
                           <span className="deposit-amt">{d.amount}</span>
                           <span className="deposit-token">{d.token}</span>
+                          {d.isLocked && <span className="tier-badge tier-premium" style={{marginLeft:"8px",fontSize:"9px"}}>LOCKED</span>}
                         </div>
                         <div className="deposit-addr">{d.stealthAddress.slice(0,10)}...{d.stealthAddress.slice(-8)}</div>
-                        <button className="primary-btn" style={{padding:"10px",fontSize:"13px"}} onClick={() => withdraw(d)} disabled={withdrawing === d.stealthAddress}>
-                          {withdrawing === d.stealthAddress ? "Sacando..." : "Sacar para minha carteira"}
-                        </button>
+                        {d.isLocked ? (
+                          <div style={{fontSize:"11px",color:"var(--amber)",padding:"8px 0"}}>
+                            Saque disponivel em {new Date(d.unlockAt * 1000).toLocaleString("pt-BR")}
+                          </div>
+                        ) : (
+                          <button className="primary-btn" style={{padding:"10px",fontSize:"13px"}} onClick={() => withdraw(d)} disabled={withdrawing === d.stealthAddress}>
+                            {withdrawing === d.stealthAddress ? "Sacando..." : "Sacar para minha carteira"}
+                          </button>
+                        )}
                       </div>
                     ))
                   }
