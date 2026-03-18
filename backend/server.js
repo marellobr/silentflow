@@ -8,10 +8,13 @@ app.use(express.json());
 
 const provider = new ethers.JsonRpcProvider(process.env.ALCHEMY_URL);
 
-const CONTRACT_ADDRESS = "0xAdcBABf7CB3cE55559b2A3ca81f75bbBC147565b";
+const CONTRACT_ADDRESS = "0x9ce1b8a2344BB1891A6Ed9b2aBb782fb1B8C18E9";
 const CONTRACT_ABI = [
   "function depositETH(address stealthAddress, bytes calldata ephemeralPubKey, uint8 viewTag) external payable",
+  "function depositETHTimelocked(address stealthAddress, bytes calldata ephemeralPubKey, uint8 viewTag) external payable",
   "function depositToken(address token, uint256 amount, address stealthAddress, bytes calldata ephemeralPubKey, uint8 viewTag) external",
+  "function depositTokenTimelocked(address token, uint256 amount, address stealthAddress, bytes calldata ephemeralPubKey, uint8 viewTag) external",
+  "function isValidDenomination(address token, uint256 amount) external view returns (bool)",
 ];
 const ERC20_ABI = [
   "function transfer(address to, uint256 amount) returns (bool)",
@@ -129,8 +132,53 @@ function splitAleatorio(total, partes) {
     restante -= min + rand;
   }
   vals.push(restante);
-  // Embaralhar ordem dos splits para dificultar correlacao
   return vals.sort(() => Math.random() - 0.5);
+}
+
+// Denominacoes fixas ETH (em wei) — devem bater com o contrato V7
+const ETH_DENOMS = [
+  ethers.parseEther("5"),
+  ethers.parseEther("1"),
+  ethers.parseEther("0.5"),
+  ethers.parseEther("0.1"),
+  ethers.parseEther("0.05"),
+  ethers.parseEther("0.01"),
+]; // ordem decrescente
+
+// Denominacoes fixas USDC/USDT (em units com 6 decimais)
+const STABLE_DENOMS = [
+  ethers.parseUnits("1000", 6),
+  ethers.parseUnits("500", 6),
+  ethers.parseUnits("100", 6),
+  ethers.parseUnits("50", 6),
+  ethers.parseUnits("10", 6),
+]; // ordem decrescente
+
+function getDenoms(token) {
+  if (token === "ETH") return ETH_DENOMS;
+  return STABLE_DENOMS;
+}
+
+// Quebra valor em denominacoes fixas validas (greedy)
+// Ex: 0.35 ETH -> [0.1, 0.1, 0.1, 0.05]
+function splitEmDenominacoes(total, token) {
+  const denoms = getDenoms(token);
+  const result = [];
+  let restante = total;
+  for (const d of denoms) {
+    while (restante >= d) {
+      result.push(d);
+      restante -= d;
+    }
+  }
+  // Se sobrou resto que nao cabe em nenhuma denominacao,
+  // adiciona a menor denominacao e o pipeline absorve a diferenca como gas
+  if (result.length === 0 && total > 0n) {
+    // Valor menor que menor denominacao — usa split aleatorio como fallback
+    return null;
+  }
+  // Embaralhar ordem
+  return result.sort(() => Math.random() - 0.5);
 }
 
 async function getGasPrice() { return (await provider.getFeeData()).gasPrice; }
@@ -157,17 +205,19 @@ async function hopETH(deWallet, paraEndereco) {
   } catch (e) { console.error(`  hopETH falhou: ${e.message}`); return false; }
 }
 
-async function depositarETHNoContrato(wallet, stealthAddress, ephemeralPubKey, viewTag) {
+async function depositarETHNoContrato(wallet, valorFixo, stealthAddress, ephemeralPubKey, viewTag, timelocked) {
   const gasPrice = await getGasPrice();
-  const gasLimit = 120000n;
-  const saldo = await provider.getBalance(wallet.address);
-  const valor = saldo - gasPrice * gasLimit;
-  if (valor <= 0n) return null;
+  const gasLimit = 150000n;
   const contrato = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, wallet);
   try {
-    const tx = await contrato.depositETH(stealthAddress, ephemeralPubKey, viewTag, { value: valor, gasLimit, gasPrice });
+    let tx;
+    if (timelocked) {
+      tx = await contrato.depositETHTimelocked(stealthAddress, ephemeralPubKey, viewTag, { value: valorFixo, gasLimit, gasPrice });
+    } else {
+      tx = await contrato.depositETH(stealthAddress, ephemeralPubKey, viewTag, { value: valorFixo, gasLimit, gasPrice });
+    }
     await tx.wait();
-    console.log(`  depositETH: ${ethers.formatEther(valor)} ETH -> stealth ${stealthAddress.slice(0,10)}...`);
+    console.log(`  depositETH${timelocked?"Timelocked":""}: ${ethers.formatEther(valorFixo)} ETH -> stealth ${stealthAddress.slice(0,10)}...`);
     return tx.hash;
   } catch (e) { console.error(`  depositETH falhou: ${e.message}`); return null; }
 }
@@ -182,7 +232,7 @@ async function hopToken(deWallet, paraEndereco, tokenAddress, valor) {
   } catch (e) { console.error(`  hopToken falhou: ${e.message}`); return false; }
 }
 
-async function depositarTokenNoContrato(wallet, tokenAddress, valor, stealthAddress, ephemeralPubKey, viewTag) {
+async function depositarTokenNoContrato(wallet, tokenAddress, valor, stealthAddress, ephemeralPubKey, viewTag, timelocked) {
   await financiarGas(wallet.address);
   const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, wallet);
   const contratoContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, wallet);
@@ -190,7 +240,12 @@ async function depositarTokenNoContrato(wallet, tokenAddress, valor, stealthAddr
     const approveTx = await tokenContract.approve(CONTRACT_ADDRESS, valor);
     await approveTx.wait();
     const gasPrice = await getGasPrice();
-    const tx = await contratoContract.depositToken(tokenAddress, valor, stealthAddress, ephemeralPubKey, viewTag, { gasLimit: 150000n, gasPrice });
+    let tx;
+    if (timelocked) {
+      tx = await contratoContract.depositTokenTimelocked(tokenAddress, valor, stealthAddress, ephemeralPubKey, viewTag, { gasLimit: 180000n, gasPrice });
+    } else {
+      tx = await contratoContract.depositToken(tokenAddress, valor, stealthAddress, ephemeralPubKey, viewTag, { gasLimit: 180000n, gasPrice });
+    }
     await tx.wait();
     return tx.hash;
   } catch (e) { console.error(`  depositToken falhou: ${e.message}`); return null; }
@@ -236,7 +291,7 @@ async function dummyPeriodico() {
 // ============================================================
 // PIPELINE ETH — com delays inteligentes e dummies melhorados
 // ============================================================
-async function executarPipelineETH(txId, valorBruto, stealthAddress, ephemeralPubKey, viewTag) {
+async function executarPipelineETH(txId, valorBruto, stealthAddress, ephemeralPubKey, viewTag, timelocked) {
   const tx = fila.get(txId);
   if (!tx) return;
 
@@ -247,22 +302,27 @@ async function executarPipelineETH(txId, valorBruto, stealthAddress, ephemeralPu
   stats.volumeETH += valorBruto;
   stats.receitaETH += taxa;
 
-  const numSplits = 2 + Math.floor(Math.random() * 2); // 2 ou 3
-  const numHopsPerSplit = 2;
-  const partes = splitAleatorio(valorLiquido, numSplits);
+  // Tenta quebrar em denominacoes fixas; fallback para split aleatorio
+  let partes = splitEmDenominacoes(valorLiquido, "ETH");
+  const usandoDenoms = partes !== null;
+  if (!partes) {
+    const numSplits = 2 + Math.floor(Math.random() * 2);
+    partes = splitAleatorio(valorLiquido, numSplits);
+  }
 
+  const numHopsPerSplit = 2;
   tx.hopsTotal = partes.length * numHopsPerSplit;
   tx.hopsFeitos = 0;
   tx.splits = partes.length;
   tx.taxaBps = Number(bps);
 
-  console.log(`\n Pipeline ETH [${txId}]: ${partes.length} splits`);
+  console.log(`\n Pipeline ETH [${txId}]: ${partes.length} splits (denoms: ${usandoDenoms})${timelocked ? " [TIMELOCKED]" : ""}`);
 
   const cadeias = partes.map(() =>
     Array.from({ length: numHopsPerSplit }, () => ethers.Wallet.createRandom().connect(provider))
   );
 
-  // FASE 1: Financia em serie (evita conflito de nonce na master)
+  // FASE 1: Financia em serie
   pipelineAtivo = true;
   const gasDeposit = await estimarCustoGasDeposit();
   const gasHops = (await estimarCustoGasETH()) * BigInt(numHopsPerSplit);
@@ -272,35 +332,31 @@ async function executarPipelineETH(txId, valorBruto, stealthAddress, ephemeralPu
     const valorComGas = partes[i] + gasDeposit + gasHops + gasExtra;
     const txFund = await masterWallet.sendTransaction({ to: cadeias[i][0].address, value: valorComGas, gasLimit: 21000n });
     await txFund.wait();
-    console.log(`  -> Funded E${i+1}[0]: ${cadeias[i][0].address.slice(0,10)}...`);
+    console.log(`  -> Funded E${i+1}[0]: ${cadeias[i][0].address.slice(0,10)}... (${ethers.formatEther(partes[i])} ETH)`);
   }
   pipelineAtivo = false;
 
-  // Dummy pre-hops — ruido antes dos hops comecarem
   await enviarDummy();
 
   // FASE 2: Hops em paralelo com delays inteligentes
-  // Cada split recebe um perfil de delay diferente
   const promessas = partes.map(async (valorParte, i) => {
     const cadeia = cadeias[i];
-    const delayProfile = gerarDelayProfile(); // perfil unico por split
+    const delayProfile = gerarDelayProfile();
     try {
       for (let h = 0; h < cadeia.length - 1; h++) {
         const delay = delayAleatorio(delayProfile);
-        console.log(`  Split ${i+1} hop ${h+1}: aguardando ${Math.round(delay/1000)}s (perfil ${delayProfile.min}-${delayProfile.max}s)...`);
+        console.log(`  Split ${i+1} hop ${h+1}: aguardando ${Math.round(delay/1000)}s...`);
         await sleep(delay);
-        // Dummy entre hops
         await enviarDummy();
         const ok = await hopETH(cadeia[h], cadeia[h + 1].address);
         if (!ok) throw new Error(`Hop ${h} falhou`);
         tx.hopsFeitos++;
       }
-      // Delay final antes do deposito (tambem com perfil)
       const delayFinal = delayAleatorio(delayProfile);
       await sleep(delayFinal);
-      // Dummy antes do deposito final
       await enviarDummy();
-      const depositHash = await depositarETHNoContrato(cadeia[cadeia.length - 1], stealthAddress, ephemeralPubKey, viewTag);
+      // Deposita o valor fixo da denominacao (nao o saldo todo da wallet)
+      const depositHash = await depositarETHNoContrato(cadeia[cadeia.length - 1], valorParte, stealthAddress, ephemeralPubKey, viewTag, timelocked);
       tx.hopsFeitos++;
       if (!depositHash) throw new Error(`Deposito final falhou`);
       console.log(`  Split ${i+1} concluido`);
@@ -308,9 +364,11 @@ async function executarPipelineETH(txId, valorBruto, stealthAddress, ephemeralPu
     } catch (e) {
       console.error(`  Split ${i} falhou: ${e.message} — fallback`);
       try {
-        const gasPrice = await getGasPrice();
         const c = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, masterWallet);
-        const txFb = await c.depositETH(stealthAddress, ephemeralPubKey, viewTag, { value: valorParte, gasLimit: 120000n, gasPrice });
+        const gasPrice = await getGasPrice();
+        const txFb = timelocked
+          ? await c.depositETHTimelocked(stealthAddress, ephemeralPubKey, viewTag, { value: valorParte, gasLimit: 150000n, gasPrice })
+          : await c.depositETH(stealthAddress, ephemeralPubKey, viewTag, { value: valorParte, gasLimit: 150000n, gasPrice });
         await txFb.wait();
         return txFb.hash;
       } catch (e2) { return null; }
@@ -331,27 +389,29 @@ async function executarPipelineETH(txId, valorBruto, stealthAddress, ephemeralPu
 // ============================================================
 // PIPELINE TOKEN — com delays inteligentes
 // ============================================================
-async function executarPipelineToken(txId, tokenAddress, valorBruto, tokenSymbol, stealthAddress, ephemeralPubKey, viewTag) {
+async function executarPipelineToken(txId, tokenAddress, valorBruto, tokenSymbol, stealthAddress, ephemeralPubKey, viewTag, timelocked) {
   const tx = fila.get(txId);
   if (!tx) return;
 
   const { valorLiquido, taxa, bps } = descontarTaxa(valorBruto, tokenSymbol);
   console.log(`  Taxa coletada: ${taxa.toString()} units (${Number(bps)/100}%)`);
 
-  // Analytics
   if (tokenSymbol === "USDC") { stats.volumeUSDC += valorBruto; stats.receitaUSDC += taxa; }
   if (tokenSymbol === "USDT") { stats.volumeUSDT += valorBruto; stats.receitaUSDT += taxa; }
 
-  const numSplits = 2;
-  const numHopsPerSplit = 2;
-  const partes = splitAleatorio(valorLiquido, numSplits);
+  // Tenta denominacoes fixas; fallback para split aleatorio
+  let partes = splitEmDenominacoes(valorLiquido, tokenSymbol);
+  if (!partes) {
+    partes = splitAleatorio(valorLiquido, 2);
+  }
 
+  const numHopsPerSplit = 2;
   tx.hopsTotal = partes.length * numHopsPerSplit;
   tx.hopsFeitos = 0;
   tx.splits = partes.length;
   tx.taxaBps = Number(bps);
 
-  console.log(`\n Pipeline Token [${txId}]: ${partes.length} splits`);
+  console.log(`\n Pipeline Token [${txId}]: ${partes.length} splits${timelocked ? " [TIMELOCKED]" : ""}`);
 
   const depositHashes = [];
   for (let i = 0; i < partes.length; i++) {
@@ -376,15 +436,14 @@ async function executarPipelineToken(txId, tokenAddress, valorBruto, tokenSymbol
       const delayFinal = delayAleatorio(delayProfile);
       await sleep(delayFinal);
       await enviarDummy();
-      const saldoFinal = await new ethers.Contract(tokenAddress, ERC20_ABI, provider).balanceOf(cadeia[cadeia.length-1].address);
-      const hash = await depositarTokenNoContrato(cadeia[cadeia.length-1], tokenAddress, saldoFinal, stealthAddress, ephemeralPubKey, viewTag);
+      const hash = await depositarTokenNoContrato(cadeia[cadeia.length-1], tokenAddress, valorParte, stealthAddress, ephemeralPubKey, viewTag, timelocked);
       tx.hopsFeitos++;
       if (hash) depositHashes.push(hash);
       console.log(`  Split ${i+1} token concluido`);
     } catch (e) {
       console.error(`  Split token ${i} falhou: ${e.message} — fallback`);
       try {
-        const hash = await depositarTokenNoContrato(masterWallet, tokenAddress, valorParte, stealthAddress, ephemeralPubKey, viewTag);
+        const hash = await depositarTokenNoContrato(masterWallet, tokenAddress, valorParte, stealthAddress, ephemeralPubKey, viewTag, timelocked);
         if (hash) depositHashes.push(hash);
       } catch {}
     }
@@ -449,11 +508,11 @@ async function monitorarEntradas() {
           await txMove.wait();
           console.log(`  -> ETH consolidado na master: ${ethers.formatEther(enviar)} ETH`);
         }
-        executarPipelineETH(id, valorRecebido, entrada.stealthAddress, entrada.ephemeralPubKey, entrada.viewTag)
+        executarPipelineETH(id, valorRecebido, entrada.stealthAddress, entrada.ephemeralPubKey, entrada.viewTag, entrada.timelocked || false)
           .catch(e => console.error(`Pipeline ETH erro:`, e.message));
       } else {
         const tokenAddr = TOKENS[entrada.token].address;
-        executarPipelineToken(id, tokenAddr, valorRecebido, entrada.token, entrada.stealthAddress, entrada.ephemeralPubKey, entrada.viewTag)
+        executarPipelineToken(id, tokenAddr, valorRecebido, entrada.token, entrada.stealthAddress, entrada.ephemeralPubKey, entrada.viewTag, entrada.timelocked || false)
           .catch(e => console.error(`Pipeline Token erro:`, e.message));
       }
     } catch (e) { console.error(`Erro monitorando ${endereco.slice(0,10)}...: ${e.message}`); }
@@ -482,16 +541,17 @@ setInterval(() => {
 // GET /entrada — gera endereco de entrada descartavel
 app.get("/entrada", (req, res) => {
   try {
-    const { token, stealthAddress, ephemeralPubKey, viewTag } = req.query;
+    const { token, stealthAddress, ephemeralPubKey, viewTag, timelocked } = req.query;
     if (!token || !stealthAddress || !ephemeralPubKey || viewTag === undefined)
       return res.status(400).json({ erro: "Parametros incompletos" });
     const minimo = getMinimo(token);
     const wallet = ethers.Wallet.createRandom().connect(provider);
     entradasPendentes.set(wallet.address, {
       wallet, token, stealthAddress, ephemeralPubKey,
-      viewTag: parseInt(viewTag), criadoEm: Date.now(), resolveId: null,
+      viewTag: parseInt(viewTag), timelocked: timelocked === "true",
+      criadoEm: Date.now(), resolveId: null,
     });
-    console.log(`Nova entrada gerada: ${wallet.address.slice(0,10)}... [${token}]`);
+    console.log(`Nova entrada gerada: ${wallet.address.slice(0,10)}... [${token}]${timelocked === "true" ? " [TIMELOCKED]" : ""}`);
     res.json({
       entradaAddress: wallet.address,
       token,
