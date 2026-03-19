@@ -1177,7 +1177,7 @@ export default function App() {
       }
 
       setZkStatus("Gerando prova zero-knowledge...");
-      const { proof, publicSignals } = await window.snarkjs.groth16.fullProve(
+      const { proof } = await window.snarkjs.groth16.fullProve(
         input,
         "/silentflow.wasm",
         "/silentflow_final.zkey"
