@@ -757,29 +757,43 @@ async function syncMerkleTree() {
     const zkContract = new ethers.Contract(ZK_CONTRACT_ADDRESS, ZK_CONTRACT_ABI, provider);
     const treeSize = Number(await zkContract.nextIndex());
 
+    console.log(`Merkle sync: on-chain treeSize=${treeSize}, local=${localTree.leaves.length}`);
+
     if (treeSize === localTree.leaves.length && localTree.initialized) return;
+    if (treeSize === 0) { localTree.initialized = true; return; }
 
     const filter = zkContract.filters.Deposit();
     const currentBlock = await provider.getBlockNumber();
-    const fromBlock = Math.max(0, currentBlock - 100000);
-    const CHUNK = 2000;
+    // Buscar desde o inicio da Sepolia se necessario (500000 blocos = ~70 dias)
+    const fromBlock = Math.max(0, currentBlock - 500000);
+    const CHUNK = 5000;
     const events = [];
+
+    console.log(`Merkle sync: scanning blocks ${fromBlock} to ${currentBlock}...`);
 
     for (let start = fromBlock; start <= currentBlock; start += CHUNK) {
       const end = Math.min(start + CHUNK - 1, currentBlock);
-      const chunk = await zkContract.queryFilter(filter, start, end);
-      events.push(...chunk);
+      try {
+        const chunk = await zkContract.queryFilter(filter, start, end);
+        events.push(...chunk);
+      } catch (e) {
+        console.error(`Merkle sync chunk error ${start}-${end}: ${e.message}`);
+      }
     }
+
+    console.log(`Merkle sync: found ${events.length} Deposit events`);
 
     // Sort by leafIndex
     events.sort((a, b) => Number(a.args[1]) - Number(b.args[1]));
 
     const leaves = events.map(e => e.args[0].toString());
     localTree.leaves = leaves;
-    localTree.layers = buildMerkleTree(leaves);
+    if (leaves.length > 0) {
+      localTree.layers = buildMerkleTree(leaves);
+    }
     localTree.initialized = true;
 
-    console.log(`Merkle tree synced: ${leaves.length} leaves`);
+    console.log(`Merkle tree synced: ${leaves.length} leaves, root=${localTree.layers[MERKLE_LEVELS] ? localTree.layers[MERKLE_LEVELS][0] : "empty"}`);
   } catch (e) {
     console.error(`Merkle tree sync error: ${e.message}`);
   }
@@ -833,8 +847,8 @@ app.get("/zk/deposits", async (req, res) => {
     const zkContract = new ethers.Contract(ZK_CONTRACT_ADDRESS, ZK_CONTRACT_ABI, provider);
     const filter = zkContract.filters.Deposit();
     const currentBlock = await provider.getBlockNumber();
-    const fromBlock = Math.max(0, currentBlock - 100000);
-    const CHUNK = 2000;
+    const fromBlock = Math.max(0, currentBlock - 500000);
+    const CHUNK = 5000;
     const events = [];
 
     for (let start = fromBlock; start <= currentBlock; start += CHUNK) {
