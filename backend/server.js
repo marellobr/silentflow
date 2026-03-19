@@ -771,14 +771,13 @@ async function syncMerkleTree() {
     const currentBlock = await provider.getBlockNumber();
     const CHUNK = 9; // Alchemy free limit
 
-    // Se primeira vez, buscar nos ultimos 5000 blocos (com chunks de 9)
-    // Se ja sincronizou, buscar so a partir do ultimo bloco
+    // Se primeira vez, buscar desde o bloco do deploy do contrato V8
     let fromBlock;
     if (lastSyncedBlock > 0) {
       fromBlock = lastSyncedBlock + 1;
     } else {
-      // Primeira sync: busca ultimos 2000 blocos (~6 horas na Sepolia)
-      fromBlock = Math.max(0, currentBlock - 2000);
+      // Bloco do deploy do contrato V8 na Sepolia
+      fromBlock = 10477500;
     }
 
     if (fromBlock > currentBlock) return;
