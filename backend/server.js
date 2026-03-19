@@ -679,9 +679,196 @@ app.get("/admin/stats", (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
+
+// ============================================================
+// ZK MODULE — Contrato V8 + Merkle Tree Tracking
+// ============================================================
+const ZK_CONTRACT_ADDRESS = "0x2230dAB87e0e5342c6588353A78ACAdB2E4e5065";
+const ZK_CONTRACT_ABI = [
+  "function depositETH(uint256 commitment) external payable",
+  "function depositToken(address token, uint256 amount, uint256 commitment) external",
+  "function withdraw(uint256[2] calldata a, uint256[2][2] calldata b, uint256[2] calldata c, uint256 root, uint256 nullifierHash, address payable recipient, address token, uint256 denomination, uint256 relayerFee) external",
+  "function getLastRoot() external view returns (uint256)",
+  "function getTreeSize() external view returns (uint256)",
+  "function isSpent(uint256 nullifierHash) external view returns (bool)",
+  "function isCommitted(uint256 commitment) external view returns (bool)",
+  "function nextIndex() external view returns (uint256)",
+  "function filledSubtrees(uint256) external view returns (uint256)",
+  "function isKnownRoot(uint256) external view returns (bool)",
+  "event Deposit(uint256 indexed commitment, uint256 leafIndex, uint256 timestamp, address token, uint256 denomination)",
+];
+
+const MERKLE_LEVELS = 20;
+const FIELD_SIZE = BigInt("21888242871839275222246405745257275088548364400416034343698204186575808495617");
+const ZERO_VALUE = BigInt("11469701942666298368112882412133877458305516134926649826543144744382391691533");
+
+// Merkle tree local mirror (para gerar paths sem ler tudo on-chain)
+let localTree = {
+  leaves: [],
+  layers: [],
+  initialized: false,
+};
+
+function hashLeftRight(left, right) {
+  const packed = ethers.solidityPackedKeccak256(["uint256", "uint256"], [left, right]);
+  return BigInt(packed) % FIELD_SIZE;
+}
+
+function buildMerkleTree(leaves) {
+  const layers = [leaves.map(l => BigInt(l))];
+  let currentLayer = layers[0];
+
+  for (let level = 0; level < MERKLE_LEVELS; level++) {
+    const nextLayer = [];
+    for (let i = 0; i < Math.ceil(currentLayer.length / 2); i++) {
+      const left = currentLayer[i * 2];
+      const right = i * 2 + 1 < currentLayer.length ? currentLayer[i * 2 + 1] : ZERO_VALUE;
+      nextLayer.push(hashLeftRight(left, right));
+    }
+    // Pad with zero hashes if needed
+    if (nextLayer.length === 0) nextLayer.push(hashLeftRight(ZERO_VALUE, ZERO_VALUE));
+    layers.push(nextLayer);
+    currentLayer = nextLayer;
+  }
+  return layers;
+}
+
+function getMerklePath(layers, leafIndex) {
+  const pathElements = [];
+  const pathIndices = [];
+  let currentIndex = leafIndex;
+
+  for (let level = 0; level < MERKLE_LEVELS; level++) {
+    const layer = layers[level] || [];
+    const siblingIndex = currentIndex % 2 === 0 ? currentIndex + 1 : currentIndex - 1;
+    const sibling = siblingIndex < layer.length ? layer[siblingIndex] : ZERO_VALUE;
+
+    pathElements.push(sibling.toString());
+    pathIndices.push(currentIndex % 2);
+    currentIndex = Math.floor(currentIndex / 2);
+  }
+
+  return { pathElements, pathIndices };
+}
+
+// Sync Merkle tree from chain events
+async function syncMerkleTree() {
+  try {
+    const zkContract = new ethers.Contract(ZK_CONTRACT_ADDRESS, ZK_CONTRACT_ABI, provider);
+    const treeSize = Number(await zkContract.nextIndex());
+
+    if (treeSize === localTree.leaves.length && localTree.initialized) return;
+
+    const filter = zkContract.filters.Deposit();
+    const currentBlock = await provider.getBlockNumber();
+    const fromBlock = Math.max(0, currentBlock - 100000);
+    const CHUNK = 2000;
+    const events = [];
+
+    for (let start = fromBlock; start <= currentBlock; start += CHUNK) {
+      const end = Math.min(start + CHUNK - 1, currentBlock);
+      const chunk = await zkContract.queryFilter(filter, start, end);
+      events.push(...chunk);
+    }
+
+    // Sort by leafIndex
+    events.sort((a, b) => Number(a.args[1]) - Number(b.args[1]));
+
+    const leaves = events.map(e => e.args[0].toString());
+    localTree.leaves = leaves;
+    localTree.layers = buildMerkleTree(leaves);
+    localTree.initialized = true;
+
+    console.log(`Merkle tree synced: ${leaves.length} leaves`);
+  } catch (e) {
+    console.error(`Merkle tree sync error: ${e.message}`);
+  }
+}
+
+// Sync every 30 seconds
+setInterval(syncMerkleTree, 30000);
+syncMerkleTree(); // initial sync
+
+// ============================================================
+// ZK ENDPOINTS
+// ============================================================
+
+// GET /zk/info — info do contrato ZK
+app.get("/zk/info", async (req, res) => {
+  try {
+    const zkContract = new ethers.Contract(ZK_CONTRACT_ADDRESS, ZK_CONTRACT_ABI, provider);
+    const treeSize = Number(await zkContract.nextIndex());
+    const root = (await zkContract.getLastRoot()).toString();
+    res.json({
+      contract: ZK_CONTRACT_ADDRESS,
+      treeSize,
+      root,
+      localTreeSize: localTree.leaves.length,
+      merkleDepth: MERKLE_LEVELS,
+    });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
+// GET /zk/merkle-path/:leafIndex — retorna path elements para gerar ZK proof
+app.get("/zk/merkle-path/:leafIndex", async (req, res) => {
+  try {
+    await syncMerkleTree(); // ensure fresh
+    const leafIndex = parseInt(req.params.leafIndex);
+    if (leafIndex < 0 || leafIndex >= localTree.leaves.length) {
+      return res.status(404).json({ erro: "Leaf index out of range" });
+    }
+    const { pathElements, pathIndices } = getMerklePath(localTree.layers, leafIndex);
+    const root = localTree.layers[MERKLE_LEVELS]
+      ? localTree.layers[MERKLE_LEVELS][0].toString()
+      : "0";
+
+    res.json({ leafIndex, root, pathElements, pathIndices });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
+// GET /zk/deposits — lista depositos (para o frontend encontrar o leafIndex do usuario)
+app.get("/zk/deposits", async (req, res) => {
+  try {
+    await syncMerkleTree();
+    const zkContract = new ethers.Contract(ZK_CONTRACT_ADDRESS, ZK_CONTRACT_ABI, provider);
+    const filter = zkContract.filters.Deposit();
+    const currentBlock = await provider.getBlockNumber();
+    const fromBlock = Math.max(0, currentBlock - 100000);
+    const CHUNK = 2000;
+    const events = [];
+
+    for (let start = fromBlock; start <= currentBlock; start += CHUNK) {
+      const end = Math.min(start + CHUNK - 1, currentBlock);
+      const chunk = await zkContract.queryFilter(filter, start, end);
+      events.push(...chunk);
+    }
+
+    const deposits = events.map(e => ({
+      commitment: e.args[0].toString(),
+      leafIndex: Number(e.args[1]),
+      timestamp: Number(e.args[2]),
+      token: e.args[3],
+      denomination: e.args[4].toString(),
+      txHash: e.transactionHash,
+    }));
+
+    res.json({ deposits, treeSize: localTree.leaves.length });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
+// GET /zk/is-spent/:nullifierHash — verifica se nullifier ja foi usado
+app.get("/zk/is-spent/:nullifierHash", async (req, res) => {
+  try {
+    const zkContract = new ethers.Contract(ZK_CONTRACT_ADDRESS, ZK_CONTRACT_ABI, provider);
+    const spent = await zkContract.isSpent(req.params.nullifierHash);
+    res.json({ nullifierHash: req.params.nullifierHash, spent });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
 app.listen(PORT, () => {
-  console.log(`SilentFlow backend v5 (delays inteligentes + taxa tier + analytics) — porta ${PORT}`);
+  console.log(`SilentFlow backend v6 (V7 stealth + V8 ZK) — porta ${PORT}`);
   console.log(`Master wallet: ${masterWallet.address}`);
+  console.log(`V7 Stealth: ${CONTRACT_ADDRESS}`);
+  console.log(`V8 ZK: ${ZK_CONTRACT_ADDRESS}`);
   console.log(`Taxas: 0.20% (standard) / 0.15% (volume) / 0.10% (premium)`);
-  console.log(`Minimos: ${ethers.formatEther(MIN_ETH)} ETH / ${ethers.formatUnits(MIN_USDC,6)} USDC / ${ethers.formatUnits(MIN_USDT,6)} USDT`);
 });
