@@ -709,6 +709,44 @@ export default function App() {
   const [pipelineData, setPipelineData]   = useState(null); // { hopsFeitos, hopsTotal, splits, concluido }
   const [notifPerm, setNotifPerm]         = useState(typeof Notification !== "undefined" ? Notification.permission : "denied");
 
+  // ZK states
+  const [zkMode, setZkMode]               = useState("deposit"); // "deposit" or "withdraw"
+  const [zkToken, setZkToken]             = useState("ETH");
+  const [zkDenom, setZkDenom]             = useState("");
+  const [zkStatus, setZkStatus]           = useState("");
+  const [zkLoading, setZkLoading]         = useState(false);
+  const [zkNotes, setZkNotes]             = useState([]); // saved notes [{secret, nullifier, commitment, leafIndex, token, denomination, timestamp}]
+  const [zkWithdrawNote, setZkWithdrawNote] = useState(null);
+  const [zkRecipient, setZkRecipient]     = useState("");
+
+  // ZK Contract
+  const ZK_CONTRACT = "0x2230dAB87e0e5342c6588353A78ACAdB2E4e5065";
+  const ZK_ABI = [
+    "function depositETH(uint256 commitment) external payable",
+    "function depositToken(address token, uint256 amount, uint256 commitment) external",
+    "function getLastRoot() external view returns (uint256)",
+    "function getTreeSize() external view returns (uint256)",
+    "function isSpent(uint256 nullifierHash) external view returns (bool)",
+    "event Deposit(uint256 indexed commitment, uint256 leafIndex, uint256 timestamp, address token, uint256 denomination)",
+  ];
+  const ZK_DENOMS = {
+    ETH:  ["0.01", "0.05", "0.1", "0.5", "1"],
+    USDC: ["10", "50", "100", "500", "1000"],
+    USDT: ["10", "50", "100", "500", "1000"],
+  };
+
+  // FIELD_SIZE for ZK
+  const FIELD_SIZE = BigInt("21888242871839275222246405745257275088548364400416034343698204186575808495617");
+
+  // Load ZK notes from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("sf_zk_notes");
+    if (saved) { try { setZkNotes(JSON.parse(saved)); } catch {} }
+  }, []);
+  useEffect(() => {
+    if (zkNotes.length > 0) localStorage.setItem("sf_zk_notes", JSON.stringify(zkNotes));
+  }, [zkNotes]);
+
   // Denominacoes fixas por token (melhora anonymity set)
   const DENOMS = {
     ETH:  ["0.005", "0.01", "0.02", "0.05", "0.1", "0.5"],
@@ -987,6 +1025,220 @@ export default function App() {
     setWithdrawing(null);
   };
 
+  // ============================================================
+  // ZK FUNCTIONS
+  // ============================================================
+
+  // Gera random field element
+  const randomFieldElement = () => {
+    const bytes = new Uint8Array(31); // 31 bytes para ficar dentro do campo
+    crypto.getRandomValues(bytes);
+    let hex = "0x";
+    bytes.forEach(b => hex += b.toString(16).padStart(2, "0"));
+    const val = BigInt(hex) % FIELD_SIZE;
+    return val.toString();
+  };
+
+  // Hash para commitment (keccak256 mod FIELD_SIZE — deve bater com o contrato)
+  const zkHash = (left, right) => {
+    const packed = ethers.solidityPackedKeccak256(["uint256", "uint256"], [left, right]);
+    return (BigInt(packed) % FIELD_SIZE).toString();
+  };
+
+  // Gera commitment = hash(secret, nullifier)
+  const generateCommitment = () => {
+    const secret = randomFieldElement();
+    const nullifier = randomFieldElement();
+    const commitment = zkHash(secret, nullifier);
+    const nullifierHash = zkHash(nullifier, nullifier);
+    return { secret, nullifier, commitment, nullifierHash };
+  };
+
+  // ZK Deposit
+  const zkDeposit = async () => {
+    if (!account) return alert("Conecte sua carteira.");
+    if (!zkDenom) return alert("Selecione uma denominacao.");
+    setZkLoading(true); setZkStatus("Gerando commitment...");
+    try {
+      const { secret, nullifier, commitment, nullifierHash } = generateCommitment();
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(ZK_CONTRACT, ZK_ABI, signer);
+
+      if (zkToken === "ETH") {
+        const valorWei = ethers.parseEther(zkDenom);
+        setZkStatus("Aguardando confirmacao na carteira...");
+        const tx = await contract.depositETH(commitment, { value: valorWei });
+        setZkStatus("Confirmando deposito ZK...");
+        await tx.wait();
+
+        // Busca o leafIndex do evento
+        const receipt = await provider.getTransactionReceipt(tx.hash);
+        let leafIndex = 0;
+        for (const log of receipt.logs) {
+          try {
+            const parsed = contract.interface.parseLog(log);
+            if (parsed && parsed.name === "Deposit") {
+              leafIndex = Number(parsed.args[1]);
+            }
+          } catch {}
+        }
+
+        // Salva a note (secret + nullifier + metadata)
+        const note = {
+          secret, nullifier, commitment, nullifierHash,
+          leafIndex, token: "ETH", denomination: zkDenom,
+          txHash: tx.hash, timestamp: Date.now(),
+        };
+        setZkNotes(prev => [...prev, note]);
+        setZkStatus(`Deposito ZK concluido! Nota #${leafIndex} salva. GUARDE ESTA NOTA — sem ela voce nao consegue sacar.`);
+      } else {
+        const t = TOKENS[zkToken];
+        const valorUnits = ethers.parseUnits(zkDenom, t.decimals);
+        const tc = new ethers.Contract(t.address, ERC20_ABI, signer);
+        setZkStatus("Aprovando token...");
+        const allow = await tc.allowance(account, ZK_CONTRACT);
+        if (allow < valorUnits) {
+          const appTx = await tc.approve(ZK_CONTRACT, valorUnits);
+          await appTx.wait();
+        }
+        setZkStatus("Aguardando confirmacao na carteira...");
+        const tx = await contract.depositToken(t.address, valorUnits, commitment);
+        setZkStatus("Confirmando deposito ZK...");
+        await tx.wait();
+
+        const receipt = await provider.getTransactionReceipt(tx.hash);
+        let leafIndex = 0;
+        for (const log of receipt.logs) {
+          try {
+            const parsed = contract.interface.parseLog(log);
+            if (parsed && parsed.name === "Deposit") {
+              leafIndex = Number(parsed.args[1]);
+            }
+          } catch {}
+        }
+
+        const note = {
+          secret, nullifier, commitment, nullifierHash,
+          leafIndex, token: zkToken, denomination: zkDenom,
+          txHash: tx.hash, timestamp: Date.now(),
+        };
+        setZkNotes(prev => [...prev, note]);
+        setZkStatus(`Deposito ZK concluido! Nota #${leafIndex} salva.`);
+      }
+      setZkDenom("");
+    } catch (e) {
+      setZkStatus(`Erro: ${e.reason || e.message}`);
+    }
+    setZkLoading(false);
+  };
+
+  // ZK Withdraw — gera proof e saca
+  const zkWithdraw = async (note) => {
+    if (!account) return alert("Conecte sua carteira.");
+    const recipient = zkRecipient || account;
+    setZkLoading(true); setZkStatus("Buscando Merkle path...");
+    try {
+      // 1. Busca Merkle path do backend
+      const pathRes = await fetch(`${BACKEND_URL}/zk/merkle-path/${note.leafIndex}`);
+      const pathData = await pathRes.json();
+      if (pathData.erro) throw new Error(pathData.erro);
+
+      setZkStatus("Gerando ZK proof (pode demorar 30-60s)...");
+
+      // 2. Prepara inputs para o circuit
+      const tokenAddr = TOKENS[note.token]?.address || ethers.ZeroAddress;
+      const denomWei = note.token === "ETH"
+        ? ethers.parseEther(note.denomination).toString()
+        : ethers.parseUnits(note.denomination, TOKENS[note.token].decimals).toString();
+
+      const input = {
+        root: pathData.root,
+        nullifierHash: note.nullifierHash,
+        recipient: BigInt(recipient).toString(),
+        denomination: denomWei,
+        secret: note.secret,
+        nullifier: note.nullifier,
+        pathElements: pathData.pathElements,
+        pathIndices: pathData.pathIndices,
+      };
+
+      // 3. Gera ZK proof com snarkjs (carregado via CDN)
+      if (!window.snarkjs) {
+        setZkStatus("Carregando snarkjs...");
+        await new Promise((resolve, reject) => {
+          const s = document.createElement("script");
+          s.src = "https://cdn.jsdelivr.net/npm/snarkjs@0.7.4/build/snarkjs.min.js";
+          s.onload = resolve;
+          s.onerror = reject;
+          document.head.appendChild(s);
+        });
+      }
+
+      setZkStatus("Gerando prova zero-knowledge...");
+      const { proof, publicSignals } = await window.snarkjs.groth16.fullProve(
+        input,
+        "/silentflow.wasm",
+        "/silentflow_final.zkey"
+      );
+
+      // 4. Formata proof para o contrato
+      const a = [proof.pi_a[0], proof.pi_a[1]];
+      const b = [[proof.pi_b[0][1], proof.pi_b[0][0]], [proof.pi_b[1][1], proof.pi_b[1][0]]];
+      const c = [proof.pi_c[0], proof.pi_c[1]];
+
+      setZkStatus("Enviando saque anonimo...");
+
+      // 5. Chama withdraw no contrato
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(ZK_CONTRACT, [
+        "function withdraw(uint256[2] calldata a, uint256[2][2] calldata b, uint256[2] calldata c, uint256 root, uint256 nullifierHash, address payable recipient, address token, uint256 denomination, uint256 relayerFee) external",
+      ], signer);
+
+      const tx = await contract.withdraw(
+        a, b, c,
+        pathData.root,
+        note.nullifierHash,
+        recipient,
+        tokenAddr,
+        denomWei,
+        0 // sem relayer fee por agora
+      );
+      setZkStatus("Confirmando saque...");
+      await tx.wait();
+
+      // Remove note da lista
+      setZkNotes(prev => prev.filter(n => n.commitment !== note.commitment));
+      setZkStatus("Saque ZK anonimo concluido! Ninguem sabe qual deposito foi sacado.");
+      sendNotification("SilentFlow ZK", "Saque anonimo concluido com sucesso!");
+    } catch (e) {
+      setZkStatus(`Erro: ${e.reason || e.message}`);
+    }
+    setZkLoading(false);
+  };
+
+  // Export ZK notes (backup)
+  const exportZkNotes = () => {
+    if (zkNotes.length === 0) return;
+    const blob = new Blob([JSON.stringify(zkNotes, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url;
+    a.download = "silentflow-zk-notes.json"; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Import ZK notes
+  const importZkNotes = (file) => {
+    if (!file) return;
+    file.text().then(text => {
+      try {
+        const notes = JSON.parse(text);
+        if (Array.isArray(notes)) { setZkNotes(notes); setZkStatus("Notas ZK importadas!"); }
+      } catch { setZkStatus("Arquivo invalido."); }
+    });
+  };
+
   // Taxa por tier
   const getTierInfo = (amt, tok) => {
     const v = parseFloat(amt);
@@ -1056,6 +1308,7 @@ export default function App() {
         <div className="tabs">
           <button className={`tab${tab==="send"?" on":""}`} onClick={() => setTab("send")}>Enviar</button>
           <button className={`tab${tab==="receive"?" on":""}`} onClick={() => setTab("receive")}>Receber</button>
+          <button className={`tab${tab==="zk"?" on":""}`} onClick={() => setTab("zk")}>ZK Privacy</button>
         </div>
 
         {/* ============ TAB: SEND ============ */}
@@ -1336,6 +1589,147 @@ export default function App() {
                     </div>
                   )}
                 </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ============ TAB: ZK PRIVACY ============ */}
+        {tab === "zk" && (
+          <div className="grid">
+            <div className="left">
+              <span className="sec-label">Suas notas ZK</span>
+              <div className="card">
+                <div className="card-body" style={{padding:"0 4px"}}>
+                  {zkNotes.length === 0
+                    ? <div className="hist-empty">Nenhuma nota ZK. Faca um deposito para comecar.</div>
+                    : zkNotes.map((note, idx) => (
+                      <div className="deposit-item" key={note.commitment}>
+                        <div className="deposit-header">
+                          <span className="deposit-amt">{note.denomination}</span>
+                          <span className="deposit-token">{note.token}</span>
+                          <span className="tier-badge tier-premium" style={{marginLeft:"8px",fontSize:"9px"}}>ZK</span>
+                        </div>
+                        <div className="deposit-addr">nota #{note.leafIndex} · {new Date(note.timestamp).toLocaleDateString("pt-BR")}</div>
+                        <button className="primary-btn" style={{padding:"10px",fontSize:"13px"}} onClick={() => zkWithdraw(note)} disabled={zkLoading}>
+                          {zkLoading ? "Gerando prova..." : "Sacar anonimamente"}
+                        </button>
+                      </div>
+                    ))
+                  }
+                </div>
+              </div>
+
+              {/* Backup/Import notas */}
+              <div style={{display:"flex",gap:"8px"}}>
+                <button className="ghost-btn" style={{marginTop:"0"}} onClick={exportZkNotes} disabled={zkNotes.length === 0}>Exportar notas</button>
+                <label className="ghost-btn" style={{marginTop:"0",cursor:"pointer",textAlign:"center"}}>
+                  Importar notas
+                  <input type="file" accept=".json" style={{display:"none"}} onChange={e => importZkNotes(e.target.files[0])} />
+                </label>
+              </div>
+
+              <div className="warning-box">
+                <p>IMPORTANTE: Suas notas ZK sao a UNICA forma de sacar seus fundos. Faca backup! Se perder as notas, os fundos ficam travados para sempre.</p>
+              </div>
+
+              <div className="info-card">
+                <div className="info-toggle" onClick={() => setAccordOpen(o => !o)}>
+                  <span className="info-label">Como funciona o ZK Privacy</span>
+                  <span className={`info-arrow${accordOpen?" open":""}`}>&#9660;</span>
+                </div>
+                <div className={`info-body${accordOpen?" open":""}`}>
+                  {[
+                    ["Commitment",      "hash(secret + nullifier)"],
+                    ["Merkle tree",     "todos os deposits numa arvore"],
+                    ["ZK Proof",        "prova sem revelar qual deposit"],
+                    ["Nullifier",       "previne double-spend"],
+                    ["Denominacoes",    "valores fixos = anonymity set"],
+                    ["Privacidade",     "10/10 — link quebrado"],
+                  ].map(([k,v]) => (
+                    <div className="info-row" key={k}>
+                      <span className="info-k">{k}</span>
+                      <span className="info-v">{v}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* ---- ZK FORM ---- */}
+            <div className="form-card">
+              <div className="form-title">ZK Privacy</div>
+              <div className="form-sub">Privacidade maxima — ninguem sabe qual deposito e seu</div>
+
+              {/* Mode toggle */}
+              <div className="toks" style={{marginBottom:"20px"}}>
+                <button className={`tok${zkMode==="deposit"?" on":""}`} onClick={() => setZkMode("deposit")}>Depositar</button>
+                <button className={`tok${zkMode==="withdraw"?" on":""}`} onClick={() => setZkMode("withdraw")}>Sacar</button>
+              </div>
+
+              {zkMode === "deposit" && (
+                <>
+                  <div className="toks">
+                    {Object.keys(TOKENS).map(t => (
+                      <button key={t} className={`tok${zkToken===t?" on":""}`} onClick={() => { setZkToken(t); setZkDenom(""); }}>{t}</button>
+                    ))}
+                  </div>
+                  <div style={{fontSize:"11px",color:"var(--text3)",marginBottom:"12px",textTransform:"uppercase",letterSpacing:"1px",fontWeight:"600"}}>Denominacao (valor fixo)</div>
+                  <div className="denom-grid">
+                    {ZK_DENOMS[zkToken].map(d => (
+                      <button key={d} className={`denom-btn${zkDenom===d?" on":""}`} onClick={() => setZkDenom(d)}>
+                        {d} {zkToken}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="sep" />
+                  <button className="primary-btn" onClick={zkDeposit} disabled={zkLoading || !account || !zkDenom}>
+                    {zkLoading ? "Processando..." : "Depositar com ZK"}
+                  </button>
+                  <div style={{textAlign:"center",marginTop:"10px",fontSize:"11px",color:"var(--text3)"}}>
+                    Sem taxa de privacidade no modo ZK
+                  </div>
+                </>
+              )}
+
+              {zkMode === "withdraw" && (
+                <>
+                  {zkNotes.length === 0 ? (
+                    <div className="no-keys">
+                      <div className="no-keys-icon" style={{background:"rgba(251,191,36,.08)",borderColor:"rgba(251,191,36,.12)"}}>
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7v10l10 5 10-5V7L12 2z" stroke="currentColor" strokeWidth="1.5" fill="none" opacity=".6"/></svg>
+                      </div>
+                      <div className="no-keys-title">Nenhuma nota ZK</div>
+                      <div className="no-keys-sub">Faca um deposito ZK primeiro, ou importe notas de um backup.</div>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{fontSize:"11px",color:"var(--text3)",marginBottom:"12px",textTransform:"uppercase",letterSpacing:"1px",fontWeight:"600"}}>Selecione a nota para sacar</div>
+                      {zkNotes.map((note, idx) => (
+                        <div key={note.commitment} className="denom-toggle" onClick={() => setZkWithdrawNote(note)} style={{marginBottom:"8px",borderColor: zkWithdrawNote?.commitment === note.commitment ? "var(--accent)" : ""}}>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:"14px",fontWeight:"600"}}>{note.denomination} {note.token}</div>
+                            <div style={{fontSize:"10px",color:"var(--text3)",fontFamily:"var(--mono)"}}>nota #{note.leafIndex}</div>
+                          </div>
+                          {zkWithdrawNote?.commitment === note.commitment && <span style={{color:"var(--accent)",fontSize:"14px"}}>&#10003;</span>}
+                        </div>
+                      ))}
+                      <div className="fld" style={{marginTop:"16px"}}>
+                        <label>Endereco destino (deixe vazio para sua carteira)</label>
+                        <input type="text" placeholder={account || "0x..."} value={zkRecipient} onChange={e => setZkRecipient(e.target.value)} />
+                      </div>
+                      <button className="primary-btn" onClick={() => zkWithdrawNote && zkWithdraw(zkWithdrawNote)} disabled={zkLoading || !zkWithdrawNote || !account}>
+                        {zkLoading ? "Gerando prova ZK..." : "Sacar anonimamente"}
+                      </button>
+                    </>
+                  )}
+                </>
+              )}
+
+              {zkStatus && (
+                <div className={`status-box${zkStatus.includes("concluido") || zkStatus.includes("salva") ? " ok" : zkStatus.includes("Erro") ? " err" : ""}`} style={{marginTop:"14px"}}>
+                  <pre>{zkStatus}</pre>
+                </div>
               )}
             </div>
           </div>
