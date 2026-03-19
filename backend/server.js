@@ -752,48 +752,78 @@ function getMerklePath(layers, leafIndex) {
 }
 
 // Sync Merkle tree from chain events
+// Alchemy free: max 10 blocos por getLogs request
+// Estrategia: guardar o ultimo bloco sincronizado para nao re-escanear tudo
+let lastSyncedBlock = 0;
+const ZK_DEPLOY_BLOCK = 0; // sera descoberto automaticamente
+
 async function syncMerkleTree() {
   try {
     const zkContract = new ethers.Contract(ZK_CONTRACT_ADDRESS, ZK_CONTRACT_ABI, provider);
     const treeSize = Number(await zkContract.nextIndex());
 
-    console.log(`Merkle sync: on-chain treeSize=${treeSize}, local=${localTree.leaves.length}`);
-
     if (treeSize === localTree.leaves.length && localTree.initialized) return;
     if (treeSize === 0) { localTree.initialized = true; return; }
 
+    console.log(`Merkle sync: on-chain=${treeSize}, local=${localTree.leaves.length}`);
+
     const filter = zkContract.filters.Deposit();
     const currentBlock = await provider.getBlockNumber();
-    // Buscar desde o inicio da Sepolia se necessario (500000 blocos = ~70 dias)
-    const fromBlock = Math.max(0, currentBlock - 500000);
-    const CHUNK = 5000;
+    const CHUNK = 9; // Alchemy free limit
+
+    // Se primeira vez, buscar nos ultimos 5000 blocos (com chunks de 9)
+    // Se ja sincronizou, buscar so a partir do ultimo bloco
+    let fromBlock;
+    if (lastSyncedBlock > 0) {
+      fromBlock = lastSyncedBlock + 1;
+    } else {
+      // Primeira sync: busca ultimos 2000 blocos (~6 horas na Sepolia)
+      fromBlock = Math.max(0, currentBlock - 2000);
+    }
+
+    if (fromBlock > currentBlock) return;
+
     const events = [];
-
-    console.log(`Merkle sync: scanning blocks ${fromBlock} to ${currentBlock}...`);
-
-    for (let start = fromBlock; start <= currentBlock; start += CHUNK) {
-      const end = Math.min(start + CHUNK - 1, currentBlock);
+    for (let start = fromBlock; start <= currentBlock; start += CHUNK + 1) {
+      const end = Math.min(start + CHUNK, currentBlock);
       try {
         const chunk = await zkContract.queryFilter(filter, start, end);
         events.push(...chunk);
       } catch (e) {
-        console.error(`Merkle sync chunk error ${start}-${end}: ${e.message}`);
+        // Se falhar, tenta com range menor
+        try {
+          for (let s = start; s <= end; s++) {
+            const single = await zkContract.queryFilter(filter, s, s);
+            events.push(...single);
+          }
+        } catch {}
       }
     }
 
-    console.log(`Merkle sync: found ${events.length} Deposit events`);
+    lastSyncedBlock = currentBlock;
 
-    // Sort by leafIndex
-    events.sort((a, b) => Number(a.args[1]) - Number(b.args[1]));
+    if (events.length > 0 || !localTree.initialized) {
+      // Se temos novos eventos, adicionar aos leaves existentes
+      const newLeaves = events.map(e => ({
+        commitment: e.args[0].toString(),
+        leafIndex: Number(e.args[1]),
+      }));
 
-    const leaves = events.map(e => e.args[0].toString());
-    localTree.leaves = leaves;
-    if (leaves.length > 0) {
-      localTree.layers = buildMerkleTree(leaves);
+      // Merge com existentes (evitar duplicatas)
+      const existingCommitments = new Set(localTree.leaves);
+      for (const nl of newLeaves) {
+        if (!existingCommitments.has(nl.commitment)) {
+          localTree.leaves.push(nl.commitment);
+        }
+      }
+
+      // Rebuild tree se mudou
+      if (localTree.leaves.length > 0) {
+        localTree.layers = buildMerkleTree(localTree.leaves);
+      }
+      localTree.initialized = true;
+      console.log(`Merkle tree synced: ${localTree.leaves.length} leaves`);
     }
-    localTree.initialized = true;
-
-    console.log(`Merkle tree synced: ${leaves.length} leaves, root=${localTree.layers[MERKLE_LEVELS] ? localTree.layers[MERKLE_LEVELS][0] : "empty"}`);
   } catch (e) {
     console.error(`Merkle tree sync error: ${e.message}`);
   }
@@ -840,33 +870,17 @@ app.get("/zk/merkle-path/:leafIndex", async (req, res) => {
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
-// GET /zk/deposits — lista depositos (para o frontend encontrar o leafIndex do usuario)
+// GET /zk/deposits — usa dados da sync local
 app.get("/zk/deposits", async (req, res) => {
   try {
     await syncMerkleTree();
-    const zkContract = new ethers.Contract(ZK_CONTRACT_ADDRESS, ZK_CONTRACT_ABI, provider);
-    const filter = zkContract.filters.Deposit();
-    const currentBlock = await provider.getBlockNumber();
-    const fromBlock = Math.max(0, currentBlock - 500000);
-    const CHUNK = 5000;
-    const events = [];
-
-    for (let start = fromBlock; start <= currentBlock; start += CHUNK) {
-      const end = Math.min(start + CHUNK - 1, currentBlock);
-      const chunk = await zkContract.queryFilter(filter, start, end);
-      events.push(...chunk);
-    }
-
-    const deposits = events.map(e => ({
-      commitment: e.args[0].toString(),
-      leafIndex: Number(e.args[1]),
-      timestamp: Number(e.args[2]),
-      token: e.args[3],
-      denomination: e.args[4].toString(),
-      txHash: e.transactionHash,
-    }));
-
-    res.json({ deposits, treeSize: localTree.leaves.length });
+    res.json({
+      deposits: localTree.leaves.map((commitment, idx) => ({
+        commitment,
+        leafIndex: idx,
+      })),
+      treeSize: localTree.leaves.length,
+    });
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
