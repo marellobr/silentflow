@@ -721,7 +721,7 @@ export default function App() {
   const [zkRecipient, setZkRecipient]     = useState("");
 
   // ZK Contract
-  const ZK_CONTRACT = "0x2230dAB87e0e5342c6588353A78ACAdB2E4e5065";
+  const ZK_CONTRACT = "0xB2c88ff42e75879feE4A680b3577BA57bed8Af8e";
   const ZK_ABI = [
     "function depositETH(uint256 commitment) external payable",
     "function depositToken(address token, uint256 amount, uint256 commitment) external",
