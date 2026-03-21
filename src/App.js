@@ -1040,46 +1040,23 @@ export default function App() {
     return val.toString();
   };
 
-  // Poseidon hash — carregado via circomlibjs (mesmo que o circuit usa)
-  const [poseidonFn, setPoseidonFn] = useState(null);
+  // Poseidon hash — chama o contrato iden3 on-chain (garante compatibilidade 100%)
+  const POSEIDON_ADDR = "0x72F721D9D5f91353B505207C63B56cF3d9447edB";
+  const POSEIDON_ABI_HASH = ["function poseidon(uint256[2]) external pure returns (uint256)"];
 
-  useEffect(() => {
-    // Carrega circomlibjs para ter Poseidon identico ao circuit
-    const loadPoseidon = async () => {
-      try {
-        const script = document.createElement("script");
-        script.src = "https://cdn.jsdelivr.net/npm/circomlibjs@0.1.7/build/circomlibjs.umd.min.js";
-        script.onload = async () => {
-          if (window.circomlibjs) {
-            const poseidon = await window.circomlibjs.buildPoseidon();
-            setPoseidonFn(() => poseidon);
-            console.log("Poseidon loaded");
-          }
-        };
-        document.head.appendChild(script);
-      } catch (e) { console.error("Failed to load Poseidon:", e); }
-    };
-    loadPoseidon();
-  }, []);
-
-  // Hash com Poseidon (identico ao circuit e ao contrato)
-  const zkHash = (left, right) => {
-    if (!poseidonFn) {
-      // Fallback — nao deve ser usado em producao
-      console.warn("Poseidon not loaded, using fallback");
-      const packed = ethers.solidityPackedKeccak256(["uint256", "uint256"], [left, right]);
-      return (BigInt(packed) % FIELD_SIZE).toString();
-    }
-    const hash = poseidonFn([BigInt(left), BigInt(right)]);
-    return poseidonFn.F.toString(hash);
+  const zkHash = async (left, right) => {
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const poseidon = new ethers.Contract(POSEIDON_ADDR, POSEIDON_ABI_HASH, provider);
+    const result = await poseidon.poseidon([left, right]);
+    return result.toString();
   };
 
-  // Gera commitment = hash(secret, nullifier)
-  const generateCommitment = () => {
+  // Gera commitment = Poseidon(secret, nullifier) — async por usar contrato
+  const generateCommitment = async () => {
     const secret = randomFieldElement();
     const nullifier = randomFieldElement();
-    const commitment = zkHash(secret, nullifier);
-    const nullifierHash = zkHash(nullifier, nullifier);
+    const commitment = await zkHash(secret, nullifier);
+    const nullifierHash = await zkHash(nullifier, nullifier);
     return { secret, nullifier, commitment, nullifierHash };
   };
 
@@ -1087,10 +1064,9 @@ export default function App() {
   const zkDeposit = async () => {
     if (!account) return alert("Conecte sua carteira.");
     if (!zkDenom) return alert("Selecione uma denominacao.");
-    if (!poseidonFn) return alert("Aguarde o Poseidon carregar (recarregue a pagina se demorar).");
-    setZkLoading(true); setZkStatus("Gerando commitment...");
+    setZkLoading(true); setZkStatus("Gerando commitment com Poseidon...");
     try {
-      const { secret, nullifier, commitment, nullifierHash } = generateCommitment();
+      const { secret, nullifier, commitment, nullifierHash } = await generateCommitment();
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(ZK_CONTRACT, ZK_ABI, signer);
@@ -1203,8 +1179,8 @@ export default function App() {
       };
 
       // DEBUG: verificar commitment e root
-      const localCommitment = zkHash(note.secret, note.nullifier);
-      const localNullifierHash = zkHash(note.nullifier, note.nullifier);
+      const localCommitment = await zkHash(note.secret, note.nullifier);
+      const localNullifierHash = await zkHash(note.nullifier, note.nullifier);
       console.log("=== ZK DEBUG ===");
       console.log("note.commitment:", note.commitment);
       console.log("localCommitment (recalc):", localCommitment);
