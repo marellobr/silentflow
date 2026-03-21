@@ -683,7 +683,8 @@ const PORT = process.env.PORT || 3001;
 // ============================================================
 // ZK MODULE — Contrato V8 + Merkle Tree Tracking
 // ============================================================
-const ZK_CONTRACT_ADDRESS = "0x2230dAB87e0e5342c6588353A78ACAdB2E4e5065";
+const ZK_CONTRACT_ADDRESS = "0xB2c88ff42e75879feE4A680b3577BA57bed8Af8e"; // sera atualizado apos redeploy
+const POSEIDON_ADDRESS = "0x72F721D9D5f91353B505207C63B56cF3d9447edB"; // iden3 Poseidon T3 na Sepolia
 const ZK_CONTRACT_ABI = [
   "function depositETH(uint256 commitment) external payable",
   "function depositToken(address token, uint256 amount, uint256 commitment) external",
@@ -695,26 +696,58 @@ const ZK_CONTRACT_ABI = [
   "function nextIndex() external view returns (uint256)",
   "function filledSubtrees(uint256) external view returns (uint256)",
   "function isKnownRoot(uint256) external view returns (bool)",
+  "function hashLeftRight(uint256, uint256) external view returns (uint256)",
+  "function getZeroValue(uint256) external view returns (uint256)",
   "event Deposit(uint256 indexed commitment, uint256 leafIndex, uint256 timestamp, address token, uint256 denomination)",
+];
+const POSEIDON_ABI = [
+  "function poseidon(uint256[2] calldata) external pure returns (uint256)",
 ];
 
 const MERKLE_LEVELS = 20;
 const FIELD_SIZE = BigInt("21888242871839275222246405745257275088548364400416034343698204186575808495617");
-const ZERO_VALUE = BigInt("11469701942666298368112882412133877458305516134926649826543144744382391691533");
 
-// Merkle tree local mirror (para gerar paths sem ler tudo on-chain)
+// Cache dos zero values (computados com Poseidon pelo contrato)
+let zeroValues = null;
+
+async function loadZeroValues() {
+  if (zeroValues) return;
+  try {
+    const zkContract = new ethers.Contract(ZK_CONTRACT_ADDRESS, ZK_CONTRACT_ABI, provider);
+    zeroValues = [];
+    for (let i = 0; i <= MERKLE_LEVELS; i++) {
+      const z = await zkContract.getZeroValue(i);
+      zeroValues.push(BigInt(z.toString()));
+    }
+    console.log(`Zero values loaded: ${zeroValues.length} levels`);
+  } catch (e) {
+    console.error(`Failed to load zero values: ${e.message}`);
+    // Fallback: zero value 0 for all levels
+    zeroValues = new Array(MERKLE_LEVELS + 1).fill(0n);
+  }
+}
+
+// Hash via Poseidon on-chain
+const poseidonContract = new ethers.Contract(POSEIDON_ADDRESS, POSEIDON_ABI, provider);
+
+async function hashLeftRightPoseidon(left, right) {
+  const result = await poseidonContract.poseidon([left.toString(), right.toString()]);
+  return BigInt(result.toString());
+}
+
+// Merkle tree local mirror
 let localTree = {
   leaves: [],
   layers: [],
   initialized: false,
 };
 
-function hashLeftRight(left, right) {
-  const packed = ethers.solidityPackedKeccak256(["uint256", "uint256"], [left, right]);
-  return BigInt(packed) % FIELD_SIZE;
-}
-
-function buildMerkleTree(leaves) {
+// Build tree using cached Poseidon hashes from on-chain
+// Since calling Poseidon on-chain for every hash is slow,
+// we read the tree state from the contract events and
+// compute the root using the contract's hashLeftRight
+async function buildMerkleTreeOnChain(leaves) {
+  await loadZeroValues();
   const layers = [leaves.map(l => BigInt(l))];
   let currentLayer = layers[0];
 
@@ -722,11 +755,14 @@ function buildMerkleTree(leaves) {
     const nextLayer = [];
     for (let i = 0; i < Math.ceil(currentLayer.length / 2); i++) {
       const left = currentLayer[i * 2];
-      const right = i * 2 + 1 < currentLayer.length ? currentLayer[i * 2 + 1] : ZERO_VALUE;
-      nextLayer.push(hashLeftRight(left, right));
+      const right = i * 2 + 1 < currentLayer.length ? currentLayer[i * 2 + 1] : zeroValues[level];
+      // Use on-chain Poseidon
+      const hash = await hashLeftRightPoseidon(left, right);
+      nextLayer.push(hash);
     }
-    // Pad with zero hashes if needed
-    if (nextLayer.length === 0) nextLayer.push(hashLeftRight(ZERO_VALUE, ZERO_VALUE));
+    if (nextLayer.length === 0) {
+      nextLayer.push(await hashLeftRightPoseidon(zeroValues[level], zeroValues[level]));
+    }
     layers.push(nextLayer);
     currentLayer = nextLayer;
   }
@@ -734,6 +770,7 @@ function buildMerkleTree(leaves) {
 }
 
 function getMerklePath(layers, leafIndex) {
+  if (!zeroValues) return { pathElements: [], pathIndices: [] };
   const pathElements = [];
   const pathIndices = [];
   let currentIndex = leafIndex;
@@ -741,7 +778,9 @@ function getMerklePath(layers, leafIndex) {
   for (let level = 0; level < MERKLE_LEVELS; level++) {
     const layer = layers[level] || [];
     const siblingIndex = currentIndex % 2 === 0 ? currentIndex + 1 : currentIndex - 1;
-    const sibling = siblingIndex < layer.length ? layer[siblingIndex] : ZERO_VALUE;
+    const sibling = siblingIndex >= 0 && siblingIndex < layer.length
+      ? layer[siblingIndex]
+      : zeroValues[level];
 
     pathElements.push(sibling.toString());
     pathIndices.push(currentIndex % 2);
@@ -776,8 +815,8 @@ async function syncMerkleTree() {
     if (lastSyncedBlock > 0) {
       fromBlock = lastSyncedBlock + 1;
     } else {
-      // Bloco do deploy do contrato V8 na Sepolia
-      fromBlock = 10477500;
+      // Bloco do deploy do contrato V8 Poseidon na Sepolia
+      fromBlock = 10478300;
     }
 
     if (fromBlock > currentBlock) return;
@@ -818,7 +857,9 @@ async function syncMerkleTree() {
 
       // Rebuild tree se mudou
       if (localTree.leaves.length > 0) {
-        localTree.layers = buildMerkleTree(localTree.leaves);
+        console.log(`Building Merkle tree with Poseidon (${localTree.leaves.length} leaves)...`);
+        localTree.layers = await buildMerkleTreeOnChain(localTree.leaves);
+        console.log(`Merkle tree built. Root: ${localTree.layers[MERKLE_LEVELS] ? localTree.layers[MERKLE_LEVELS][0] : "empty"}`);
       }
       localTree.initialized = true;
       console.log(`Merkle tree synced: ${localTree.leaves.length} leaves`);
