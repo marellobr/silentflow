@@ -1040,10 +1040,38 @@ export default function App() {
     return val.toString();
   };
 
-  // Hash para commitment (keccak256 mod FIELD_SIZE — deve bater com o contrato)
+  // Poseidon hash — carregado via circomlibjs (mesmo que o circuit usa)
+  const [poseidonFn, setPoseidonFn] = useState(null);
+
+  useEffect(() => {
+    // Carrega circomlibjs para ter Poseidon identico ao circuit
+    const loadPoseidon = async () => {
+      try {
+        const script = document.createElement("script");
+        script.src = "https://cdn.jsdelivr.net/npm/circomlibjs@0.1.7/build/circomlibjs.umd.min.js";
+        script.onload = async () => {
+          if (window.circomlibjs) {
+            const poseidon = await window.circomlibjs.buildPoseidon();
+            setPoseidonFn(() => poseidon);
+            console.log("Poseidon loaded");
+          }
+        };
+        document.head.appendChild(script);
+      } catch (e) { console.error("Failed to load Poseidon:", e); }
+    };
+    loadPoseidon();
+  }, []);
+
+  // Hash com Poseidon (identico ao circuit e ao contrato)
   const zkHash = (left, right) => {
-    const packed = ethers.solidityPackedKeccak256(["uint256", "uint256"], [left, right]);
-    return (BigInt(packed) % FIELD_SIZE).toString();
+    if (!poseidonFn) {
+      // Fallback — nao deve ser usado em producao
+      console.warn("Poseidon not loaded, using fallback");
+      const packed = ethers.solidityPackedKeccak256(["uint256", "uint256"], [left, right]);
+      return (BigInt(packed) % FIELD_SIZE).toString();
+    }
+    const hash = poseidonFn([BigInt(left), BigInt(right)]);
+    return poseidonFn.F.toString(hash);
   };
 
   // Gera commitment = hash(secret, nullifier)
@@ -1059,6 +1087,7 @@ export default function App() {
   const zkDeposit = async () => {
     if (!account) return alert("Conecte sua carteira.");
     if (!zkDenom) return alert("Selecione uma denominacao.");
+    if (!poseidonFn) return alert("Aguarde o Poseidon carregar (recarregue a pagina se demorar).");
     setZkLoading(true); setZkStatus("Gerando commitment...");
     try {
       const { secret, nullifier, commitment, nullifierHash } = generateCommitment();
