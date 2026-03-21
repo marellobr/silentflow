@@ -1202,6 +1202,23 @@ export default function App() {
         pathIndices: pathData.pathIndices,
       };
 
+      // DEBUG: verificar commitment e root
+      const localCommitment = zkHash(note.secret, note.nullifier);
+      const localNullifierHash = zkHash(note.nullifier, note.nullifier);
+      console.log("=== ZK DEBUG ===");
+      console.log("note.commitment:", note.commitment);
+      console.log("localCommitment (recalc):", localCommitment);
+      console.log("commitment match:", note.commitment === localCommitment);
+      console.log("note.nullifierHash:", note.nullifierHash);
+      console.log("localNullifierHash:", localNullifierHash);
+      console.log("nullifierHash match:", note.nullifierHash === localNullifierHash);
+      console.log("pathData.root:", pathData.root);
+      console.log("pathElements:", pathData.pathElements);
+      console.log("pathIndices:", pathData.pathIndices);
+      console.log("leafIndex:", note.leafIndex);
+      console.log("input:", JSON.stringify(input, null, 2));
+      console.log("=== END DEBUG ===");
+
       // 3. Gera ZK proof com snarkjs (carregado via CDN)
       if (!window.snarkjs) {
         setZkStatus("Carregando snarkjs...");
