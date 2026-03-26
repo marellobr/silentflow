@@ -1143,17 +1143,8 @@ export default function App() {
   const zkWithdraw = async (note) => {
     if (!account) return alert("Conecte sua carteira.");
     const recipient = zkRecipient || account;
-    setZkLoading(true); setZkStatus("Sincronizando commitment...");
+    setZkLoading(true); setZkStatus("Buscando Merkle path...");
     try {
-      // 0. Garante que o backend conhece o commitment
-      await fetch(`${BACKEND_URL}/zk/add-commitment`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ commitment: note.commitment }),
-      });
-
-      setZkStatus("Buscando Merkle path...");
-
       // 1. Busca Merkle path do backend
       const pathRes = await fetch(`${BACKEND_URL}/zk/merkle-path/${note.leafIndex}`);
       const pathData = await pathRes.json();
