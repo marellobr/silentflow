@@ -907,21 +907,108 @@ app.get("/zk/info", async (req, res) => {
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
-// GET /zk/merkle-path/:leafIndex — retorna path elements para gerar ZK proof
+// GET /zk/merkle-path/:leafIndex — computa path diretamente do contrato V8
 app.get("/zk/merkle-path/:leafIndex", async (req, res) => {
   try {
-    await syncMerkleTree(); // ensure fresh
+    const zkContract = new ethers.Contract(ZK_CONTRACT_ADDRESS, ZK_CONTRACT_ABI, provider);
+    const treeSize = Number(await zkContract.nextIndex());
     const leafIndex = parseInt(req.params.leafIndex);
-    if (leafIndex < 0 || leafIndex >= localTree.leaves.length) {
-      return res.status(404).json({ erro: "Leaf index out of range" });
-    }
-    const { pathElements, pathIndices } = getMerklePath(localTree.layers, leafIndex);
-    const root = localTree.layers[MERKLE_LEVELS]
-      ? localTree.layers[MERKLE_LEVELS][0].toString()
-      : "0";
 
-    res.json({ leafIndex, root, pathElements, pathIndices });
-  } catch (e) { res.status(500).json({ erro: e.message }); }
+    if (leafIndex < 0 || leafIndex >= treeSize) {
+      return res.status(404).json({ erro: `Leaf index ${leafIndex} out of range (treeSize: ${treeSize})` });
+    }
+
+    // Ler todos os Deposit events para reconstruir as leaves
+    const currentBlock = await provider.getBlockNumber();
+    const fromBlock = Math.max(0, currentBlock - 500);
+    const filter = zkContract.filters.Deposit();
+    let events = [];
+
+    // Buscar em chunks de 9 (Alchemy free)
+    for (let start = Math.max(0, currentBlock - 5000); start <= currentBlock; start += 10) {
+      const end = Math.min(start + 9, currentBlock);
+      try {
+        const chunk = await zkContract.queryFilter(filter, start, end);
+        events.push(...chunk);
+      } catch {}
+    }
+
+    // Se nao encontrou todos, tentar range maior
+    if (events.length < treeSize) {
+      events = [];
+      for (let start = Math.max(0, currentBlock - 50000); start <= currentBlock; start += 10) {
+        const end = Math.min(start + 9, currentBlock);
+        try {
+          const chunk = await zkContract.queryFilter(filter, start, end);
+          events.push(...chunk);
+        } catch {}
+        if (events.length >= treeSize) break;
+      }
+    }
+
+    events.sort((a, b) => Number(a.args[1]) - Number(b.args[1]));
+    const leaves = events.map(e => e.args[0].toString());
+
+    if (leaves.length < treeSize) {
+      return res.status(500).json({ erro: `Could only find ${leaves.length}/${treeSize} leaves` });
+    }
+
+    // Reconstruir tree usando hashLeftRight do contrato (Poseidon exato)
+    const layers = [leaves.map(l => BigInt(l))];
+    let currentLayer = layers[0];
+
+    // Carregar zero values do contrato
+    const zv = [];
+    for (let i = 0; i < MERKLE_LEVELS; i++) {
+      zv.push(BigInt((await zkContract.getZeroValue(i)).toString()));
+    }
+
+    for (let level = 0; level < MERKLE_LEVELS; level++) {
+      const nextLayer = [];
+      for (let i = 0; i < Math.ceil(currentLayer.length / 2); i++) {
+        const left = currentLayer[i * 2];
+        const right = i * 2 + 1 < currentLayer.length ? currentLayer[i * 2 + 1] : zv[level];
+        const hash = BigInt((await zkContract.hashLeftRight(left.toString(), right.toString())).toString());
+        nextLayer.push(hash);
+      }
+      if (nextLayer.length === 0) {
+        const hash = BigInt((await zkContract.hashLeftRight(zv[level].toString(), zv[level].toString())).toString());
+        nextLayer.push(hash);
+      }
+      layers.push(nextLayer);
+      currentLayer = nextLayer;
+    }
+
+    // Extrair path
+    const pathElements = [];
+    const pathIndices = [];
+    let idx = leafIndex;
+    for (let level = 0; level < MERKLE_LEVELS; level++) {
+      const layer = layers[level];
+      const sibIdx = idx % 2 === 0 ? idx + 1 : idx - 1;
+      const sibling = sibIdx >= 0 && sibIdx < layer.length ? layer[sibIdx] : zv[level];
+      pathElements.push(sibling.toString());
+      pathIndices.push(idx % 2);
+      idx = Math.floor(idx / 2);
+    }
+
+    const computedRoot = layers[MERKLE_LEVELS][0].toString();
+    const onChainRoot = (await zkContract.getLastRoot()).toString();
+
+    console.log(`Merkle path for leaf ${leafIndex}: computedRoot=${computedRoot}, onChainRoot=${onChainRoot}, match=${computedRoot === onChainRoot}`);
+
+    res.json({
+      leafIndex,
+      root: onChainRoot, // usar o root on-chain
+      computedRoot,
+      rootMatch: computedRoot === onChainRoot,
+      pathElements,
+      pathIndices,
+    });
+  } catch (e) {
+    console.error(`Merkle path error: ${e.message}`);
+    res.status(500).json({ erro: e.message });
+  }
 });
 
 // GET /zk/deposits — usa dados da sync local
