@@ -679,10 +679,8 @@ app.get("/admin/stats", (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
-const PORT = process.env.PORT || 3001;
 
 // Dummy periodico a cada 2-5 minutos para criar ruido de fundo
-setInterval(dummyPeriodico, 120000 + Math.random() * 180000);
 
 app.listen(PORT, () => {
   console.log(`SilentFlow backend v7 (pronto para mainnet) — porta ${PORT}`);
