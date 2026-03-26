@@ -707,185 +707,12 @@ const POSEIDON_ABI = [
 const MERKLE_LEVELS = 20;
 const FIELD_SIZE = BigInt("21888242871839275222246405745257275088548364400416034343698204186575808495617");
 
-// Cache dos zero values (computados com Poseidon pelo contrato)
-let zeroValues = null;
-
-async function loadZeroValues() {
-  if (zeroValues) return;
-  try {
-    const zkContract = new ethers.Contract(ZK_CONTRACT_ADDRESS, ZK_CONTRACT_ABI, provider);
-    zeroValues = [];
-    for (let i = 0; i <= MERKLE_LEVELS; i++) {
-      const z = await zkContract.getZeroValue(i);
-      zeroValues.push(BigInt(z.toString()));
-    }
-    console.log(`Zero values loaded: ${zeroValues.length} levels`);
-  } catch (e) {
-    console.error(`Failed to load zero values: ${e.message}`);
-    // Fallback: zero value 0 for all levels
-    zeroValues = new Array(MERKLE_LEVELS + 1).fill(0n);
-  }
-}
-
-// Hash via Poseidon on-chain
+// Hash via Poseidon on-chain (usado apenas no /zk/merkle-path)
 const poseidonContract = new ethers.Contract(POSEIDON_ADDRESS, POSEIDON_ABI, provider);
 
-async function hashLeftRightPoseidon(left, right) {
-  const result = await poseidonContract.poseidon([left.toString(), right.toString()]);
-  return BigInt(result.toString());
-}
-
-// Merkle tree local mirror
-let localTree = {
-  leaves: [],
-  layers: [],
-  initialized: false,
-};
-
-// Build tree using cached Poseidon hashes from on-chain
-// Since calling Poseidon on-chain for every hash is slow,
-// we read the tree state from the contract events and
-// compute the root using the contract's hashLeftRight
-async function buildMerkleTreeOnChain(leaves) {
-  await loadZeroValues();
-  const layers = [leaves.map(l => BigInt(l))];
-  let currentLayer = layers[0];
-
-  for (let level = 0; level < MERKLE_LEVELS; level++) {
-    const nextLayer = [];
-    for (let i = 0; i < Math.ceil(currentLayer.length / 2); i++) {
-      const left = currentLayer[i * 2];
-      const right = i * 2 + 1 < currentLayer.length ? currentLayer[i * 2 + 1] : zeroValues[level];
-      // Use on-chain Poseidon
-      const hash = await hashLeftRightPoseidon(left, right);
-      nextLayer.push(hash);
-    }
-    if (nextLayer.length === 0) {
-      nextLayer.push(await hashLeftRightPoseidon(zeroValues[level], zeroValues[level]));
-    }
-    layers.push(nextLayer);
-    currentLayer = nextLayer;
-  }
-  return layers;
-}
-
-function getMerklePath(layers, leafIndex) {
-  if (!zeroValues) return { pathElements: [], pathIndices: [] };
-  const pathElements = [];
-  const pathIndices = [];
-  let currentIndex = leafIndex;
-
-  for (let level = 0; level < MERKLE_LEVELS; level++) {
-    const layer = layers[level] || [];
-    const siblingIndex = currentIndex % 2 === 0 ? currentIndex + 1 : currentIndex - 1;
-    const sibling = siblingIndex >= 0 && siblingIndex < layer.length
-      ? layer[siblingIndex]
-      : zeroValues[level];
-
-    pathElements.push(sibling.toString());
-    pathIndices.push(currentIndex % 2);
-    currentIndex = Math.floor(currentIndex / 2);
-  }
-
-  return { pathElements, pathIndices };
-}
-
-// Sync Merkle tree from chain events
-// Abordagem: buscar blocos recentes (ultimos 100) com chunk de 9
-// Para deposits antigos: endpoint /zk/add-commitment permite adicionar manualmente
-let lastSyncedBlock = 0;
-
-async function syncMerkleTree() {
-  try {
-    const zkContract = new ethers.Contract(ZK_CONTRACT_ADDRESS, ZK_CONTRACT_ABI, provider);
-    const treeSize = Number(await zkContract.nextIndex());
-
-    if (treeSize === localTree.leaves.length && localTree.initialized) return;
-    if (treeSize === 0) { localTree.initialized = true; return; }
-
-    console.log(`Merkle sync: on-chain=${treeSize}, local=${localTree.leaves.length}`);
-
-    const currentBlock = await provider.getBlockNumber();
-    const CHUNK = 9;
-
-    // Buscar ultimos 200 blocos (~30min na Sepolia)
-    const fromBlock = lastSyncedBlock > 0
-      ? lastSyncedBlock + 1
-      : Math.max(0, currentBlock - 200);
-
-    if (fromBlock > currentBlock) return;
-
-    const filter = zkContract.filters.Deposit();
-    const events = [];
-
-    for (let start = fromBlock; start <= currentBlock; start += CHUNK + 1) {
-      const end = Math.min(start + CHUNK, currentBlock);
-      try {
-        const chunk = await zkContract.queryFilter(filter, start, end);
-        events.push(...chunk);
-      } catch (e) {
-        console.error(`Sync chunk ${start}-${end} failed: ${e.message}`);
-      }
-    }
-
-    lastSyncedBlock = currentBlock;
-
-    if (events.length > 0) {
-      events.sort((a, b) => Number(a.args[1]) - Number(b.args[1]));
-      const existingCommitments = new Set(localTree.leaves);
-      for (const ev of events) {
-        const commitment = ev.args[0].toString();
-        if (!existingCommitments.has(commitment)) {
-          localTree.leaves.push(commitment);
-          existingCommitments.add(commitment);
-        }
-      }
-    }
-
-    // Rebuild tree if we have all leaves
-    if (localTree.leaves.length > 0 && localTree.leaves.length >= treeSize) {
-      console.log(`Building Merkle tree with Poseidon (${localTree.leaves.length} leaves)...`);
-      localTree.layers = await buildMerkleTreeOnChain(localTree.leaves);
-      console.log(`Merkle tree built successfully`);
-    } else if (localTree.leaves.length > 0 && localTree.leaves.length < treeSize) {
-      console.log(`Merkle sync incomplete: have ${localTree.leaves.length}/${treeSize} leaves. Missing old deposits.`);
-    }
-
-    localTree.initialized = true;
-  } catch (e) {
-    console.error(`Merkle tree sync error: ${e.message}`);
-  }
-}
-
-// Sync every 15 seconds
-setInterval(syncMerkleTree, 15000);
-syncMerkleTree();
-
-// Endpoint para forcar adição de commitment (quando o sync nao pega)
-app.post("/zk/add-commitment", async (req, res) => {
-  try {
-    const { commitment } = req.body;
-    if (!commitment) return res.status(400).json({ erro: "commitment required" });
-
-    const zkContract = new ethers.Contract(ZK_CONTRACT_ADDRESS, ZK_CONTRACT_ABI, provider);
-    const isCommitted = await zkContract.isCommitted(commitment);
-    if (!isCommitted) return res.status(400).json({ erro: "commitment not found on-chain" });
-
-    if (!localTree.leaves.includes(commitment.toString())) {
-      localTree.leaves.push(commitment.toString());
-      console.log(`Commitment added manually: ${commitment.toString().slice(0,20)}...`);
-
-      // Rebuild tree
-      if (localTree.leaves.length > 0) {
-        localTree.layers = await buildMerkleTreeOnChain(localTree.leaves);
-      }
-      localTree.initialized = true;
-    }
-
-    const leafIndex = localTree.leaves.indexOf(commitment.toString());
-    res.json({ ok: true, leafIndex, treeSize: localTree.leaves.length });
-  } catch (e) { res.status(500).json({ erro: e.message }); }
-});
+// Cache simples de leaves (sem tree building automatico)
+let cachedLeaves = [];
+let cacheTimestamp = 0;
 
 // ============================================================
 // ZK ENDPOINTS
@@ -901,7 +728,6 @@ app.get("/zk/info", async (req, res) => {
       contract: ZK_CONTRACT_ADDRESS,
       treeSize,
       root,
-      localTreeSize: localTree.leaves.length,
       merkleDepth: MERKLE_LEVELS,
     });
   } catch (e) { res.status(500).json({ erro: e.message }); }
@@ -1011,17 +837,12 @@ app.get("/zk/merkle-path/:leafIndex", async (req, res) => {
   }
 });
 
-// GET /zk/deposits — usa dados da sync local
+// GET /zk/deposits — retorna treeSize do contrato
 app.get("/zk/deposits", async (req, res) => {
   try {
-    await syncMerkleTree();
-    res.json({
-      deposits: localTree.leaves.map((commitment, idx) => ({
-        commitment,
-        leafIndex: idx,
-      })),
-      treeSize: localTree.leaves.length,
-    });
+    const zkContract = new ethers.Contract(ZK_CONTRACT_ADDRESS, ZK_CONTRACT_ABI, provider);
+    const treeSize = Number(await zkContract.nextIndex());
+    res.json({ treeSize });
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
