@@ -8,7 +8,7 @@ app.use(express.json());
 
 const provider = new ethers.JsonRpcProvider(process.env.ALCHEMY_URL);
 
-const CONTRACT_ADDRESS = "0x9ce1b8a2344BB1891A6Ed9b2aBb782fb1B8C18E9";
+const CONTRACT_ADDRESS = "0x864d9f1ad69201Fe022A24b6E71de648936dF71e";
 const CONTRACT_ABI = [
   "function depositETH(address stealthAddress, bytes calldata ephemeralPubKey, uint8 viewTag) external payable",
   "function depositETHTimelocked(address stealthAddress, bytes calldata ephemeralPubKey, uint8 viewTag) external payable",
@@ -22,8 +22,8 @@ const ERC20_ABI = [
   "function approve(address spender, uint256 amount) returns (bool)",
 ];
 const TOKENS = {
-  USDC: { address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", decimals: 6 },
-  USDT: { address: "0xaA8E23Fb1079EA71e0a56F48a2aA51851D8433D0", decimals: 6 },
+  USDC: { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 },
+  USDT: { address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6 },
 };
 
 // ============================================================
@@ -60,7 +60,7 @@ function descontarTaxa(valorBruto, token) {
   return { valorLiquido: valorBruto - taxa, taxa, bps };
 }
 
-const MIN_ETH  = ethers.parseEther(process.env.MIN_ETH  || "0.005");
+const MIN_ETH  = ethers.parseEther(process.env.MIN_ETH  || "0.05");
 const MIN_USDC = ethers.parseUnits(process.env.MIN_USDC || "5", 6);
 const MIN_USDT = ethers.parseUnits(process.env.MIN_USDT || "5", 6);
 
@@ -683,7 +683,7 @@ const PORT = process.env.PORT || 3001;
 // Dummy periodico a cada 2-5 minutos para criar ruido de fundo
 
 app.listen(PORT, () => {
-  console.log(`SilentFlow backend v7 (pronto para mainnet) — porta ${PORT}`);
+  console.log(`SilentFlow backend v7 (Base Mainnet) — porta ${PORT}`);
   console.log(`Master wallet: ${masterWallet.address}`);
   console.log(`Contrato V7: ${CONTRACT_ADDRESS}`);
   console.log(`Taxas: 0.20% (standard) / 0.15% (volume) / 0.10% (premium)`);
