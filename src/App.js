@@ -526,25 +526,35 @@ export default function App() {
       const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
       const filter   = contract.filters.StealthDeposit();
       const current  = await provider.getBlockNumber();
-      const from     = Math.max(0, current - 50000);
-      const events   = await contract.queryFilter(filter, from, current);
+      const CHUNK    = 9000; // RPC limit is 10k, use 9k to be safe
+      const TOTAL    = 40000; // scan last ~40k blocks
+      const fromBlock = Math.max(0, current - TOTAL);
       const found    = [];
-      for (const ev of events) {
-        const [ephPubKey, stealthAddr, tokenAddr, amt, vTag, timelocked, unlockAt] = ev.args;
-        const result = tryDecryptDeposit(ephPubKey, stealthAddr, Number(vTag), spendingKey, viewingKey);
-        if (result) {
-          const tokenSym = Object.keys(TOKENS).find(k => TOKENS[k].address.toLowerCase() === tokenAddr.toLowerCase()) || "?";
-          const dec = TOKENS[tokenSym]?.decimals || 18;
-          found.push({
-            stealthAddress: result.stealthAddress,
-            stealthPrivKey: result.stealthPrivKey,
-            token: tokenSym, tokenAddr,
-            amount: ethers.formatUnits(amt, dec),
-            timelocked, unlockAt: Number(unlockAt),
-            txHash: ev.transactionHash
-          });
-        }
+
+      // Fetch in chunks to respect RPC limits
+      for (let start = fromBlock; start < current; start += CHUNK) {
+        const end = Math.min(start + CHUNK - 1, current);
+        try {
+          const events = await contract.queryFilter(filter, start, end);
+          for (const ev of events) {
+            const [ephPubKey, stealthAddr, tokenAddr, amt, vTag, timelocked, unlockAt] = ev.args;
+            const result = tryDecryptDeposit(ephPubKey, stealthAddr, Number(vTag), spendingKey, viewingKey);
+            if (result) {
+              const tokenSym = Object.keys(TOKENS).find(k => TOKENS[k].address.toLowerCase() === tokenAddr.toLowerCase()) || "?";
+              const dec = TOKENS[tokenSym]?.decimals || 18;
+              found.push({
+                stealthAddress: result.stealthAddress,
+                stealthPrivKey: result.stealthPrivKey,
+                token: tokenSym, tokenAddr,
+                amount: ethers.formatUnits(amt, dec),
+                timelocked, unlockAt: Number(unlockAt),
+                txHash: ev.transactionHash
+              });
+            }
+          }
+        } catch { /* skip failed chunk */ }
       }
+
       setScanResults(found);
       if (found.length === 0) showStatus(lang === "pt" ? "Nenhum depósito encontrado." : "No deposits found.", "info");
     } catch (e) { showStatus(e.message, "error"); }
