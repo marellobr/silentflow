@@ -226,7 +226,7 @@ export default function App() {
         <header className="hdr">
           <div className="logo">
             <img src="/logo.png" alt="SilentFlow" />
-            <span className="net">SEPOLIA TESTNET</span>
+            <span className="net">BASE MAINNET</span>
           </div>
           <button className={`conn-btn${account ? " on" : ""}`} onClick={connect}>
             {account ? `● ${account.slice(0,6)}...${account.slice(-4)}` : "Conectar Carteira"}
@@ -253,7 +253,7 @@ export default function App() {
                     <span className={`hist-status ${tx.done ? "done" : "proc"}`}>
                       {tx.done ? "Entregue" : "Processando"}
                     </span>
-                    <a className="hist-link" href={`https://sepolia.etherscan.io/tx/${tx.hash}`} target="_blank" rel="noreferrer">
+                    <a className="hist-link" href={`https://basescan.org/tx/${tx.hash}`} target="_blank" rel="noreferrer">
                       Etherscan ↗
                     </a>
                   </div>
@@ -293,7 +293,7 @@ export default function App() {
           {/* FORM */}
           <div className="form-card">
             <div className="form-title">Envio Privado</div>
-            <div className="form-sub">Non-custodial · Sepolia testnet</div>
+            <div className="form-sub">Non-custodial · BASE MAINNET</div>
 
             <div className="toks">
               {Object.keys(TOKENS).map(t => (
