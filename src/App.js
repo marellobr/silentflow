@@ -12,24 +12,20 @@ const ABI = [
   "function depositToken(address token, uint256 amount, address stealthAddress, bytes calldata ephemeralPubKey, uint8 viewTag) external",
   "function depositTokenTimelocked(address token, uint256 amount, address stealthAddress, bytes calldata ephemeralPubKey, uint8 viewTag) external",
   "function withdrawFor(address stealthAddress, address token, address recipient, bytes calldata sig) external",
-  "function balanceOf(address stealthAddress, address token) external view returns (uint256)",
-  "function getUnlockTime(address stealthAddress, address token) external view returns (uint256)",
-  "function isUnlocked(address stealthAddress, address token) external view returns (bool)",
-  "function isValidDenomination(address token, uint256 amount) external view returns (bool)",
+  "function withdrawNonces(address) external view returns (uint256)",
   "event StealthDeposit(bytes ephemeralPubKey, address indexed stealthAddress, address token, uint256 amount, uint8 viewTag, bool timelocked, uint256 unlockAt)"
 ];
 
 const ERC20_ABI = [
   "function approve(address spender, uint256 amount) external returns (bool)",
   "function allowance(address owner, address spender) external view returns (uint256)",
-  "function transfer(address to, uint256 amount) returns (bool)",
-  "function balanceOf(address) view returns (uint256)"
+  "function transfer(address to, uint256 amount) returns (bool)"
 ];
 
 const TOKENS = {
-  ETH:  { address: "0x0000000000000000000000000000000000000000", decimals: 18, symbol: "ETH" },
-  USDC: { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6,  symbol: "USDC" },
-  USDT: { address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6,  symbol: "USDT" }
+  ETH:  { address: "0x0000000000000000000000000000000000000000", decimals: 18 },
+  USDC: { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 },
+  USDT: { address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6 }
 };
 
 const DENOMS = {
@@ -38,358 +34,482 @@ const DENOMS = {
   USDT: [10, 50, 100, 500, 1000]
 };
 
-function getTierInfo(amountUsd) {
-  if (amountUsd >= 5000) return { label: "Premium", bps: 10, color: "#a78bfa" };
-  if (amountUsd >= 500)  return { label: "Volume",  bps: 15, color: "#34d399" };
-  return                        { label: "Standard", bps: 20, color: "#22b8e6" };
+function getTierInfo(usd) {
+  if (usd >= 5000) return { label: "Premium", bps: 10, color: "#a78bfa" };
+  if (usd >= 500)  return { label: "Volume",  bps: 15, color: "#34d399" };
+  return                  { label: "Standard", bps: 20, color: "#22b8e6" };
 }
 
-function tryDecryptDeposit(ephemeralPubKeyHex, stealthAddressOnChain, viewTagOnChain, spendingPrivKey, viewingPrivKey) {
+function fmt(addr) {
+  if (!addr) return "";
+  return addr.slice(0, 8) + "..." + addr.slice(-6);
+}
+
+function tryDecrypt(ephPub, stealthOn, vTagOn, sk, vk) {
   try {
-    const viewingPubKey  = ethers.SigningKey.computePublicKey(viewingPrivKey, true);
-    const spendingPubKey = ethers.SigningKey.computePublicKey(spendingPrivKey, true);
-    const h = ethers.keccak256(ethers.concat([
-      ethers.getBytes(ephemeralPubKeyHex),
-      ethers.getBytes(viewingPubKey)
-    ]));
-    if (parseInt(h.slice(2, 4), 16) !== viewTagOnChain) return null;
-    const stealthSeed = ethers.keccak256(ethers.concat([
-      ethers.getBytes(h),
-      ethers.getBytes(spendingPubKey)
-    ]));
-    const stealthWallet = new ethers.Wallet(stealthSeed);
-    if (stealthWallet.address.toLowerCase() !== stealthAddressOnChain.toLowerCase()) return null;
-    return { stealthAddress: stealthWallet.address, stealthPrivKey: stealthSeed };
+    const vPub = ethers.SigningKey.computePublicKey(vk, true);
+    const sPub = ethers.SigningKey.computePublicKey(sk, true);
+    const h = ethers.keccak256(ethers.concat([ethers.getBytes(ephPub), ethers.getBytes(vPub)]));
+    if (parseInt(h.slice(2,4),16) !== vTagOn) return null;
+    const seed = ethers.keccak256(ethers.concat([ethers.getBytes(h), ethers.getBytes(sPub)]));
+    const w = new ethers.Wallet(seed);
+    if (w.address.toLowerCase() !== stealthOn.toLowerCase()) return null;
+    return { stealthAddress: w.address, stealthPrivKey: seed };
   } catch { return null; }
 }
 
-async function encryptKeys(data, password) {
+async function encryptKeys(data, pwd) {
   const enc = new TextEncoder();
-  const keyMat = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
+  const km = await crypto.subtle.importKey("raw", enc.encode(pwd), "PBKDF2", false, ["deriveKey"]);
   const salt = crypto.getRandomValues(new Uint8Array(16));
-  const key = await crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" },
-    keyMat, { name: "AES-GCM", length: 256 }, false, ["encrypt"]
-  );
+  const key = await crypto.subtle.deriveKey({ name:"PBKDF2", salt, iterations:100000, hash:"SHA-256" }, km, { name:"AES-GCM", length:256 }, false, ["encrypt"]);
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc.encode(JSON.stringify(data)));
-  return btoa(JSON.stringify({
-    salt: Array.from(salt), iv: Array.from(iv), ct: Array.from(new Uint8Array(ct))
-  }));
+  const ct = await crypto.subtle.encrypt({ name:"AES-GCM", iv }, key, enc.encode(JSON.stringify(data)));
+  return btoa(JSON.stringify({ salt:Array.from(salt), iv:Array.from(iv), ct:Array.from(new Uint8Array(ct)) }));
 }
 
-async function decryptKeys(b64, password) {
+async function decryptKeys(b64, pwd) {
   const enc = new TextEncoder();
   const { salt, iv, ct } = JSON.parse(atob(b64));
-  const keyMat = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
-  const key = await crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt: new Uint8Array(salt), iterations: 100000, hash: "SHA-256" },
-    keyMat, { name: "AES-GCM", length: 256 }, false, ["decrypt"]
-  );
-  const dec = await crypto.subtle.decrypt({ name: "AES-GCM", iv: new Uint8Array(iv) }, key, new Uint8Array(ct));
+  const km = await crypto.subtle.importKey("raw", enc.encode(pwd), "PBKDF2", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey({ name:"PBKDF2", salt:new Uint8Array(salt), iterations:100000, hash:"SHA-256" }, km, { name:"AES-GCM", length:256 }, false, ["decrypt"]);
+  const dec = await crypto.subtle.decrypt({ name:"AES-GCM", iv:new Uint8Array(iv) }, key, new Uint8Array(ct));
   return JSON.parse(new TextDecoder().decode(dec));
 }
 
 const S = `
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=JetBrains+Mono:wght@400;500&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#09090b;--surface:#0f0f14;--surface2:#141420;
-  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.12);
-  --accent:#22b8e6;--accent2:#38d0ff;--accent-dim:rgba(34,184,230,0.12);
-  --green:#34d399;--amber:#fbbf24;--red:#f87171;--purple:#a78bfa;
-  --text:#e2e8f0;--muted:#64748b;--muted2:#94a3b8;
+  --bg:#08090d;--bg2:#0d0f18;--surface:#111520;--surface2:#181c2e;
+  --border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.1);
+  --accent:#22c5f0;--accent2:#5dd8f8;--accent-dim:rgba(34,197,240,0.1);--accent-glow:rgba(34,197,240,0.2);
+  --green:#34d399;--green-dim:rgba(52,211,153,0.1);
+  --amber:#fbbf24;--red:#f87171;--red-dim:rgba(248,113,113,0.1);--purple:#a78bfa;
+  --text:#f0f4ff;--text2:#94a3b8;--text3:#475569;
   --sans:'DM Sans',sans-serif;--mono:'JetBrains Mono',monospace;
-  --r:12px;--r2:8px;
+  --r:16px;--r2:10px;--r3:8px;
 }
-html{scroll-behavior:smooth}
-body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.6;min-height:100vh}
-button{cursor:pointer;font-family:var(--sans)}
-input,textarea{font-family:var(--sans)}
+html,body,#root{height:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+button{cursor:pointer;font-family:var(--sans);outline:none}
+input,textarea{font-family:var(--sans);outline:none}
 a{color:var(--accent);text-decoration:none}
-.app{min-height:100vh;display:flex;flex-direction:column}
-.nav{position:sticky;top:0;z-index:50;display:flex;align-items:center;justify-content:space-between;padding:14px 24px;background:rgba(9,9,11,0.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
-.nav-left{display:flex;align-items:center;gap:14px}
-.nav-logo{display:flex;align-items:center;gap:10px}
-.nav-logo img{width:28px;height:28px;filter:drop-shadow(0 0 8px rgba(34,184,230,0.6))}
-.nav-logo span{font-size:15px;font-weight:600;letter-spacing:0.04em;color:#fff}
-.net-badge{font-family:var(--mono);font-size:10px;color:var(--green);background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.25);padding:3px 10px;border-radius:20px;letter-spacing:0.05em}
-.nav-right{display:flex;align-items:center;gap:12px}
-.lang-btn{background:transparent;border:1px solid var(--border2);color:var(--muted2);font-size:12px;padding:5px 12px;border-radius:20px;transition:all 0.2s}
-.lang-btn:hover{border-color:var(--accent);color:var(--accent)}
-.connect-btn{background:var(--accent);color:var(--bg);font-weight:600;font-size:13px;padding:8px 18px;border-radius:var(--r2);border:none;transition:all 0.2s;box-shadow:0 0 16px rgba(34,184,230,0.2)}
-.connect-btn:hover{opacity:0.85;transform:translateY(-1px)}
-.account-pill{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border2);padding:7px 14px;border-radius:20px;font-family:var(--mono);font-size:12px;color:var(--accent2)}
-.account-dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
-.main{flex:1;max-width:1080px;margin:0 auto;width:100%;padding:32px 20px}
-.tabs{display:flex;gap:4px;margin-bottom:28px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:4px}
-.tab{flex:1;padding:9px 0;border:none;border-radius:var(--r2);background:transparent;color:var(--muted);font-size:13px;font-weight:500;transition:all 0.2s}
-.tab:hover{color:var(--text)}
-.tab.active{background:var(--surface2);color:var(--accent);border:1px solid var(--border2)}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
-@media(max-width:700px){.grid{grid-template-columns:1fr}}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:24px}
-.card-title{font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:20px}
-.form-group{margin-bottom:16px}
-.form-label{font-size:12px;color:var(--muted);margin-bottom:6px;display:block;font-weight:500}
-.form-input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r2);padding:10px 14px;color:var(--text);font-size:14px;transition:border-color 0.2s;outline:none}
-.form-input:focus{border-color:var(--accent)}
-.form-input::placeholder{color:var(--muted)}
-.form-sub{font-size:12px;color:var(--muted);margin-top:6px}
-.token-tabs{display:flex;gap:6px;margin-bottom:16px}
-.token-tab{flex:1;padding:8px;border:1px solid var(--border);border-radius:var(--r2);background:transparent;color:var(--muted);font-size:13px;font-weight:500;transition:all 0.2s}
-.token-tab.active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent)}
-.denom-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}
-.denom-btn{padding:7px;border:1px solid var(--border);border-radius:var(--r2);background:transparent;color:var(--muted2);font-size:12px;font-family:var(--mono);transition:all 0.2s}
-.denom-btn:hover{border-color:var(--accent);color:var(--accent)}
-.denom-btn.active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent)}
-.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-top:1px solid var(--border)}
-.toggle-label{font-size:13px;color:var(--muted2)}
-.toggle-label small{display:block;font-size:11px;color:var(--muted);margin-top:1px}
-.toggle{position:relative;width:40px;height:22px;flex-shrink:0}
-.toggle input{opacity:0;width:0;height:0}
-.toggle-slider{position:absolute;inset:0;background:var(--surface2);border:1px solid var(--border2);border-radius:20px;cursor:pointer;transition:all 0.3s}
-.toggle-slider::before{content:'';position:absolute;width:16px;height:16px;border-radius:50%;background:var(--muted);left:2px;top:2px;transition:all 0.3s}
-.toggle input:checked + .toggle-slider{background:var(--accent-dim);border-color:var(--accent)}
-.toggle input:checked + .toggle-slider::before{background:var(--accent);transform:translateX(18px)}
-.tier-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;margin-bottom:12px}
-.send-btn{width:100%;padding:13px;border:none;border-radius:var(--r);background:var(--accent);color:var(--bg);font-size:14px;font-weight:600;transition:all 0.2s;margin-top:8px;box-shadow:0 0 20px rgba(34,184,230,0.2)}
-.send-btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 0 30px rgba(34,184,230,0.35)}
-.send-btn:disabled{opacity:0.5;cursor:not-allowed}
-.status-box{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin-top:16px}
-.status-title{font-size:12px;color:var(--muted);margin-bottom:14px;font-weight:500}
-.pipeline-steps{display:flex;flex-direction:column;gap:10px}
-.pipeline-step{display:flex;align-items:center;gap:12px;font-size:13px}
-.step-icon{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0}
-.step-icon.done{background:rgba(52,211,153,0.15);color:var(--green);border:1px solid rgba(52,211,153,0.3)}
-.step-icon.active{background:var(--accent-dim);color:var(--accent);border:1px solid rgba(34,184,230,0.3);animation:pulse-glow 1.5s infinite}
-.step-icon.pending{background:var(--surface);color:var(--muted);border:1px solid var(--border)}
-.step-text{color:var(--muted2)}
-.step-text.active{color:var(--text)}
-@keyframes pulse-glow{0%,100%{box-shadow:0 0 0 0 rgba(34,184,230,0.3)}50%{box-shadow:0 0 0 6px rgba(34,184,230,0)}}
-.history-empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:13px}
-.history-item{padding:14px 0;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
-.history-item:last-child{border-bottom:none}
-.history-token{width:32px;height:32px;border-radius:50%;background:var(--accent-dim);border:1px solid rgba(34,184,230,0.2);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--accent);flex-shrink:0}
-.history-info{flex:1}
-.history-amount{font-size:14px;font-weight:600;color:#fff}
-.history-to{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px}
-.history-link{font-size:11px;color:var(--accent)}
-.history-status{font-size:11px;padding:3px 8px;border-radius:20px;white-space:nowrap}
-.status-ok{background:rgba(52,211,153,0.1);color:var(--green);border:1px solid rgba(52,211,153,0.2)}
-.status-pending{background:var(--accent-dim);color:var(--accent);border:1px solid rgba(34,184,230,0.2)}
-.key-box{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r2);padding:14px;margin-bottom:12px}
-.key-label{font-size:11px;color:var(--muted);margin-bottom:6px;font-weight:500}
-.key-value{font-family:var(--mono);font-size:11px;color:var(--accent2);word-break:break-all;line-height:1.5}
-.key-actions{display:flex;gap:8px;margin-top:10px}
-.key-btn{flex:1;padding:7px;border:1px solid var(--border2);border-radius:var(--r2);background:transparent;color:var(--muted2);font-size:12px;transition:all 0.2s}
-.key-btn:hover{border-color:var(--accent);color:var(--accent)}
-.key-btn.primary{background:var(--accent-dim);border-color:var(--accent);color:var(--accent)}
-.paylink-box{background:var(--surface2);border:1px solid rgba(34,184,230,0.2);border-radius:var(--r2);padding:14px;margin-top:16px}
-.paylink-label{font-size:11px;color:var(--accent);margin-bottom:6px;font-weight:500}
-.paylink-value{font-family:var(--mono);font-size:11px;color:var(--muted2);word-break:break-all}
-.paylink-copy{width:100%;margin-top:10px;padding:8px;border:1px solid var(--accent);border-radius:var(--r2);background:var(--accent-dim);color:var(--accent);font-size:12px;font-weight:600;transition:all 0.2s}
-.paylink-copy:hover{background:var(--accent);color:var(--bg)}
-.scan-result{background:var(--surface2);border:1px solid rgba(52,211,153,0.2);border-radius:var(--r);padding:20px;margin-top:16px}
-.scan-found{font-size:13px;color:var(--green);font-weight:600;margin-bottom:12px}
-.scan-item{padding:10px 0;border-bottom:1px solid var(--border);font-size:13px}
+.app{min-height:100vh;display:flex;flex-direction:column;padding-bottom:80px}
+.app-glow{position:fixed;top:-200px;left:50%;transform:translateX(-50%);width:800px;height:500px;border-radius:50%;background:radial-gradient(ellipse,rgba(34,197,240,0.04) 0%,transparent 70%);pointer-events:none;z-index:0}
+
+/* NAV */
+.nav{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;background:rgba(8,9,13,0.85);backdrop-filter:blur(24px);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50}
+.nav-brand{display:flex;align-items:center;gap:10px}
+.nav-logo-img{width:26px;height:26px;filter:drop-shadow(0 0 10px var(--accent-glow))}
+.nav-logo-text{font-size:14px;font-weight:600;letter-spacing:0.06em;color:#fff}
+.nav-badge{font-family:var(--mono);font-size:9px;letter-spacing:0.06em;color:var(--green);background:var(--green-dim);border:1px solid rgba(52,211,153,0.2);padding:3px 8px;border-radius:20px;display:flex;align-items:center;gap:5px}
+.nav-badge::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--green);animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+.nav-right{display:flex;align-items:center;gap:10px}
+.nav-lang{background:transparent;border:1px solid var(--border2);color:var(--text2);font-size:11px;font-weight:500;padding:5px 10px;border-radius:20px;transition:all 0.2s}
+.nav-lang:hover{border-color:var(--accent);color:var(--accent)}
+.nav-connect{background:var(--accent);color:#08090d;font-weight:600;font-size:13px;padding:8px 18px;border-radius:var(--r2);border:none;transition:all 0.2s;box-shadow:0 0 20px var(--accent-glow)}
+.nav-connect:hover{opacity:0.9;transform:translateY(-1px)}
+.nav-wallet{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border2);padding:7px 14px;border-radius:20px;font-family:var(--mono);font-size:11px;color:var(--accent2)}
+.wallet-dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
+
+/* MAIN */
+.main{flex:1;max-width:960px;margin:0 auto;width:100%;padding:28px 20px 0;position:relative;z-index:1}
+
+/* TABS */
+.tabs-wrap{display:flex;gap:3px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:4px;margin-bottom:24px}
+.tab-btn{flex:1;padding:10px 8px;border:none;border-radius:var(--r2);background:transparent;color:var(--text3);font-size:13px;font-weight:500;transition:all 0.22s;display:flex;align-items:center;justify-content:center;gap:6px}
+.tab-btn:hover{color:var(--text2)}
+.tab-btn.active{background:var(--surface2);color:var(--accent);border:1px solid rgba(34,197,240,0.15);box-shadow:0 2px 12px rgba(34,197,240,0.08)}
+.tab-icon{font-size:15px}
+@media(max-width:680px){
+  .section-grid{grid-template-columns:1fr!important}
+  .app{padding-bottom:90px}
+  .tabs-wrap{position:fixed;bottom:0;left:0;right:0;z-index:50;border-radius:0;border-left:none;border-right:none;border-bottom:none;border-top:1px solid var(--border);background:rgba(8,9,13,0.95);backdrop-filter:blur(20px);margin-bottom:0;padding:8px 12px 12px}
+  .tab-btn{flex-direction:column;gap:3px;font-size:10px;padding:8px 4px}
+  .tab-icon{font-size:18px}
+}
+
+/* GRID */
+.section-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+
+/* CARD */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:22px}
+.card-title{font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:18px}
+.card-subtitle{font-size:13px;color:var(--text2);margin-bottom:20px;line-height:1.6}
+
+/* TOKEN SELECTOR */
+.token-row{display:flex;gap:6px;margin-bottom:18px}
+.token-btn{flex:1;padding:9px 6px;border:1px solid var(--border);border-radius:var(--r2);background:transparent;color:var(--text2);font-size:13px;font-weight:600;transition:all 0.2s}
+.token-btn:hover{border-color:var(--border2);color:var(--text)}
+.token-btn.active{background:var(--accent-dim);border-color:rgba(34,197,240,0.3);color:var(--accent)}
+
+/* AMOUNT */
+.amount-wrap{position:relative;margin-bottom:16px}
+.amount-input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r2);padding:14px 70px 14px 16px;color:var(--text);font-size:22px;font-weight:500;transition:border-color 0.2s}
+.amount-input:focus{border-color:rgba(34,197,240,0.4)}
+.amount-input::placeholder{color:var(--text3)}
+.amount-token{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:13px;font-weight:600;color:var(--text2);font-family:var(--mono)}
+
+/* DENOM */
+.denom-wrap{margin-bottom:16px}
+.denom-label{font-size:12px;color:var(--text3);margin-bottom:8px;font-weight:500}
+.denom-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.denom-btn{padding:9px 6px;border:1px solid var(--border);border-radius:var(--r2);background:transparent;color:var(--text2);font-size:12px;font-family:var(--mono);font-weight:500;transition:all 0.2s}
+.denom-btn:hover{border-color:var(--border2);color:var(--text)}
+.denom-btn.active{background:var(--accent-dim);border-color:rgba(34,197,240,0.3);color:var(--accent)}
+
+/* FIELD */
+.field-label{font-size:12px;color:var(--text3);margin-bottom:7px;font-weight:500;display:block}
+.field-input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r2);padding:11px 14px;color:var(--text);font-size:13px;transition:border-color 0.2s}
+.field-input:focus{border-color:rgba(34,197,240,0.4)}
+.field-input::placeholder{color:var(--text3)}
+.field-hint{font-size:11px;color:var(--text3);margin-top:5px}
+
+/* OPTIONS CHIPS */
+.options-row{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+.option-chip{display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:500;transition:all 0.2s;cursor:pointer}
+.option-chip:hover{border-color:var(--border2);color:var(--text)}
+.option-chip.active{background:var(--accent-dim);border-color:rgba(34,197,240,0.3);color:var(--accent)}
+.chip-check{width:16px;height:16px;border-radius:50%;border:1.5px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:9px;flex-shrink:0}
+.chip-check.on{background:var(--accent);border-color:var(--accent);color:#08090d}
+
+/* FEE */
+.fee-row{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:var(--r2);background:var(--surface2);border:1px solid var(--border);margin-bottom:16px;font-size:12px}
+.fee-label{color:var(--text3)}
+.fee-value{font-weight:600;font-family:var(--mono)}
+
+/* BUTTONS */
+.btn-primary{width:100%;padding:14px;border:none;border-radius:var(--r);background:var(--accent);color:#08090d;font-size:15px;font-weight:700;transition:all 0.22s;box-shadow:0 0 24px var(--accent-glow);display:flex;align-items:center;justify-content:center;gap:8px}
+.btn-primary:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 4px 32px var(--accent-glow)}
+.btn-primary:disabled{opacity:0.45;cursor:not-allowed;transform:none}
+.btn-secondary{width:100%;padding:11px;border:1px solid var(--border2);border-radius:var(--r);background:transparent;color:var(--text2);font-size:14px;font-weight:500;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn-secondary:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.btn-secondary:disabled{opacity:0.4;cursor:not-allowed}
+
+/* PIPELINE */
+.pipeline{background:var(--surface2);border:1px solid rgba(34,197,240,0.15);border-radius:var(--r);padding:18px;margin-top:14px}
+.pipeline-title{font-size:11px;color:var(--text3);font-weight:600;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:14px}
+.pipeline-steps{display:flex;flex-direction:column;gap:8px}
+.pipe-step{display:flex;align-items:center;gap:12px}
+.pipe-dot{width:24px;height:24px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px}
+.pipe-dot.done{background:var(--green-dim);color:var(--green);border:1px solid rgba(52,211,153,0.3)}
+.pipe-dot.active{background:var(--accent-dim);color:var(--accent);border:1px solid rgba(34,197,240,0.3);animation:pulse-ring 1.5s infinite}
+.pipe-dot.wait{background:var(--surface);color:var(--text3);border:1px solid var(--border)}
+.pipe-label{font-size:13px;color:var(--text2)}
+.pipe-label.active{color:var(--text)}
+@keyframes pulse-ring{0%,100%{box-shadow:0 0 0 0 rgba(34,197,240,0.3)}50%{box-shadow:0 0 0 5px rgba(34,197,240,0)}}
+
+/* HISTORY */
+.history-empty{padding:36px 20px;text-align:center;color:var(--text3);font-size:13px}
+.history-empty-icon{font-size:32px;margin-bottom:10px;opacity:0.4}
+.history-list{display:flex;flex-direction:column}
+.history-row{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--border)}
+.history-row:last-child{border-bottom:none}
+.history-ico{width:34px;height:34px;border-radius:50%;background:var(--accent-dim);border:1px solid rgba(34,197,240,0.15);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--accent);flex-shrink:0}
+.history-body{flex:1;min-width:0}
+.history-amount{font-size:14px;font-weight:600;color:var(--text)}
+.history-dest{font-size:11px;color:var(--text3);font-family:var(--mono);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.history-link{font-size:11px;color:var(--accent);margin-top:2px;display:block}
+.history-badge{font-size:10px;padding:3px 8px;border-radius:20px;white-space:nowrap;flex-shrink:0}
+.badge-pending{background:var(--accent-dim);color:var(--accent);border:1px solid rgba(34,197,240,0.2)}
+.badge-done{background:var(--green-dim);color:var(--green);border:1px solid rgba(52,211,153,0.2)}
+
+/* RECEIVE */
+.receive-address-card{background:var(--surface2);border:1px solid rgba(34,197,240,0.15);border-radius:var(--r);padding:20px;margin-bottom:14px;position:relative;overflow:hidden}
+.receive-address-card::before{content:'';position:absolute;top:-30px;right:-30px;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,rgba(34,197,240,0.06),transparent 70%)}
+.receive-label{font-size:11px;color:var(--text3);font-weight:600;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:10px}
+.receive-addr-display{font-family:var(--mono);font-size:12px;color:var(--accent2);word-break:break-all;line-height:1.6;margin-bottom:14px;padding:12px;background:rgba(0,0,0,0.2);border-radius:var(--r3);border:1px solid var(--border)}
+.copy-btn{padding:8px 18px;border:1px solid rgba(34,197,240,0.3);border-radius:20px;background:var(--accent-dim);color:var(--accent);font-size:12px;font-weight:600;transition:all 0.2s;cursor:pointer}
+.copy-btn:hover{background:var(--accent);color:#08090d}
+.copy-btn.copied{background:var(--green-dim);border-color:rgba(52,211,153,0.3);color:var(--green)}
+
+.key-row{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-radius:var(--r2);background:var(--surface2);border:1px solid var(--border);margin-bottom:8px}
+.key-row-label{font-size:12px;color:var(--text3);font-weight:500}
+.key-row-value{font-family:var(--mono);font-size:11px;color:var(--text2);filter:blur(5px);transition:filter 0.2s;cursor:pointer;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.key-row-value:hover{filter:none}
+
+.paylink-section{margin-top:16px;padding:16px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r)}
+.paylink-label{font-size:11px;color:var(--text3);font-weight:600;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:8px}
+.paylink-url{font-family:var(--mono);font-size:11px;color:var(--text3);word-break:break-all;margin-bottom:12px;line-height:1.5}
+.action-row{display:flex;gap:8px;margin-top:14px}
+.action-btn{flex:1;padding:9px;border:1px solid var(--border2);border-radius:var(--r2);background:transparent;color:var(--text2);font-size:12px;font-weight:500;transition:all 0.2s;cursor:pointer}
+.action-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* SCAN */
+.scan-hero{text-align:center;padding:8px 0 24px}
+.scan-hero-icon{font-size:48px;margin-bottom:12px;filter:drop-shadow(0 0 16px var(--accent-glow))}
+.scan-hero-title{font-size:18px;font-weight:600;color:var(--text);margin-bottom:6px}
+.scan-hero-sub{font-size:13px;color:var(--text2);max-width:320px;margin:0 auto}
+.scan-result-card{background:var(--surface2);border:1px solid rgba(52,211,153,0.2);border-radius:var(--r);padding:16px;margin-top:14px}
+.scan-result-header{font-size:12px;color:var(--green);font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.scan-item{padding:12px 0;border-bottom:1px solid var(--border)}
 .scan-item:last-child{border-bottom:none}
-.scan-addr{font-family:var(--mono);font-size:11px;color:var(--accent2)}
-.scan-amount{font-weight:600;color:#fff}
-.scan-locked{font-size:11px;color:var(--amber);margin-top:3px}
-.withdraw-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r2);padding:16px;margin-bottom:12px}
-.withdraw-addr{font-family:var(--mono);font-size:11px;color:var(--accent2);word-break:break-all}
-.withdraw-balance{font-size:18px;font-weight:600;color:#fff;margin:8px 0 4px}
-.withdraw-btn{width:100%;padding:9px;border:1px solid var(--accent);border-radius:var(--r2);background:var(--accent-dim);color:var(--accent);font-size:13px;font-weight:600;transition:all 0.2s;margin-top:10px}
-.withdraw-btn:hover:not(:disabled){background:var(--accent);color:var(--bg)}
-.withdraw-btn:disabled{opacity:0.5;cursor:not-allowed}
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px}
-.modal{background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:28px;width:100%;max-width:420px;animation:modal-up 0.3s ease}
-@keyframes modal-up{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-.modal-title{font-size:16px;font-weight:600;color:#fff;margin-bottom:20px}
+.scan-item-amount{font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px}
+.scan-item-addr{font-family:var(--mono);font-size:11px;color:var(--text3)}
+.scan-item-locked{font-size:11px;color:var(--amber);margin-top:4px}
+.scan-item-link{font-size:11px;color:var(--accent);margin-top:4px;display:block}
+
+/* WITHDRAW */
+.withdraw-item{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:18px;margin-bottom:12px}
+.withdraw-amount{font-size:22px;font-weight:700;color:var(--text);margin-bottom:4px}
+.withdraw-addr{font-family:var(--mono);font-size:11px;color:var(--text3);margin-bottom:12px;word-break:break-all}
+.withdraw-status{font-size:11px;margin-bottom:12px;display:flex;align-items:center;gap:5px}
+.status-unlocked{color:var(--green)}
+.status-locked{color:var(--amber)}
+
+/* HOW */
+.how-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:20px}
+.how-title{font-size:12px;color:var(--text3);font-weight:600;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:16px}
+.how-steps{display:flex;flex-direction:column}
+.how-step{display:flex;gap:14px;padding:13px 0;border-bottom:1px solid var(--border)}
+.how-step:last-child{border-bottom:none}
+.how-num{width:24px;height:24px;border-radius:50%;flex-shrink:0;margin-top:1px;background:var(--accent-dim);border:1px solid rgba(34,197,240,0.2);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:10px;color:var(--accent)}
+.how-step-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:2px}
+.how-step-desc{font-size:12px;color:var(--text3);line-height:1.6}
+
+/* ALERTS */
+.alert{padding:12px 16px;border-radius:var(--r2);font-size:13px;margin-bottom:14px;line-height:1.5}
+.alert-error{background:var(--red-dim);border:1px solid rgba(248,113,113,0.2);color:var(--red)}
+.alert-success{background:var(--green-dim);border:1px solid rgba(52,211,153,0.2);color:var(--green)}
+.alert-info{background:var(--accent-dim);border:1px solid rgba(34,197,240,0.2);color:var(--accent2)}
+.alert-warn{background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.2);color:var(--amber)}
+
+/* MODAL */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(6px);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px}
+.modal{background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);padding:28px;width:100%;max-width:400px;animation:modal-in 0.25s ease}
+@keyframes modal-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+.modal-title{font-size:16px;font-weight:600;color:var(--text);margin-bottom:20px}
+.modal-field{margin-bottom:14px}
+.modal-label{font-size:12px;color:var(--text3);margin-bottom:6px;font-weight:500;display:block}
+.modal-input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r2);padding:10px 14px;color:var(--text);font-size:14px}
+.modal-input:focus{border-color:rgba(34,197,240,0.4);outline:none}
 .modal-actions{display:flex;gap:10px;margin-top:20px}
-.modal-btn{flex:1;padding:10px;border-radius:var(--r2);font-size:13px;font-weight:600;border:none;transition:all 0.2s;cursor:pointer}
-.modal-btn.primary{background:var(--accent);color:var(--bg)}
-.modal-btn.secondary{background:var(--surface2);color:var(--muted2);border:1px solid var(--border)}
-.notif-banner{background:rgba(34,184,230,0.08);border:1px solid rgba(34,184,230,0.2);border-radius:var(--r2);padding:10px 16px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;color:var(--muted2)}
-.notif-btn{padding:5px 12px;border:1px solid var(--accent);border-radius:20px;background:transparent;color:var(--accent);font-size:12px;white-space:nowrap;transition:all 0.2s;cursor:pointer}
-.notif-btn:hover{background:var(--accent);color:var(--bg)}
-.alert{padding:12px 16px;border-radius:var(--r2);font-size:13px;margin-bottom:12px}
-.alert-error{background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2);color:var(--red)}
-.alert-success{background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.2);color:var(--green)}
-.alert-info{background:var(--accent-dim);border:1px solid rgba(34,184,230,0.2);color:var(--accent2)}
-.how-list{display:flex;flex-direction:column;gap:0}
-.how-item{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--border)}
-.how-item:last-child{border-bottom:none}
-.how-num{width:26px;height:26px;border-radius:50%;background:var(--accent-dim);border:1px solid rgba(34,184,230,0.3);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;color:var(--accent);flex-shrink:0;margin-top:1px}
-.how-text h4{font-size:13px;font-weight:600;color:#fff;margin-bottom:2px}
-.how-text p{font-size:12px;color:var(--muted);line-height:1.5}
-.spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,0.2);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;display:inline-block}
-@keyframes spin{to{transform:rotate(360deg)}}
-@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
-.fade-up{animation:fadeUp 0.4s ease both}
+.modal-cancel{flex:1;padding:10px;border:1px solid var(--border);border-radius:var(--r2);background:transparent;color:var(--text2);font-size:13px;font-weight:500;cursor:pointer;transition:all 0.2s}
+.modal-cancel:hover{border-color:var(--border2);color:var(--text)}
+.modal-confirm{flex:1;padding:10px;border:none;border-radius:var(--r2);background:var(--accent);color:#08090d;font-size:13px;font-weight:700;cursor:pointer;transition:all 0.2s}
+.modal-confirm:hover{opacity:0.9}
+
+/* NOTIF */
+.notif-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;margin-bottom:16px;background:var(--surface2);border:1px solid rgba(34,197,240,0.15);border-radius:var(--r2);font-size:13px;color:var(--text2)}
+.notif-btn{padding:5px 12px;border:1px solid rgba(34,197,240,0.3);border-radius:20px;background:transparent;color:var(--accent);font-size:11px;font-weight:600;white-space:nowrap;transition:all 0.2s;cursor:pointer}
+.notif-btn:hover{background:var(--accent);color:#08090d}
+
+/* SPINNER */
+.spin{width:16px;height:16px;border:2px solid rgba(8,9,13,0.3);border-top-color:#08090d;border-radius:50%;animation:spinning 0.65s linear infinite;display:inline-block}
+@keyframes spinning{to{transform:rotate(360deg)}}
+
+/* EMPTY */
+.empty-state{text-align:center;padding:48px 20px}
+.empty-icon{font-size:40px;margin-bottom:12px;opacity:0.35}
+.empty-title{font-size:15px;font-weight:600;color:var(--text2);margin-bottom:6px}
+.empty-desc{font-size:13px;color:var(--text3);margin-bottom:20px}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.fade{animation:fadeUp 0.35s ease both}
 `;
 
 const T = {
-  en: {
-    send:"Send",receive:"Receive",scan:"Scan",withdraw:"Withdraw",
-    history:"History",connect:"Connect Wallet",connecting:"Connecting...",
-    sending:"Sending...",scanning:"Scanning...",withdrawing:"Withdrawing...",
-    amount:"Amount",recipient:"Recipient (stealth address or meta-address)",
-    fixedDenom:"Fixed denomination (more privacy)",timelock:"Time-lock (max privacy)",
-    timelockDesc:"Withdraw only on next 6h window",
-    sendPrivate:"Send Private",privacyFee:"Privacy fee",
-    noHistory:"No transactions yet",viewOnExplorer:"View on Basescan",
-    yourMetaAddress:"Your meta-address (share to receive)",spendingKey:"Spending key (private)",
-    viewingKey:"Viewing key (private)",generateKeys:"Generate new keys",
-    copyLink:"Copy payment link",payLink:"Payment link",
-    exportKeys:"Export keys",importKeys:"Import keys",
-    scanDesc:"Scan the blockchain to find deposits sent to your stealth addresses.",
-    scanBtn:"Scan blockchain",found:"deposits found",
-    withdrawDesc:"Withdraw funds from your stealth addresses to your real wallet.",
-    noDeposits:"No deposits found. Scan first.",
-    locked:"Locked until",unlocked:"Unlocked",
-    enableNotifs:"Enable notifications",notifAsk:"Get notified when your transaction completes.",
-    wrongNetwork:"Please switch to Base Mainnet in MetaMask.",
-    howTitle:"How privacy works",
-    how1t:"Disposable address",how1d:"A new address is created for each transaction — never seen before on-chain.",
-    how2t:"Multi-hop routing",how2d:"Funds pass through ephemeral wallets with random delays (20–200s).",
-    how3t:"Fixed denominations",how3d:"Standard amounts create anonymity sets — your value blends with others.",
-    how4t:"Stealth addresses",how4d:"Recipient is invisible on-chain. Only they can detect the deposit.",
-    exportTitle:"Export keys (AES-256)",importTitle:"Import keys",
-    password:"Password",confirm:"Confirm",cancel:"Cancel",
-    copied:"Copied!",copyPayLink:"Copy payment link",
-    backupDesc:"Import a previously exported backup file.",
-  },
   pt: {
-    send:"Enviar",receive:"Receber",scan:"Escanear",withdraw:"Sacar",
-    history:"Histórico",connect:"Conectar Carteira",connecting:"Conectando...",
-    sending:"Enviando...",scanning:"Escaneando...",withdrawing:"Sacando...",
-    amount:"Valor",recipient:"Destinatário (stealth address ou meta-address)",
-    fixedDenom:"Valor fixo (mais privacidade)",timelock:"Time-lock (privacidade máxima)",
-    timelockDesc:"Saque apenas na próxima janela de 6h",
-    sendPrivate:"Envio Privado",privacyFee:"Taxa de privacidade",
-    noHistory:"Nenhuma transação ainda",viewOnExplorer:"Ver no Basescan",
-    yourMetaAddress:"Seu meta-address (compartilhe para receber)",spendingKey:"Chave de gasto (privada)",
-    viewingKey:"Chave de visualização (privada)",generateKeys:"Gerar novas chaves",
-    copyLink:"Copiar link de pagamento",payLink:"Link de pagamento",
-    exportKeys:"Exportar chaves",importKeys:"Importar chaves",
-    scanDesc:"Escanear a blockchain para encontrar depósitos enviados aos seus stealth addresses.",
-    scanBtn:"Escanear blockchain",found:"depósitos encontrados",
-    withdrawDesc:"Sacar fundos dos seus stealth addresses para sua carteira real.",
-    noDeposits:"Nenhum depósito encontrado. Escanear primeiro.",
-    locked:"Bloqueado até",unlocked:"Disponível",
-    enableNotifs:"Ativar notificações",notifAsk:"Seja notificado quando sua transação for concluída.",
-    wrongNetwork:"Por favor, mude para a Base Mainnet no MetaMask.",
-    howTitle:"Como funciona a privacidade",
-    how1t:"Endereço descartável",how1d:"Um novo endereço é criado para cada transação — nunca visto antes na blockchain.",
-    how2t:"Roteamento multi-hop",how2d:"Os fundos passam por carteiras efêmeras com delays aleatórios (20–200s).",
-    how3t:"Denominações fixas",how3d:"Valores padronizados criam anonymity sets — seu valor se mistura com outros.",
-    how4t:"Stealth addresses",how4d:"O destinatário é invisível on-chain. Só ele consegue detectar o depósito.",
-    exportTitle:"Exportar chaves (AES-256)",importTitle:"Importar chaves",
+    send:"Enviar",receive:"Receber",scan:"Recebidos",withdraw:"Sacar",
+    sendDesc:"Seus fundos chegam sem revelar sua identidade.",
+    amount:"Valor",to:"Enviar para",toHint:"Cole o endereço ou link de pagamento do destinatário",
+    fixedDenom:"Valor padronizado",fixedDenomDesc:"mais privacidade",
+    timelock:"Atraso 6h",timelockDesc:"máxima privacidade",
+    sendBtn:"Enviar com privacidade",sending:"Processando...",
+    fee:"Taxa de privacidade",history:"Histórico",
+    noHistory:"Nenhum envio ainda",noHistoryDesc:"Seus envios privados aparecerão aqui.",
+    basescan:"Ver no Basescan",
+    receiveAddress:"Seu endereço de recebimento",
+    receiveDesc:"Compartilhe para receber pagamentos privados.",
+    spendKey:"Chave de acesso",viewKey:"Chave de visualização",
+    keysHint:"Passe o mouse para revelar. Nunca compartilhe.",
+    paylink:"Link de pagamento",paylinkDesc:"Compartilhe — quem clicar pode te pagar diretamente.",
+    copy:"Copiar",copied:"Copiado!",copyLink:"Copiar link",
+    exportKeys:"Fazer backup",generateKeys:"Novo endereço",
+    noKeys:"Você ainda não tem endereço de recebimento.",
+    noKeysDesc:"Crie um endereço para receber pagamentos privados.",
+    generateBtn:"Criar endereço de recebimento",
+    importKeys:"Importar backup",backupDesc:"Restaure suas chaves a partir de um backup.",
+    scanTitle:"Verificar pagamentos recebidos",
+    scanDesc:"Verifique se você recebeu algum pagamento privado.",
+    scanBtn:"Verificar agora",scanning:"Verificando...",
+    scanFound:"pagamento(s) encontrado(s)",scanEmpty:"Nenhum pagamento encontrado.",
+    howScan:"Como funciona",
+    how1t:"Busca na blockchain",how1d:"Analisa os eventos recentes do contrato SilentFlow.",
+    how2t:"Descriptografia local",how2d:"Suas chaves ficam no browser. Nunca saem do dispositivo.",
+    how3t:"100% privado",how3d:"Ninguém sabe que você está verificando.",
+    withdrawTitle:"Sacar para sua carteira",
+    withdrawDesc:"Transfira pagamentos recebidos para sua carteira.",
+    withdrawBtn:"Sacar agora",withdrawing:"Sacando...",
+    noWithdraw:"Nenhum pagamento para sacar.",
+    noWithdrawDesc:"Vá para Recebidos e verifique primeiro.",
+    goScan:"Verificar recebimentos",
+    unlocked:"Disponível para saque",locked:"Bloqueado até",
+    gasless:"Saque sem gas",gaslessDesc:"Você não precisa de ETH para sacar. O protocolo cobre o gas.",
+    connect:"Conectar carteira",connecting:"Conectando...",
+    wrongNetwork:"Mude para a rede Base no MetaMask.",
+    exportTitle:"Backup das chaves (AES-256)",
     password:"Senha",confirm:"Confirmar",cancel:"Cancelar",
-    copied:"Copiado!",copyPayLink:"Copiar link de pagamento",
-    backupDesc:"Importe um arquivo de backup exportado anteriormente.",
+    notifAsk:"Ative notificações para saber quando seu envio for concluído.",
+    notifBtn:"Ativar",
+    pipeline:"Processando envio privado",
+    pipe1:"Entrada recebida",pipe2:"Dividindo em partes",pipe3:"Roteando entre carteiras",pipe4:"Depositado com privacidade",
+    invalidRecipient:"Destinatário inválido.",enterAmount:"Informe o valor.",enterRecipient:"Informe o destinatário.",
+    sent:"Enviado! Processando...",txComplete:"✓ Transação concluída!",
+    importedKeys:"Chaves importadas!",wrongPwd:"Senha incorreta ou arquivo inválido.",
+    noKeysForScan:"Crie seu endereço de recebimento primeiro.",
+    withdrawSuccess:"Saque realizado!",contractVerified:"Contrato verificado na Base",
+  },
+  en: {
+    send:"Send",receive:"Receive",scan:"Received",withdraw:"Withdraw",
+    sendDesc:"Your funds arrive without revealing your identity.",
+    amount:"Amount",to:"Send to",toHint:"Paste the recipient address or payment link",
+    fixedDenom:"Standard amount",fixedDenomDesc:"more privacy",
+    timelock:"6h delay",timelockDesc:"maximum privacy",
+    sendBtn:"Send privately",sending:"Processing...",
+    fee:"Privacy fee",history:"History",
+    noHistory:"No transfers yet",noHistoryDesc:"Your private transfers will appear here.",
+    basescan:"View on Basescan",
+    receiveAddress:"Your receiving address",
+    receiveDesc:"Share this to receive private payments.",
+    spendKey:"Spending key",viewKey:"Viewing key",
+    keysHint:"Hover to reveal. Never share.",
+    paylink:"Payment link",paylinkDesc:"Share this — anyone who clicks can pay you privately.",
+    copy:"Copy",copied:"Copied!",copyLink:"Copy link",
+    exportKeys:"Backup keys",generateKeys:"New address",
+    noKeys:"You don't have a receiving address yet.",
+    noKeysDesc:"Create an address to receive private payments.",
+    generateBtn:"Create receiving address",
+    importKeys:"Import backup",backupDesc:"Restore your keys from a backup file.",
+    scanTitle:"Check received payments",
+    scanDesc:"Check if you have received any private payment.",
+    scanBtn:"Check now",scanning:"Checking...",
+    scanFound:"payment(s) found",scanEmpty:"No payments found.",
+    howScan:"How it works",
+    how1t:"Blockchain scan",how1d:"Analyses recent events from the SilentFlow contract.",
+    how2t:"Local decryption",how2d:"Your keys stay in the browser. Never leave your device.",
+    how3t:"100% private",how3d:"Nobody knows you are checking.",
+    withdrawTitle:"Withdraw to your wallet",
+    withdrawDesc:"Transfer received payments to your wallet.",
+    withdrawBtn:"Withdraw now",withdrawing:"Withdrawing...",
+    noWithdraw:"No payments to withdraw.",
+    noWithdrawDesc:"Go to Received and check first.",
+    goScan:"Check received",
+    unlocked:"Available to withdraw",locked:"Locked until",
+    gasless:"Gasless withdrawal",gaslessDesc:"You don't need ETH to withdraw. The protocol covers gas.",
+    connect:"Connect wallet",connecting:"Connecting...",
+    wrongNetwork:"Switch to Base network in MetaMask.",
+    exportTitle:"Key backup (AES-256)",
+    password:"Password",confirm:"Confirm",cancel:"Cancel",
+    notifAsk:"Enable notifications to know when your transfer is complete.",
+    notifBtn:"Enable",
+    pipeline:"Processing private transfer",
+    pipe1:"Entry received",pipe2:"Splitting into parts",pipe3:"Routing through wallets",pipe4:"Deposited privately",
+    invalidRecipient:"Invalid recipient.",enterAmount:"Enter an amount.",enterRecipient:"Enter a recipient.",
+    sent:"Sent! Processing...",txComplete:"✓ Transaction complete!",
+    importedKeys:"Keys imported!",wrongPwd:"Wrong password or invalid file.",
+    noKeysForScan:"Create your receiving address first.",
+    withdrawSuccess:"Withdrawal successful!",contractVerified:"Verified contract on Base",
   }
 };
 
 export default function App() {
-  const [lang, setLang]                   = useState("pt");
+  const [lang, setLang]             = useState("pt");
   const t = T[lang];
-  const [account, setAccount]             = useState("");
-  const [tab, setTab]                     = useState("send");
-  const [token, setToken]                 = useState("ETH");
-  const [amount, setAmount]               = useState("");
-  const [recipient, setRecipient]         = useState("");
-  const [useFixedDenom, setUseFixedDenom] = useState(false);
-  const [useTimelocked, setUseTimelocked] = useState(false);
-  const [selectedDenom, setSelectedDenom] = useState(null);
-  const [loading, setLoading]             = useState(false);
-  const [status, setStatus]               = useState("");
-  const [statusType, setStatusType]       = useState("info");
-  const [history, setHistory]             = useState([]);
-  const [pipelineId, setPipelineId]       = useState(null);
-  const [pipelineData, setPipelineData]   = useState(null);
-  const [notifPerm, setNotifPerm]         = useState(Notification?.permission || "default");
-  const [spendingKey, setSpendingKey]     = useState("");
-  const [viewingKey, setViewingKey]       = useState("");
-  const [metaAddress, setMetaAddress]     = useState("");
-  const [payLink, setPayLink]             = useState("");
-  const [copied, setCopied]               = useState("");
-  const [scanResults, setScanResults]     = useState([]);
-  const [scanning, setScanning]           = useState(false);
-  const [showExport, setShowExport]       = useState(false);
-  const [modalPwd, setModalPwd]           = useState("");
-  const [importData, setImportData]       = useState("");
-  const [importPwd, setImportPwd]         = useState("");
+  const [account, setAccount]       = useState("");
+  const [tab, setTab]               = useState("send");
+  const [token, setToken]           = useState("ETH");
+  const [amount, setAmount]         = useState("");
+  const [recipient, setRecipient]   = useState("");
+  const [useFixed, setUseFixed]     = useState(false);
+  const [useLock, setUseLock]       = useState(false);
+  const [selDenom, setSelDenom]     = useState(null);
+  const [loading, setLoading]       = useState(false);
+  const [alert, setAlert]           = useState(null);
+  const [history, setHistory]       = useState([]);
+  const [pipelineId, setPipelineId] = useState(null);
+  const [pipeData, setPipeData]     = useState(null);
+  const [notifPerm, setNotifPerm]   = useState(Notification?.permission || "default");
+  const [sk, setSk]                 = useState("");
+  const [vk, setVk]                 = useState("");
+  const [meta, setMeta]             = useState("");
+  const [payLink, setPayLink]       = useState("");
+  const [copied, setCopied]         = useState("");
+  const [scanResults, setScanResults] = useState([]);
+  const [scanning, setScanning]     = useState(false);
+  const [showExport, setShowExport] = useState(false);
+  const [exportPwd, setExportPwd]   = useState("");
+  const [importData, setImportData] = useState("");
+  const [importPwd, setImportPwd]   = useState("");
 
   useEffect(() => {
-    const sk = localStorage.getItem("sf_spending");
-    const vk = localStorage.getItem("sf_viewing");
-    if (sk && vk) { setSpendingKey(sk); setViewingKey(vk); buildMetaAddress(sk, vk); }
-    const hist = localStorage.getItem("sf_history");
-    if (hist) setHistory(JSON.parse(hist));
+    const s = localStorage.getItem("sf_sk");
+    const v = localStorage.getItem("sf_vk");
+    if (s && v) { setSk(s); setVk(v); buildMeta(s, v); }
+    const h = localStorage.getItem("sf_hist");
+    if (h) setHistory(JSON.parse(h));
   }, []);
 
   useEffect(() => {
-    const path = window.location.pathname;
-    const match = path.match(/\/p\/(st:.+)/);
-    if (match) { setRecipient(decodeURIComponent(match[1])); setTab("send"); }
+    const m = window.location.pathname.match(/\/p\/(st:.+)/);
+    if (m) { setRecipient(decodeURIComponent(m[1])); setTab("send"); }
   }, []);
 
   useEffect(() => {
     if (!pipelineId) return;
-    const interval = setInterval(async () => {
+    const iv = setInterval(async () => {
       try {
-        const res = await fetch(`${BACKEND_URL}/status/${pipelineId}`);
-        const data = await res.json();
-        setPipelineData(data);
-        if (data.status === "completo") {
-          clearInterval(interval);
+        const r = await fetch(`${BACKEND_URL}/status/${pipelineId}`);
+        const d = await r.json();
+        setPipeData(d);
+        if (d.status === "completo") {
+          clearInterval(iv);
           setPipelineId(null);
-          sendNotification("SilentFlow", lang === "pt" ? "Transação concluída!" : "Transaction complete!");
-          showStatus(lang === "pt" ? "✓ Transação concluída!" : "✓ Transaction complete!", "success");
+          if (Notification?.permission === "granted") new Notification("SilentFlow", { body: t.txComplete, icon:"/logo.png" });
+          showAlert(t.txComplete, "success");
         }
       } catch {}
     }, 5000);
-    const timeout = setTimeout(() => clearInterval(interval), 20 * 60 * 1000);
-    return () => { clearInterval(interval); clearTimeout(timeout); };
+    const to = setTimeout(() => clearInterval(iv), 20*60*1000);
+    return () => { clearInterval(iv); clearTimeout(to); };
   }, [pipelineId, lang]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function buildMetaAddress(sk, vk) {
+  function buildMeta(s, v) {
     try {
-      const spendPub = ethers.SigningKey.computePublicKey(sk, true);
-      const viewPub  = ethers.SigningKey.computePublicKey(vk, true);
-      const meta = `st:${spendPub}:${viewPub}`;
-      setMetaAddress(meta);
-      setPayLink(`${window.location.origin}/p/${encodeURIComponent(meta)}`);
-      return meta;
-    } catch { return ""; }
+      const sp = ethers.SigningKey.computePublicKey(s, true);
+      const vp = ethers.SigningKey.computePublicKey(v, true);
+      const m  = `st:${sp}:${vp}`;
+      setMeta(m);
+      setPayLink(`${window.location.origin}/p/${encodeURIComponent(m)}`);
+    } catch {}
   }
 
   function generateKeys() {
     const sw = ethers.Wallet.createRandom();
     const vw = ethers.Wallet.createRandom();
-    setSpendingKey(sw.privateKey);
-    setViewingKey(vw.privateKey);
-    localStorage.setItem("sf_spending", sw.privateKey);
-    localStorage.setItem("sf_viewing", vw.privateKey);
-    buildMetaAddress(sw.privateKey, vw.privateKey);
+    setSk(sw.privateKey); setVk(vw.privateKey);
+    localStorage.setItem("sf_sk", sw.privateKey);
+    localStorage.setItem("sf_vk", vw.privateKey);
+    buildMeta(sw.privateKey, vw.privateKey);
   }
 
-  function saveHistory(entry) {
-    const updated = [entry, ...history].slice(0, 50);
-    setHistory(updated);
-    localStorage.setItem("sf_history", JSON.stringify(updated));
+  function saveHistory(e) {
+    const u = [e, ...history].slice(0,50);
+    setHistory(u);
+    localStorage.setItem("sf_hist", JSON.stringify(u));
   }
 
-  function sendNotification(title, body) {
-    if (Notification?.permission === "granted") new Notification(title, { body, icon: "/logo.png" });
+  function showAlert(msg, type="info") {
+    setAlert({msg,type});
+    setTimeout(() => setAlert(null), 6000);
   }
 
-  async function requestNotifPerm() {
-    const perm = await Notification?.requestPermission();
-    setNotifPerm(perm);
+  function copyText(text, key) {
+    navigator.clipboard.writeText(text);
+    setCopied(key);
+    setTimeout(() => setCopied(""), 2000);
   }
 
   async function connect() {
@@ -399,387 +519,262 @@ export default function App() {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const net = await provider.getNetwork();
       if (Number(net.chainId) !== BASE_CHAIN_ID) {
-        try {
-          await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x2105" }] });
-        } catch {
-          setStatus(t.wrongNetwork); setStatusType("error"); setLoading(false); return;
-        }
+        try { await window.ethereum.request({ method:"wallet_switchEthereumChain", params:[{chainId:"0x2105"}] }); }
+        catch { showAlert(t.wrongNetwork,"error"); setLoading(false); return; }
       }
-      const accounts = await provider.send("eth_requestAccounts", []);
-      setAccount(accounts[0]);
-      setStatus("");
-    } catch (e) { setStatus(e.message); setStatusType("error"); }
+      const accs = await provider.send("eth_requestAccounts",[]);
+      setAccount(accs[0]);
+    } catch(e) { showAlert(e.message,"error"); }
     setLoading(false);
   }
 
-  function showStatus(msg, type = "info") { setStatus(msg); setStatusType(type); }
-
-  function copyText(text, key) {
-    navigator.clipboard.writeText(text);
-    setCopied(key);
-    setTimeout(() => setCopied(""), 2000);
-  }
-
-  function getTierForAmount() {
-    const num = parseFloat(amount) || 0;
-    const usd = token === "ETH" ? num * 3000 : num;
+  function getTier() {
+    const v = useFixed ? (selDenom||0) : (parseFloat(amount)||0);
+    const usd = token==="ETH" ? v*3000 : v;
     return getTierInfo(usd);
   }
 
-  // ── SEND ────────────────────────────────────────────────────────────────────
   async function send() {
     if (!account) return connect();
-    const val = useFixedDenom ? selectedDenom : parseFloat(amount);
-    if (!val || val <= 0) return showStatus(lang === "pt" ? "Informe o valor." : "Enter an amount.", "error");
-    if (!recipient.trim()) return showStatus(lang === "pt" ? "Informe o destinatário." : "Enter a recipient.", "error");
-
-    setLoading(true);
-    setStatus("");
-    setPipelineData(null);
-
+    const val = useFixed ? selDenom : parseFloat(amount);
+    if (!val || val<=0) return showAlert(t.enterAmount,"error");
+    if (!recipient.trim()) return showAlert(t.enterRecipient,"error");
+    setLoading(true); setPipeData(null);
     try {
-      // Derive stealth address from recipient
       let stealthAddress, ephemeralPubKey, viewTag;
       const recip = recipient.trim();
       if (recip.startsWith("st:")) {
-        const clean = recip.replace("st:", "");
-        const colonIdx = clean.indexOf(":", 4);
-        const spendingPubKey = clean.substring(0, colonIdx);
-        const viewingPubKey  = clean.substring(colonIdx + 1);
-        const ephWallet = ethers.Wallet.createRandom();
-        ephemeralPubKey = ethers.SigningKey.computePublicKey(ephWallet.privateKey, true);
-        const h = ethers.keccak256(ethers.concat([
-          ethers.getBytes(ephemeralPubKey),
-          ethers.getBytes(viewingPubKey)
-        ]));
-        const stealthSeed = ethers.keccak256(ethers.concat([
-          ethers.getBytes(h),
-          ethers.getBytes(spendingPubKey)
-        ]));
-        stealthAddress = new ethers.Wallet(stealthSeed).address;
-        viewTag = parseInt(h.slice(2, 4), 16);
+        const clean = recip.replace("st:","");
+        const idx = clean.indexOf(":",4);
+        const sPub = clean.substring(0,idx);
+        const vPub = clean.substring(idx+1);
+        const ew = ethers.Wallet.createRandom();
+        ephemeralPubKey = ethers.SigningKey.computePublicKey(ew.privateKey,true);
+        const h = ethers.keccak256(ethers.concat([ethers.getBytes(ephemeralPubKey),ethers.getBytes(vPub)]));
+        const seed = ethers.keccak256(ethers.concat([ethers.getBytes(h),ethers.getBytes(sPub)]));
+        stealthAddress = new ethers.Wallet(seed).address;
+        viewTag = parseInt(h.slice(2,4),16);
       } else {
-        stealthAddress  = recip;
+        stealthAddress = recip;
         ephemeralPubKey = ethers.hexlify(ethers.randomBytes(33));
         viewTag = 0;
       }
-
-      // Call backend /entrada with all required params
-      const params = new URLSearchParams({
-        token,
-        stealthAddress,
-        ephemeralPubKey,
-        viewTag: String(viewTag),
-        timelocked: String(useTimelocked)
-      });
-      const entryRes  = await fetch(`${BACKEND_URL}/entrada?${params}`);
-      const entryData = await entryRes.json();
-      if (entryData.erro) throw new Error(entryData.erro);
-      const entryAddress = entryData.entradaAddress;
-      if (!entryAddress) throw new Error(lang === "pt" ? "Backend não retornou endereço de entrada." : "Backend did not return entry address.");
-
+      const params = new URLSearchParams({ token, stealthAddress, ephemeralPubKey, viewTag:String(viewTag), timelocked:String(useLock) });
+      const er = await fetch(`${BACKEND_URL}/entrada?${params}`);
+      const ed = await er.json();
+      if (ed.erro) throw new Error(ed.erro);
+      if (!ed.entradaAddress) throw new Error("Backend error.");
       const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer   = await provider.getSigner();
+      const signer = await provider.getSigner();
       const decimals = TOKENS[token].decimals;
-      const valBig   = ethers.parseUnits(val.toString(), decimals);
-
+      const valBig = ethers.parseUnits(val.toString(), decimals);
       let txHash;
-      if (token === "ETH") {
-        const tx = await signer.sendTransaction({ to: entryAddress, value: valBig });
-        await tx.wait();
-        txHash = tx.hash;
+      if (token==="ETH") {
+        const tx = await signer.sendTransaction({ to:ed.entradaAddress, value:valBig });
+        await tx.wait(); txHash = tx.hash;
       } else {
-        const tc  = new ethers.Contract(TOKENS[token].address, ERC20_ABI, signer);
-        const allow = await tc.allowance(account, entryAddress);
-        if (allow < valBig) { const a = await tc.approve(entryAddress, valBig); await a.wait(); }
-        const erc20 = new ethers.Contract(TOKENS[token].address, ERC20_ABI, signer);
-        const tx = await erc20.transfer(entryAddress, valBig);
-        await tx.wait();
-        txHash = tx.hash;
+        const tc = new ethers.Contract(TOKENS[token].address, ERC20_ABI, signer);
+        const allow = await tc.allowance(account, ed.entradaAddress);
+        if (allow < valBig) { const a = await tc.approve(ed.entradaAddress,valBig); await a.wait(); }
+        const erc = new ethers.Contract(TOKENS[token].address, ERC20_ABI, signer);
+        const tx = await erc.transfer(ed.entradaAddress, valBig);
+        await tx.wait(); txHash = tx.hash;
       }
-
-      saveHistory({ hash: txHash, token, amount: val, to: recip, ts: Date.now(), status: "pending" });
-      showStatus(lang === "pt" ? "Enviado! Processando pipeline de privacidade..." : "Sent! Processing privacy pipeline...", "info");
-
-      // Poll for pipeline ID
+      saveHistory({ hash:txHash, token, amount:val, to:recip, ts:Date.now(), status:"pending" });
+      showAlert(t.sent,"info");
       try {
-        const aguardar = await fetch(`${BACKEND_URL}/aguardar/${entryAddress}`);
-        const aData    = await aguardar.json();
-        if (aData.pipelineId) setPipelineId(aData.pipelineId);
+        const ar = await fetch(`${BACKEND_URL}/aguardar/${ed.entradaAddress}`);
+        const ad = await ar.json();
+        if (ad.pipelineId) setPipelineId(ad.pipelineId);
       } catch {}
-
-    } catch (e) {
-      showStatus(e.message || "Erro ao enviar.", "error");
-    }
+    } catch(e) { showAlert(e.message||"Erro.","error"); }
     setLoading(false);
   }
 
-  // ── SCAN ────────────────────────────────────────────────────────────────────
   async function scan() {
-    if (!spendingKey || !viewingKey) {
-      return showStatus(lang === "pt" ? "Gere suas chaves primeiro na aba Receber." : "Generate your keys first in the Receive tab.", "error");
-    }
-    setScanning(true);
-    setScanResults([]);
+    if (!sk||!vk) return showAlert(t.noKeysForScan,"error");
+    setScanning(true); setScanResults([]);
     try {
       const provider = new ethers.JsonRpcProvider("https://mainnet.base.org");
       const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
-      const filter   = contract.filters.StealthDeposit();
-      const current  = await provider.getBlockNumber();
-      const CHUNK    = 9000; // RPC limit is 10k, use 9k to be safe
-      const TOTAL    = 40000; // scan last ~40k blocks
-      const fromBlock = Math.max(0, current - TOTAL);
-      const found    = [];
-
-      // Fetch in chunks to respect RPC limits
-      for (let start = fromBlock; start < current; start += CHUNK) {
-        const end = Math.min(start + CHUNK - 1, current);
+      const filter = contract.filters.StealthDeposit();
+      const current = await provider.getBlockNumber();
+      const CHUNK = 9000; const TOTAL = 36000;
+      const from = Math.max(0, current-TOTAL);
+      const found = [];
+      for (let s2=from; s2<current; s2+=CHUNK) {
+        const end = Math.min(s2+CHUNK-1,current);
         try {
-          const events = await contract.queryFilter(filter, start, end);
-          for (const ev of events) {
-            const [ephPubKey, stealthAddr, tokenAddr, amt, vTag, timelocked, unlockAt] = ev.args;
-            const result = tryDecryptDeposit(ephPubKey, stealthAddr, Number(vTag), spendingKey, viewingKey);
-            if (result) {
-              const tokenSym = Object.keys(TOKENS).find(k => TOKENS[k].address.toLowerCase() === tokenAddr.toLowerCase()) || "?";
-              const dec = TOKENS[tokenSym]?.decimals || 18;
-              found.push({
-                stealthAddress: result.stealthAddress,
-                stealthPrivKey: result.stealthPrivKey,
-                token: tokenSym, tokenAddr,
-                amount: ethers.formatUnits(amt, dec),
-                timelocked, unlockAt: Number(unlockAt),
-                txHash: ev.transactionHash
-              });
+          const evs = await contract.queryFilter(filter,s2,end);
+          for (const ev of evs) {
+            const [eph,sAddr,tAddr,amt,vt,tl,ua] = ev.args;
+            const res = tryDecrypt(eph,sAddr,Number(vt),sk,vk);
+            if (res) {
+              const sym = Object.keys(TOKENS).find(k=>TOKENS[k].address.toLowerCase()===tAddr.toLowerCase())||"?";
+              const dec = TOKENS[sym]?.decimals||18;
+              found.push({ stealthAddress:res.stealthAddress, stealthPrivKey:res.stealthPrivKey, token:sym, tokenAddr:tAddr, amount:ethers.formatUnits(amt,dec), timelocked:tl, unlockAt:Number(ua), txHash:ev.transactionHash });
             }
           }
-        } catch { /* skip failed chunk */ }
+        } catch {}
       }
-
       setScanResults(found);
-      if (found.length === 0) showStatus(lang === "pt" ? "Nenhum depósito encontrado." : "No deposits found.", "info");
-    } catch (e) { showStatus(e.message, "error"); }
+      if (!found.length) showAlert(t.scanEmpty,"info");
+    } catch(e) { showAlert(e.message,"error"); }
     setScanning(false);
   }
 
-  // ── WITHDRAW ────────────────────────────────────────────────────────────────
   async function doWithdraw(item) {
+    if (!account) return connect();
     setLoading(true);
     try {
-      const stealthWallet = new ethers.Wallet(item.stealthPrivKey);
+      const sw = new ethers.Wallet(item.stealthPrivKey);
       const provider = new ethers.JsonRpcProvider("https://mainnet.base.org");
       const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
-      const nonce    = await contract.withdrawNonces(item.stealthAddress);
-      const chainId  = BigInt(BASE_CHAIN_ID);
-      const packedHash = ethers.keccak256(ethers.solidityPacked(
-        ["address","address","address","uint256","uint256"],
-        [item.stealthAddress, item.tokenAddr, account, nonce, chainId]
-      ));
-      const sig = await stealthWallet.signMessage(ethers.getBytes(packedHash));
-      const res = await fetch(`${BACKEND_URL}/withdraw`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stealthAddress: item.stealthAddress, token: item.tokenAddr, recipient: account, sig })
-      });
-      const data = await res.json();
-      if (data.ok) {
-        showStatus(lang === "pt" ? "Saque realizado!" : "Withdrawal successful!", "success");
-        setScanResults(prev => prev.filter(r => r.stealthAddress !== item.stealthAddress));
-      } else {
-        showStatus(data.error || "Erro no saque.", "error");
-      }
-    } catch (e) { showStatus(e.message, "error"); }
+      const nonce = await contract.withdrawNonces(item.stealthAddress);
+      const packed = ethers.keccak256(ethers.solidityPacked(["address","address","address","uint256","uint256"],[item.stealthAddress,item.tokenAddr,account,nonce,BigInt(BASE_CHAIN_ID)]));
+      const sig = await sw.signMessage(ethers.getBytes(packed));
+      const res = await fetch(`${BACKEND_URL}/withdraw`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({stealthAddress:item.stealthAddress,token:item.tokenAddr,recipient:account,sig})});
+      const d = await res.json();
+      if (d.ok) { showAlert(t.withdrawSuccess,"success"); setScanResults(prev=>prev.filter(r=>r.stealthAddress!==item.stealthAddress)); }
+      else showAlert(d.error||"Erro.","error");
+    } catch(e) { showAlert(e.message,"error"); }
     setLoading(false);
   }
 
-  // ── EXPORT / IMPORT ─────────────────────────────────────────────────────────
   async function handleExport() {
-    if (!modalPwd) return;
-    const encrypted = await encryptKeys({ spendingKey, viewingKey }, modalPwd);
-    const blob = new Blob([encrypted], { type: "text/plain" });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href = url; a.download = "silentflow-keys.enc"; a.click();
-    setShowExport(false); setModalPwd("");
+    if (!exportPwd) return;
+    const enc = await encryptKeys({sk,vk}, exportPwd);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([enc],{type:"text/plain"}));
+    a.download = "silentflow-backup.enc"; a.click();
+    setShowExport(false); setExportPwd("");
   }
 
   async function handleImport() {
-    if (!importPwd || !importData) return;
+    if (!importData||!importPwd) return;
     try {
-      const { spendingKey: sk, viewingKey: vk } = await decryptKeys(importData.trim(), importPwd);
-      setSpendingKey(sk); setViewingKey(vk);
-      localStorage.setItem("sf_spending", sk);
-      localStorage.setItem("sf_viewing", vk);
-      buildMetaAddress(sk, vk);
+      const {sk:s,vk:v} = await decryptKeys(importData.trim(),importPwd);
+      setSk(s); setVk(v);
+      localStorage.setItem("sf_sk",s); localStorage.setItem("sf_vk",v);
+      buildMeta(s,v);
       setImportData(""); setImportPwd("");
-      showStatus(lang === "pt" ? "Chaves importadas!" : "Keys imported!", "success");
-    } catch {
-      showStatus(lang === "pt" ? "Senha incorreta ou arquivo inválido." : "Wrong password or invalid file.", "error");
-    }
+      showAlert(t.importedKeys,"success");
+    } catch { showAlert(t.wrongPwd,"error"); }
   }
 
-  // ── PIPELINE STEPS ──────────────────────────────────────────────────────────
-  const pipelineSteps = [
-    { key: "recebido",  label: lang === "pt" ? "Entrada recebida"          : "Entry received" },
-    { key: "splitting", label: lang === "pt" ? "Split em denominações"     : "Splitting denominations" },
-    { key: "hops",      label: lang === "pt" ? "Multi-hop routing"         : "Multi-hop routing" },
-    { key: "completo",  label: lang === "pt" ? "Depósito no stealth address" : "Deposited to stealth address" }
-  ];
-  function getStepStatus(stepKey) {
-    if (!pipelineData) return "pending";
-    const order = ["recebido","splitting","hops","completo"];
-    const ci = order.indexOf(pipelineData.status);
-    const si = order.indexOf(stepKey);
-    if (si < ci) return "done";
-    if (si === ci) return "active";
-    return "pending";
+  const pipeSteps = [t.pipe1,t.pipe2,t.pipe3,t.pipe4];
+  const pipeOrder = ["recebido","splitting","hops","completo"];
+  function pipeStatus(i) {
+    if (!pipeData) return "wait";
+    const ci = pipeOrder.indexOf(pipeData.status);
+    if (i<ci) return "done";
+    if (i===ci) return "active";
+    return "wait";
   }
 
-  // ── RENDER ──────────────────────────────────────────────────────────────────
+  const tier = getTier();
+
   return (
     <>
       <style>{S}</style>
+      <div className="app-glow" />
       <div className="app">
-
-        {/* NAV */}
         <nav className="nav">
-          <div className="nav-left">
-            <div className="nav-logo">
-              <img src="/logo.png" alt="SilentFlow" onError={e => e.target.style.display="none"} />
-              <span>SILENTFLOW</span>
-            </div>
-            <span className="net-badge">● BASE MAINNET</span>
+          <div className="nav-brand">
+            <img className="nav-logo-img" src="/logo.png" alt="SF" onError={e=>e.target.style.display="none"} />
+            <span className="nav-logo-text">SILENTFLOW</span>
+            <span className="nav-badge">BASE MAINNET</span>
           </div>
           <div className="nav-right">
-            <button className="lang-btn" onClick={() => setLang(l => l === "pt" ? "en" : "pt")}>
-              {lang === "pt" ? "EN" : "PT"}
-            </button>
-            {account ? (
-              <div className="account-pill">
-                <span className="account-dot" />
-                {account.slice(0,6)}...{account.slice(-4)}
-              </div>
-            ) : (
-              <button className="connect-btn" onClick={connect} disabled={loading}>
-                {loading ? t.connecting : t.connect}
-              </button>
-            )}
+            <button className="nav-lang" onClick={()=>setLang(l=>l==="pt"?"en":"pt")}>{lang==="pt"?"EN":"PT"}</button>
+            {account
+              ? <div className="nav-wallet"><span className="wallet-dot"/>{fmt(account)}</div>
+              : <button className="nav-connect" onClick={connect} disabled={loading}>{loading?t.connecting:t.connect}</button>
+            }
           </div>
         </nav>
 
-        {/* MAIN */}
         <main className="main">
-
-          {notifPerm === "default" && (
-            <div className="notif-banner">
+          {notifPerm==="default" && (
+            <div className="notif-bar fade">
               <span>{t.notifAsk}</span>
-              <button className="notif-btn" onClick={requestNotifPerm}>{t.enableNotifs}</button>
+              <button className="notif-btn" onClick={async()=>setNotifPerm(await Notification?.requestPermission())}>{t.notifBtn}</button>
             </div>
           )}
+          {alert && <div className={`alert alert-${alert.type} fade`}>{alert.msg}</div>}
 
-          {status && <div className={`alert alert-${statusType} fade-up`}>{status}</div>}
-
-          {/* TABS */}
-          <div className="tabs">
-            {["send","receive","scan","withdraw"].map(k => (
-              <button key={k} className={`tab ${tab === k ? "active" : ""}`}
-                onClick={() => { setTab(k); setStatus(""); }}>
-                {t[k]}
+          <div className="tabs-wrap">
+            {[{key:"send",icon:"↗",label:t.send},{key:"receive",icon:"⬇",label:t.receive},{key:"scan",icon:"⬡",label:t.scan},{key:"withdraw",icon:"💳",label:t.withdraw}].map(({key,icon,label})=>(
+              <button key={key} className={`tab-btn ${tab===key?"active":""}`} onClick={()=>{setTab(key);setAlert(null);}}>
+                <span className="tab-icon">{icon}</span>{label}
               </button>
             ))}
           </div>
 
-          {/* ── SEND ── */}
-          {tab === "send" && (
-            <div className="grid fade-up">
+          {tab==="send" && (
+            <div className="section-grid fade">
               <div>
                 <div className="card">
-                  <div className="card-title">{t.sendPrivate}</div>
-                  <p className="form-sub" style={{marginBottom:16}}>Non-custodial · BASE MAINNET</p>
-
-                  <div className="token-tabs">
-                    {["ETH","USDC","USDT"].map(tk => (
-                      <button key={tk} className={`token-tab ${token === tk ? "active" : ""}`}
-                        onClick={() => { setToken(tk); setSelectedDenom(null); setAmount(""); }}>
+                  <p className="card-subtitle">{t.sendDesc}</p>
+                  <div className="token-row">
+                    {["ETH","USDC","USDT"].map(tk=>(
+                      <button key={tk} className={`token-btn ${token===tk?"active":""}`} onClick={()=>{setToken(tk);setSelDenom(null);setAmount("");}}>
                         {tk}
                       </button>
                     ))}
                   </div>
-
-                  {amount && !useFixedDenom && (() => {
-                    const tier = getTierForAmount();
-                    return (
-                      <div className="tier-badge" style={{background:`${tier.color}18`,color:tier.color,border:`1px solid ${tier.color}33`}}>
-                        ⬡ {tier.label} — {tier.bps / 100}% fee
-                      </div>
-                    );
-                  })()}
-
-                  <div className="toggle-row">
-                    <div className="toggle-label">
-                      {t.fixedDenom}
-                      <small style={{color:"var(--accent)"}}>+privacy</small>
-                    </div>
-                    <label className="toggle">
-                      <input type="checkbox" checked={useFixedDenom}
-                        onChange={e => { setUseFixedDenom(e.target.checked); setSelectedDenom(null); setAmount(""); }} />
-                      <span className="toggle-slider" />
-                    </label>
+                  <div className="options-row">
+                    <button className={`option-chip ${useFixed?"active":""}`} onClick={()=>{setUseFixed(f=>!f);setSelDenom(null);setAmount("");}}>
+                      📐 {t.fixedDenom}
+                      <span style={{fontSize:10,opacity:0.7}}>· {t.fixedDenomDesc}</span>
+                      <span className={`chip-check ${useFixed?"on":""}`}>{useFixed?"✓":""}</span>
+                    </button>
+                    <button className={`option-chip ${useLock?"active":""}`} onClick={()=>setUseLock(l=>!l)}>
+                      ⏳ {t.timelock}
+                      <span style={{fontSize:10,opacity:0.7}}>· {t.timelockDesc}</span>
+                      <span className={`chip-check ${useLock?"on":""}`}>{useLock?"✓":""}</span>
+                    </button>
                   </div>
-
-                  {useFixedDenom ? (
-                    <div className="form-group" style={{marginTop:14}}>
-                      <div className="form-label">{t.amount}</div>
+                  {useFixed ? (
+                    <div className="denom-wrap">
+                      <div className="denom-label">{t.amount}</div>
                       <div className="denom-grid">
-                        {DENOMS[token].map(d => (
-                          <button key={d} className={`denom-btn ${selectedDenom === d ? "active" : ""}`}
-                            onClick={() => setSelectedDenom(d)}>
-                            {d} {token}
-                          </button>
+                        {DENOMS[token].map(d=>(
+                          <button key={d} className={`denom-btn ${selDenom===d?"active":""}`} onClick={()=>setSelDenom(d)}>{d} {token}</button>
                         ))}
                       </div>
                     </div>
                   ) : (
-                    <div className="form-group" style={{marginTop:14}}>
-                      <div className="form-label">{t.amount}</div>
-                      <input className="form-input" type="number" placeholder="0.00"
-                        value={amount} onChange={e => setAmount(e.target.value)} step="any" min="0" />
+                    <div className="amount-wrap">
+                      <input className="amount-input" type="number" placeholder="0.00" value={amount} onChange={e=>setAmount(e.target.value)} step="any" min="0"/>
+                      <span className="amount-token">{token}</span>
                     </div>
                   )}
-
-                  <div className="form-group">
-                    <div className="form-label">{t.recipient}</div>
-                    <input className="form-input" placeholder="st:0x... ou 0x..."
-                      value={recipient} onChange={e => setRecipient(e.target.value)} />
+                  <div style={{marginBottom:16}}>
+                    <label className="field-label">{t.to}</label>
+                    <input className="field-input" placeholder="st:0x... ou 0x..." value={recipient} onChange={e=>setRecipient(e.target.value)}/>
+                    <div className="field-hint">{t.toHint}</div>
                   </div>
-
-                  <div className="toggle-row">
-                    <div className="toggle-label">
-                      {t.timelock}
-                      <small>{t.timelockDesc}</small>
+                  {(amount||selDenom) && (
+                    <div className="fee-row">
+                      <span className="fee-label">{t.fee}</span>
+                      <span className="fee-value" style={{color:tier.color}}>{tier.bps/100}% · {tier.label}</span>
                     </div>
-                    <label className="toggle">
-                      <input type="checkbox" checked={useTimelocked} onChange={e => setUseTimelocked(e.target.checked)} />
-                      <span className="toggle-slider" />
-                    </label>
-                  </div>
-
-                  <button className="send-btn" onClick={send} disabled={loading}>
-                    {loading ? <><span className="spinner" /> {t.sending}</> : `→ ${t.send}`}
+                  )}
+                  <button className="btn-primary" onClick={send} disabled={loading}>
+                    {loading?<><span className="spin"/>{t.sending}</>`→ ${t.sendBtn}`}
                   </button>
                 </div>
-
-                {pipelineData && (
-                  <div className="status-box fade-up">
-                    <div className="status-title">Pipeline de privacidade</div>
+                {pipeData && (
+                  <div className="pipeline fade">
+                    <div className="pipeline-title">{t.pipeline}</div>
                     <div className="pipeline-steps">
-                      {pipelineSteps.map(step => {
-                        const s = getStepStatus(step.key);
+                      {pipeSteps.map((label,i)=>{
+                        const s = pipeStatus(i);
                         return (
-                          <div key={step.key} className="pipeline-step">
-                            <div className={`step-icon ${s}`}>
-                              {s === "done" ? "✓" : s === "active" ? "◉" : "○"}
-                            </div>
-                            <span className={`step-text ${s === "active" ? "active" : ""}`}>{step.label}</span>
+                          <div key={i} className="pipe-step">
+                            <div className={`pipe-dot ${s}`}>{s==="done"?"✓":s==="active"?"◉":"○"}</div>
+                            <span className={`pipe-label ${s==="active"?"active":""}`}>{label}</span>
                           </div>
                         );
                       })}
@@ -787,36 +782,38 @@ export default function App() {
                   </div>
                 )}
               </div>
-
               <div>
-                <div className="card">
+                <div className="card" style={{marginBottom:16}}>
                   <div className="card-title">{t.history}</div>
-                  {history.length === 0 ? (
-                    <div className="history-empty">{t.noHistory}</div>
-                  ) : history.map((h, i) => (
-                    <div key={i} className="history-item">
-                      <div className="history-token">{h.token?.slice(0,1)}</div>
-                      <div className="history-info">
-                        <div className="history-amount">{h.amount} {h.token}</div>
-                        <div className="history-to">{h.to?.slice(0,24)}...</div>
-                        <a className="history-link" href={`https://basescan.org/tx/${h.hash}`} target="_blank" rel="noreferrer">
-                          {t.viewOnExplorer} ↗
-                        </a>
-                      </div>
-                      <span className={`history-status ${h.status === "done" ? "status-ok" : "status-pending"}`}>
-                        {h.status === "done" ? "✓" : "..."}
-                      </span>
+                  {history.length===0 ? (
+                    <div className="history-empty">
+                      <div className="history-empty-icon">↗</div>
+                      <div style={{fontWeight:600,marginBottom:4}}>{t.noHistory}</div>
+                      <div style={{fontSize:12}}>{t.noHistoryDesc}</div>
                     </div>
-                  ))}
+                  ) : (
+                    <div className="history-list">
+                      {history.map((h,i)=>(
+                        <div key={i} className="history-row">
+                          <div className="history-ico">{h.token?.slice(0,1)}</div>
+                          <div className="history-body">
+                            <div className="history-amount">{h.amount} {h.token}</div>
+                            <div className="history-dest">{h.to?.slice(0,28)}...</div>
+                            <a className="history-link" href={`https://basescan.org/tx/${h.hash}`} target="_blank" rel="noreferrer">{t.basescan} ↗</a>
+                          </div>
+                          <span className={`history-badge ${h.status==="done"?"badge-done":"badge-pending"}`}>{h.status==="done"?"✓":"..."}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-
-                <div className="card" style={{marginTop:20}}>
-                  <div className="card-title">{t.howTitle}</div>
-                  <div className="how-list">
-                    {[[t.how1t,t.how1d],[t.how2t,t.how2d],[t.how3t,t.how3d],[t.how4t,t.how4d]].map(([title,desc],i) => (
-                      <div key={i} className="how-item">
+                <div className="how-card">
+                  <div className="how-title">Como funciona</div>
+                  <div className="how-steps">
+                    {[["Endereço descartável","Um endereço novo é criado para cada envio."],["Roteamento multi-hop","Fundos passam por carteiras intermediárias com delays."],["Valores padronizados","Seu valor se mistura com outros iguais."],["Stealth address","O destinatário é invisível na blockchain."]].map(([title,desc],i)=>(
+                      <div key={i} className="how-step">
                         <div className="how-num">{i+1}</div>
-                        <div className="how-text"><h4>{title}</h4><p>{desc}</p></div>
+                        <div><div className="how-step-title">{title}</div><div className="how-step-desc">{desc}</div></div>
                       </div>
                     ))}
                   </div>
@@ -825,125 +822,107 @@ export default function App() {
             </div>
           )}
 
-          {/* ── RECEIVE ── */}
-          {tab === "receive" && (
-            <div className="grid fade-up">
-              <div className="card">
-                <div className="card-title">{t.receive}</div>
-                {!spendingKey ? (
-                  <>
-                    <p style={{color:"var(--muted)",fontSize:13,marginBottom:20}}>
-                      {lang === "pt" ? "Gere suas chaves stealth para receber pagamentos de forma privada." : "Generate your stealth keys to receive payments privately."}
-                    </p>
-                    <button className="send-btn" onClick={generateKeys}>{t.generateKeys}</button>
-                  </>
+          {tab==="receive" && (
+            <div className="section-grid fade">
+              <div>
+                {!sk ? (
+                  <div className="card">
+                    <div className="empty-state">
+                      <div className="empty-icon">⬇</div>
+                      <div className="empty-title">{t.noKeys}</div>
+                      <div className="empty-desc">{t.noKeysDesc}</div>
+                      <button className="btn-primary" onClick={generateKeys} style={{maxWidth:280,margin:"0 auto"}}>{t.generateBtn}</button>
+                    </div>
+                  </div>
                 ) : (
                   <>
-                    <div className="key-box">
-                      <div className="key-label">{t.yourMetaAddress}</div>
-                      <div className="key-value">{metaAddress}</div>
-                      <div className="key-actions">
-                        <button className="key-btn primary" onClick={() => copyText(metaAddress, "meta")}>
-                          {copied === "meta" ? t.copied : lang === "pt" ? "Copiar" : "Copy"}
-                        </button>
+                    <div className="receive-address-card">
+                      <div className="receive-label">{t.receiveAddress}</div>
+                      <div className="receive-addr-display">{meta}</div>
+                      <button className={`copy-btn ${copied==="meta"?"copied":""}`} onClick={()=>copyText(meta,"meta")}>
+                        {copied==="meta"?t.copied:t.copy}
+                      </button>
+                    </div>
+                    <div className="card" style={{marginBottom:12}}>
+                      <div className="card-title">{t.keysHint}</div>
+                      <div className="key-row">
+                        <span className="key-row-label">🔑 {t.spendKey}</span>
+                        <span className="key-row-value">{sk}</span>
+                      </div>
+                      <div className="key-row" style={{marginBottom:0}}>
+                        <span className="key-row-label">👁 {t.viewKey}</span>
+                        <span className="key-row-value">{vk}</span>
+                      </div>
+                      <div className="action-row">
+                        <button className="action-btn" onClick={()=>setShowExport(true)}>{t.exportKeys}</button>
+                        <button className="action-btn" onClick={generateKeys}>{t.generateKeys}</button>
                       </div>
                     </div>
-                    <div className="key-box">
-                      <div className="key-label">{t.spendingKey} ⚠️</div>
-                      <div className="key-value" style={{filter:"blur(4px)",userSelect:"none"}}
-                        onMouseEnter={e => e.target.style.filter="none"}
-                        onMouseLeave={e => e.target.style.filter="blur(4px)"}>
-                        {spendingKey}
-                      </div>
+                    <div className="paylink-section">
+                      <div className="paylink-label">🔗 {t.paylink}</div>
+                      <div className="paylink-url">{payLink}</div>
+                      <p style={{fontSize:12,color:"var(--text3)",marginBottom:12}}>{t.paylinkDesc}</p>
+                      <button className={`copy-btn ${copied==="link"?"copied":""}`} onClick={()=>copyText(payLink,"link")} style={{width:"100%",padding:"10px",borderRadius:"var(--r2)",fontSize:13,fontWeight:600}}>
+                        {copied==="link"?t.copied:t.copyLink}
+                      </button>
                     </div>
-                    <div className="key-box">
-                      <div className="key-label">{t.viewingKey} ⚠️</div>
-                      <div className="key-value" style={{filter:"blur(4px)",userSelect:"none"}}
-                        onMouseEnter={e => e.target.style.filter="none"}
-                        onMouseLeave={e => e.target.style.filter="blur(4px)"}>
-                        {viewingKey}
-                      </div>
-                    </div>
-                    <div style={{display:"flex",gap:8,marginTop:4}}>
-                      <button className="key-btn" onClick={() => setShowExport(true)}>{t.exportKeys}</button>
-                      <button className="key-btn" onClick={generateKeys}>{t.generateKeys}</button>
-                    </div>
-                    {payLink && (
-                      <div className="paylink-box">
-                        <div className="paylink-label">🔗 {t.payLink}</div>
-                        <div className="paylink-value">{payLink}</div>
-                        <button className="paylink-copy" onClick={() => copyText(payLink, "link")}>
-                          {copied === "link" ? t.copied : t.copyPayLink}
-                        </button>
-                      </div>
-                    )}
                   </>
                 )}
               </div>
-
               <div className="card">
                 <div className="card-title">{t.importKeys}</div>
-                <p style={{color:"var(--muted)",fontSize:13,marginBottom:16}}>{t.backupDesc}</p>
-                <div className="form-group">
-                  <div className="form-label">{lang === "pt" ? "Dados do backup" : "Backup data"}</div>
-                  <textarea className="form-input" rows={4}
-                    placeholder={lang === "pt" ? "Cole o conteúdo do arquivo .enc aqui" : "Paste the .enc file content here"}
-                    value={importData} onChange={e => setImportData(e.target.value)} style={{resize:"vertical"}} />
+                <p className="card-subtitle">{t.backupDesc}</p>
+                <div className="modal-field">
+                  <label className="modal-label">{lang==="pt"?"Conteúdo do backup":"Backup content"}</label>
+                  <textarea className="modal-input" rows={5} style={{resize:"vertical"}} placeholder={lang==="pt"?"Cole o conteúdo do arquivo .enc aqui":"Paste .enc file content here"} value={importData} onChange={e=>setImportData(e.target.value)}/>
                 </div>
-                <div className="form-group">
-                  <div className="form-label">{t.password}</div>
-                  <input className="form-input" type="password" placeholder="••••••••"
-                    value={importPwd} onChange={e => setImportPwd(e.target.value)} />
+                <div className="modal-field">
+                  <label className="modal-label">{t.password}</label>
+                  <input className="modal-input" type="password" placeholder="••••••••" value={importPwd} onChange={e=>setImportPwd(e.target.value)}/>
                 </div>
-                <button className="send-btn" onClick={handleImport}>{t.importKeys}</button>
+                <button className="btn-primary" style={{marginTop:8}} onClick={handleImport}>{t.importKeys}</button>
               </div>
             </div>
           )}
 
-          {/* ── SCAN ── */}
-          {tab === "scan" && (
-            <div className="grid fade-up">
-              <div className="card">
-                <div className="card-title">{t.scan}</div>
-                <p style={{color:"var(--muted)",fontSize:13,marginBottom:20}}>{t.scanDesc}</p>
-                {!spendingKey && (
-                  <div className="alert alert-error">
-                    {lang === "pt" ? "Gere suas chaves na aba Receber primeiro." : "Generate your keys in the Receive tab first."}
+          {tab==="scan" && (
+            <div className="section-grid fade">
+              <div>
+                <div className="card">
+                  <div className="scan-hero">
+                    <div className="scan-hero-icon">⬡</div>
+                    <div className="scan-hero-title">{t.scanTitle}</div>
+                    <div className="scan-hero-sub">{t.scanDesc}</div>
                   </div>
-                )}
-                <button className="send-btn" onClick={scan} disabled={scanning || !spendingKey}>
-                  {scanning ? <><span className="spinner" /> {t.scanning}</> : t.scanBtn}
-                </button>
-                {scanResults.length > 0 && (
-                  <div className="scan-result">
-                    <div className="scan-found">✓ {scanResults.length} {t.found}</div>
-                    {scanResults.map((r,i) => (
-                      <div key={i} className="scan-item">
-                        <div className="scan-amount">{r.amount} {r.token}</div>
-                        <div className="scan-addr">{r.stealthAddress}</div>
-                        {r.timelocked && r.unlockAt > Date.now()/1000 && (
-                          <div className="scan-locked">🔒 {t.locked}: {new Date(r.unlockAt*1000).toLocaleString()}</div>
-                        )}
-                        <a href={`https://basescan.org/tx/${r.txHash}`} target="_blank" rel="noreferrer"
-                          style={{fontSize:11,color:"var(--accent)"}}>Basescan ↗</a>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="card">
-                <div className="card-title" style={{color:"var(--muted)"}}>
-                  {lang === "pt" ? "Como funciona o scan" : "How scanning works"}
+                  {!sk && <div className="alert alert-warn">{t.noKeysForScan}</div>}
+                  <button className="btn-primary" onClick={scan} disabled={scanning||!sk}>
+                    {scanning?<><span className="spin" style={{borderTopColor:"#08090d"}}/>{t.scanning}</>:t.scanBtn}
+                  </button>
+                  {scanResults.length>0 && (
+                    <div className="scan-result-card">
+                      <div className="scan-result-header">✓ {scanResults.length} {t.scanFound}</div>
+                      {scanResults.map((r,i)=>(
+                        <div key={i} className="scan-item">
+                          <div className="scan-item-amount">{r.amount} {r.token}</div>
+                          <div className="scan-item-addr">{fmt(r.stealthAddress)}</div>
+                          {r.timelocked&&r.unlockAt>Date.now()/1000
+                            ?<div className="scan-item-locked">🔒 {t.locked}: {new Date(r.unlockAt*1000).toLocaleString()}</div>
+                            :<div style={{fontSize:11,color:"var(--green)",marginTop:4}}>✓ {t.unlocked}</div>
+                          }
+                          <a className="scan-item-link" href={`https://basescan.org/tx/${r.txHash}`} target="_blank" rel="noreferrer">Basescan ↗</a>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div className="how-list">
-                  {[
-                    [lang==="pt"?"Busca eventos on-chain":"Fetches on-chain events", lang==="pt"?"Busca os últimos 50.000 blocos no contrato SilentFlow.":"Scans the last 50,000 blocks on the SilentFlow contract."],
-                    [lang==="pt"?"Testa cada depósito":"Tests each deposit", lang==="pt"?"Usa suas chaves privadas localmente para descriptografar.":"Uses your private keys locally to decrypt events."],
-                    [lang==="pt"?"100% local":"100% local", lang==="pt"?"Suas chaves nunca saem do browser. Zero exposição.":"Your keys never leave the browser. Zero exposure."],
-                  ].map(([title,desc],i) => (
-                    <div key={i} className="how-item">
+              </div>
+              <div className="how-card">
+                <div className="how-title">{t.howScan}</div>
+                <div className="how-steps">
+                  {[[t.how1t,t.how1d],[t.how2t,t.how2d],[t.how3t,t.how3d]].map(([title,desc],i)=>(
+                    <div key={i} className="how-step">
                       <div className="how-num">{i+1}</div>
-                      <div className="how-text"><h4>{title}</h4><p>{desc}</p></div>
+                      <div><div className="how-step-title">{title}</div><div className="how-step-desc">{desc}</div></div>
                     </div>
                   ))}
                 </div>
@@ -951,83 +930,68 @@ export default function App() {
             </div>
           )}
 
-          {/* ── WITHDRAW ── */}
-          {tab === "withdraw" && (
-            <div className="grid fade-up">
-              <div className="card">
-                <div className="card-title">{t.withdraw}</div>
-                <p style={{color:"var(--muted)",fontSize:13,marginBottom:20}}>{t.withdrawDesc}</p>
-                {!account && (
-                  <div className="alert alert-info">
-                    {lang === "pt" ? "Conecte sua carteira para sacar." : "Connect your wallet to withdraw."}
-                  </div>
-                )}
-                {scanResults.length === 0 ? (
-                  <div style={{textAlign:"center",padding:"40px 20px",color:"var(--muted)",fontSize:13}}>
-                    {t.noDeposits}
-                    <br />
-                    <button className="key-btn" style={{marginTop:12,width:"auto",padding:"8px 20px"}}
-                      onClick={() => setTab("scan")}>→ {t.scan}</button>
-                  </div>
-                ) : scanResults.map((r,i) => {
-                  const isLocked = r.timelocked && r.unlockAt > Date.now()/1000;
-                  return (
-                    <div key={i} className="withdraw-card">
-                      <div className="withdraw-addr">{r.stealthAddress}</div>
-                      <div className="withdraw-balance">{r.amount} {r.token}</div>
-                      {isLocked
-                        ? <div className="scan-locked">🔒 {t.locked}: {new Date(r.unlockAt*1000).toLocaleString()}</div>
-                        : <div style={{fontSize:11,color:"var(--green)"}}>✓ {t.unlocked}</div>}
-                      <button className="withdraw-btn" onClick={() => doWithdraw(r)}
-                        disabled={loading || isLocked || !account}>
-                        {loading ? <><span className="spinner" /> {t.withdrawing}</> : `→ ${t.withdraw}`}
-                      </button>
+          {tab==="withdraw" && (
+            <div className="section-grid fade">
+              <div>
+                <div className="card" style={{marginBottom:16}}>
+                  <div className="card-title">{t.withdrawTitle}</div>
+                  <p className="card-subtitle">{t.withdrawDesc}</p>
+                  {!account && <div className="alert alert-info" style={{marginBottom:14}}>{lang==="pt"?"Conecte sua carteira para sacar.":"Connect your wallet to withdraw."}</div>}
+                  {scanResults.length===0 ? (
+                    <div className="empty-state">
+                      <div className="empty-icon">💳</div>
+                      <div className="empty-title">{t.noWithdraw}</div>
+                      <div className="empty-desc">{t.noWithdrawDesc}</div>
+                      <button className="btn-secondary" onClick={()=>setTab("scan")} style={{maxWidth:240,margin:"0 auto"}}>→ {t.goScan}</button>
                     </div>
-                  );
-                })}
-              </div>
-              <div className="card">
-                <div className="card-title" style={{color:"var(--muted)"}}>
-                  {lang === "pt" ? "Saque gasless" : "Gasless withdrawal"}
+                  ) : scanResults.map((r,i)=>{
+                    const isLocked = r.timelocked&&r.unlockAt>Date.now()/1000;
+                    return (
+                      <div key={i} className="withdraw-item">
+                        <div className="withdraw-amount">{r.amount} {r.token}</div>
+                        <div className="withdraw-addr">{r.stealthAddress}</div>
+                        <div className={`withdraw-status ${isLocked?"status-locked":"status-unlocked"}`}>
+                          {isLocked?`🔒 ${t.locked}: ${new Date(r.unlockAt*1000).toLocaleString()}`:`✓ ${t.unlocked}`}
+                        </div>
+                        <button className="btn-primary" onClick={()=>doWithdraw(r)} disabled={loading||isLocked||!account}>
+                          {loading?<><span className="spin" style={{borderTopColor:"#08090d"}}/>{t.withdrawing}</>`→ ${t.withdrawBtn}`}
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
-                <p style={{fontSize:13,color:"var(--muted)",lineHeight:1.7}}>
-                  {lang === "pt"
-                    ? "O saque é realizado via relayer — você não precisa de ETH no stealth address. O backend paga o gas e desconta da taxa de privacidade."
-                    : "Withdrawal is done via relayer — you don't need ETH in the stealth address. The backend pays gas and deducts it from the privacy fee."}
-                </p>
-                <div style={{marginTop:20,padding:16,background:"var(--surface2)",borderRadius:"var(--r2)",border:"1px solid var(--border)"}}>
-                  <div style={{fontSize:12,color:"var(--muted)",marginBottom:8}}>
-                    {lang === "pt" ? "Contrato verificado" : "Verified contract"}
+              </div>
+              <div>
+                <div className="card">
+                  <div className="card-title">{t.gasless}</div>
+                  <p style={{fontSize:13,color:"var(--text2)",lineHeight:1.7,marginBottom:20}}>{t.gaslessDesc}</p>
+                  <div style={{padding:"14px 16px",background:"var(--surface2)",borderRadius:"var(--r2)",border:"1px solid var(--border)"}}>
+                    <div style={{fontSize:11,color:"var(--text3)",marginBottom:6}}>{t.contractVerified}</div>
+                    <a href={`https://basescan.org/address/${CONTRACT_ADDRESS}`} target="_blank" rel="noreferrer" style={{fontFamily:"var(--mono)",fontSize:11,color:"var(--accent2)",wordBreak:"break-all"}}>
+                      {CONTRACT_ADDRESS}
+                    </a>
                   </div>
-                  <a href={`https://basescan.org/address/${CONTRACT_ADDRESS}`} target="_blank" rel="noreferrer"
-                    style={{fontFamily:"var(--mono)",fontSize:11,color:"var(--accent2)",wordBreak:"break-all"}}>
-                    {CONTRACT_ADDRESS}
-                  </a>
                 </div>
               </div>
             </div>
           )}
-
         </main>
 
-        {/* EXPORT MODAL */}
         {showExport && (
-          <div className="modal-overlay" onClick={() => setShowExport(false)}>
-            <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-bg" onClick={()=>setShowExport(false)}>
+            <div className="modal" onClick={e=>e.stopPropagation()}>
               <div className="modal-title">{t.exportTitle}</div>
-              <div className="form-group">
-                <div className="form-label">{t.password}</div>
-                <input className="form-input" type="password" placeholder="••••••••"
-                  value={modalPwd} onChange={e => setModalPwd(e.target.value)} />
+              <div className="modal-field">
+                <label className="modal-label">{t.password}</label>
+                <input className="modal-input" type="password" placeholder="••••••••" value={exportPwd} onChange={e=>setExportPwd(e.target.value)}/>
               </div>
               <div className="modal-actions">
-                <button className="modal-btn secondary" onClick={() => { setShowExport(false); setModalPwd(""); }}>{t.cancel}</button>
-                <button className="modal-btn primary" onClick={handleExport}>{t.confirm}</button>
+                <button className="modal-cancel" onClick={()=>{setShowExport(false);setExportPwd("");}}>{t.cancel}</button>
+                <button className="modal-confirm" onClick={handleExport}>{t.confirm}</button>
               </div>
             </div>
           </div>
         )}
-
       </div>
     </>
   );
