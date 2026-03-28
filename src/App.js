@@ -1,5 +1,5 @@
 /* eslint-disable no-undef */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 
 // ── CONFIG ──────────────────────────────────────────────────────────────────
@@ -38,23 +38,7 @@ const DENOMS = {
 };
 
 // ── STEALTH CRYPTO ──────────────────────────────────────────────────────────
-function deriveStealthAddress(metaAddress) {
-  const clean = metaAddress.replace("st:", "");
-  const [spendingPubKey, viewingPubKey] = clean.split(":");
-  const ephemeralWallet = ethers.Wallet.createRandom();
-  const ephemeralPubKey = ethers.SigningKey.computePublicKey(ephemeralWallet.privateKey, true);
-  const h = ethers.keccak256(ethers.concat([
-    ethers.getBytes(ephemeralPubKey),
-    ethers.getBytes(viewingPubKey)
-  ]));
-  const stealthSeed = ethers.keccak256(ethers.concat([
-    ethers.getBytes(h),
-    ethers.getBytes(spendingPubKey)
-  ]));
-  const stealthAddress = new ethers.Wallet(stealthSeed).address;
-  const viewTag = parseInt(h.slice(2, 4), 16);
-  return { stealthAddress, ephemeralPubKey, viewTag };
-}
+
 
 function tryDecryptDeposit(ephemeralPubKeyHex, stealthAddressOnChain, viewTagOnChain, spendingPrivKey, viewingPrivKey) {
   try {
@@ -555,7 +539,7 @@ export default function App() {
     }, 5000);
     const timeout = setTimeout(() => clearInterval(interval), 20 * 60 * 1000);
     return () => { clearInterval(interval); clearTimeout(timeout); };
-  }, [pipelineId]);
+  }, [pipelineId, lang]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function buildMetaAddress(sk, vk) {
     try {
@@ -742,10 +726,6 @@ export default function App() {
       const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
       const nonce = await contract.withdrawNonces(item.stealthAddress);
       const chainId = BigInt(BASE_CHAIN_ID);
-      const dataHash = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
-        ["address","address","address","uint256","uint256"],
-        [item.stealthAddress, item.tokenAddr, account, nonce, chainId]
-      ));
       // Use packed encoding like the contract
       const packedHash = ethers.keccak256(ethers.solidityPacked(
         ["address","address","address","uint256","uint256"],
