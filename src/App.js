@@ -431,7 +431,7 @@ export default function App() {
   const [history, setHistory]       = useState([]);
   const [pipelineId, setPipelineId] = useState(null);
   const [pipeData, setPipeData]     = useState(null);
-  const [notifPerm, setNotifPerm]   = useState(Notification?.permission || "default");
+  const [notifPerm, setNotifPerm]   = useState(typeof Notification !== "undefined" ? Notification.permission : "denied");
   const [sk, setSk]                 = useState("");
   const [vk, setVk]                 = useState("");
   const [meta, setMeta]             = useState("");
@@ -467,7 +467,7 @@ export default function App() {
         if (d.status === "completo") {
           clearInterval(iv);
           setPipelineId(null);
-          if (Notification?.permission === "granted") new Notification("SilentFlow", { body: t.txComplete, icon:"/logo.png" });
+          if (typeof Notification !== "undefined" && Notification.permission === "granted") { try { new Notification("SilentFlow", { body: t.txComplete, icon:"/logo.png" }); } catch(e) {} }
           showAlert(t.txComplete, "success");
         }
       } catch {}
@@ -698,7 +698,7 @@ export default function App() {
           {notifPerm==="default" && (
             <div className="notif-bar fade">
               <span>{t.notifAsk}</span>
-              <button className="notif-btn" onClick={async()=>setNotifPerm(await Notification?.requestPermission())}>{t.notifBtn}</button>
+              <button className="notif-btn" onClick={async()=>{ try { const p = await Notification.requestPermission(); setNotifPerm(p); } catch(e) { setNotifPerm("denied"); } }}>{t.notifBtn}</button>
             </div>
           )}
           {alert && <div className={`alert alert-${alert.type} fade`}>{alert.msg}</div>}
