@@ -762,7 +762,7 @@ export default function App() {
                     </div>
                   )}
                   <button className="btn-primary" onClick={send} disabled={loading}>
-                    {loading?<><span className="spin"/>{t.sending}</>`→ ${t.sendBtn}`}
+                    {loading ? <><span className="spin"/>{t.sending}</> : "→ " + t.sendBtn}
                   </button>
                 </div>
                 {pipeData && (
@@ -954,7 +954,7 @@ export default function App() {
                           {isLocked?`🔒 ${t.locked}: ${new Date(r.unlockAt*1000).toLocaleString()}`:`✓ ${t.unlocked}`}
                         </div>
                         <button className="btn-primary" onClick={()=>doWithdraw(r)} disabled={loading||isLocked||!account}>
-                          {loading?<><span className="spin" style={{borderTopColor:"#08090d"}}/>{t.withdrawing}</>`→ ${t.withdrawBtn}`}
+                          {loading ? <><span className="spin" style={{borderTopColor:"#08090d"}}/>{t.withdrawing}</> : "→ " + t.withdrawBtn}
                         </button>
                       </div>
                     );
