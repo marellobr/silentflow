@@ -329,7 +329,7 @@ async function executarPipelineETH(txId, valorBruto, stealthAddress, ephemeralPu
   const gasExtra = await estimarCustoGasETH();
 
   for (let i = 0; i < partes.length; i++) {
-    const valorComGas = partes[i] + gasDeposit + gasHops + gasExtra * 3n;
+    const valorComGas = partes[i] + gasDeposit + gasHops + gasExtra * 10n;
     const txFund = await masterWallet.sendTransaction({ to: cadeias[i][0].address, value: valorComGas, gasLimit: 21000n });
     await txFund.wait();
     console.log(`  -> Funded E${i+1}[0]: ${cadeias[i][0].address.slice(0,10)}... (${ethers.formatEther(partes[i])} ETH)`);
