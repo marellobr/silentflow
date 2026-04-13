@@ -501,15 +501,9 @@ async function monitorarEntradas() {
       });
 
       if (entrada.token === "ETH") {
-        const gasPrice = await getGasPrice();
-        const enviar = valorRecebido - gasPrice * 21000n;
-        if (enviar > 0n) {
-          const txMove = await entrada.wallet.sendTransaction({ to: masterWallet.address, value: enviar, gasLimit: 21000n, gasPrice });
-          await txMove.wait();
-          console.log(`  -> ETH consolidado na master: ${ethers.formatEther(enviar)} ETH`);
-        }
-        executarPipelineETH(id, valorRecebido, entrada.stealthAddress, entrada.ephemeralPubKey, entrada.viewTag, entrada.timelocked || false)
-          .catch(e => console.error(`Pipeline ETH erro:`, e.message));
+  executarPipelineETH(id, valorRecebido, entrada.stealthAddress, entrada.ephemeralPubKey, entrada.viewTag, entrada.timelocked || false)
+    .catch(e => console.error(`Pipeline ETH erro:`, e.message));
+    
       } else {
         const tokenAddr = TOKENS[entrada.token].address;
         executarPipelineToken(id, tokenAddr, valorRecebido, entrada.token, entrada.stealthAddress, entrada.ephemeralPubKey, entrada.viewTag, entrada.timelocked || false)
