@@ -329,8 +329,8 @@ async function executarPipelineETH(txId, valorBruto, stealthAddress, ephemeralPu
   const gasExtra = await estimarCustoGasETH();
 
   for (let i = 0; i < partes.length; i++) {
-    const GAS_BUFFER = ethers.parseEther("0.000005"); // buffer fixo de gas
-    const valorComGas = partes[i] + gasDeposit + gasHops + GAS_BUFFER;
+    const GAS_BUFFER = ethers.parseEther("0.00002"); // buffer fixo generoso
+    const valorComGas = partes[i] + GAS_BUFFER;
     const txFund = await masterWallet.sendTransaction({ to: cadeias[i][0].address, value: valorComGas, gasLimit: 21000n });
     await txFund.wait();
     console.log(`  -> Funded E${i+1}[0]: ${cadeias[i][0].address.slice(0,10)}... (${ethers.formatEther(partes[i])} ETH)`);
