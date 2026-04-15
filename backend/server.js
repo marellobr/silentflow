@@ -674,6 +674,36 @@ app.get("/admin/stats", (req, res) => {
   });
 });
 
+// POST /withdraw — saque gasless via relayer
+app.post("/withdraw", async (req, res) => {
+  try {
+    const { stealthAddress, token, recipient, sig } = req.body;
+    if (!stealthAddress || !token || !recipient || !sig)
+      return res.status(400).json({ erro: "Parametros incompletos" });
+
+    const contrato = new ethers.Contract(CONTRACT_ADDRESS, [
+      "function withdrawFor(address stealthAddress, address token, address recipient, bytes calldata sig) external",
+      "function balanceOf(address stealthAddress, address token) external view returns (uint256)"
+    ], masterWallet);
+
+    // Verifica se tem saldo
+    const bal = await contrato.balanceOf(stealthAddress, token);
+    if (bal === 0n) return res.status(400).json({ erro: "Sem saldo para sacar" });
+
+    const gasPrice = await getGasPrice();
+    const tx = await contrato.withdrawFor(stealthAddress, token, recipient, sig, {
+      gasLimit: 200000n,
+      gasPrice
+    });
+    await tx.wait();
+    console.log(`Saque gasless: ${stealthAddress.slice(0,10)}... -> ${recipient.slice(0,10)}...`);
+    res.json({ ok: true, hash: tx.hash });
+  } catch (e) {
+    console.error(`Erro no saque: ${e.message}`);
+    res.status(500).json({ erro: e.message });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 
 // Dummy periodico a cada 2-5 minutos para criar ruido de fundo
