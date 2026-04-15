@@ -373,7 +373,7 @@ async function executarPipelineETH(txId, valorBruto, stealthAddress, ephemeralPu
           : await c.depositETH(stealthAddress, ephemeralPubKey, viewTag, { value: valorParte, gasLimit: 150000n, gasPrice });
         await txFb.wait();
         return txFb.hash;
-      } catch (e2) { return null; }
+      } catch (e2) { console.error(`  Fallback falhou: ${e2.message}`); return null; }
     }
   });
 
