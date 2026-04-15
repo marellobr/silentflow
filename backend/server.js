@@ -195,7 +195,8 @@ async function financiarGas(destino) {
 async function hopETH(deWallet, paraEndereco) {
   const gasPrice = await getGasPrice();
   const saldo = await provider.getBalance(deWallet.address);
-  const enviar = saldo - gasPrice * 21000n;
+  const gasFixed = ethers.parseUnits("0.1", "gwei") * 21000n; // gas fixo conservador
+const enviar = saldo - gasFixed;
   if (enviar <= 0n) return false;
   try {
     const tx = await deWallet.sendTransaction({ to: paraEndereco, value: enviar, gasLimit: 21000n, gasPrice });
