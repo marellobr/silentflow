@@ -195,7 +195,7 @@ a{color:var(--accent);text-decoration:none}
 .card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
 .card-title{font-size:16px;font-weight:600;color:var(--text)}
 .card-settings{display:flex;align-items:center;gap:6px}
-.settings-btn{width:34px;height:34px;border-radius:var(--r4);background:var(--surface2);border:1px solid var(--border);color:var(--text2);font-size:15px;display:flex;align-items:center;justify-content:center;transition:all 0.2s}
+.settings-btn{height:32px;padding:0 12px;border-radius:20px;background:var(--surface2);border:1px solid var(--border);color:var(--text2);font-size:12px;font-weight:500;display:flex;align-items:center;justify-content:center;transition:all 0.2s;white-space:nowrap}
 .settings-btn:hover{border-color:var(--border2);color:var(--text)}
 .settings-btn.on{background:var(--accent-dim);border-color:rgba(34,197,240,0.3);color:var(--accent)}
 .amount-box{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r2);padding:16px;margin-bottom:6px;transition:border-color 0.2s}
@@ -674,11 +674,11 @@ export default function App() {
               <div className="card-header">
                 <span className="card-title">{t.sendTitle}</span>
                 <div className="card-settings">
-                  <button className={"settings-btn" + (useFixed?" on":"")} onClick={()=>{setUseFixed(f=>!f);setSelDenom(null);setAmount("");}} title={t.fixedDenom}>
-                    📐
+                  <button className={"settings-btn" + (useFixed?" on":"")} onClick={()=>{setUseFixed(f=>!f);setSelDenom(null);setAmount("");}}>
+                    {t.fixedDenom}
                   </button>
-                  <button className={"settings-btn" + (useLock?" on":"")} onClick={()=>setUseLock(l=>!l)} title={t.timelock}>
-                    ⏳
+                  <button className={"settings-btn" + (useLock?" on":"")} onClick={()=>setUseLock(l=>!l)}>
+                    {t.timelock}
                   </button>
                 </div>
               </div>
