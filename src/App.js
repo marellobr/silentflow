@@ -51,6 +51,13 @@ const ERC20_ABI = [
 
 
 
+const DENOMS_BY_TOKEN = {
+  ETH:  [0.01, 0.05, 0.1, 0.5, 1, 5],
+  POL:  [1, 5, 10, 50, 100],
+  USDC: [10, 50, 100, 500, 1000],
+  USDT: [10, 50, 100, 500, 1000]
+};
+
 function getTierInfo(usd) {
   if (usd >= 5000) return { label: "Premium", bps: 10, color: "#a78bfa" };
   if (usd >= 500)  return { label: "Volume",  bps: 15, color: "#34d399" };
