@@ -49,17 +49,7 @@ const ERC20_ABI = [
   "function transfer(address to, uint256 amount) returns (bool)"
 ];
 
-const TOKENS = {
-  ETH:  { address: "0x0000000000000000000000000000000000000000", decimals: 18, icon: "E" },
-  USDC: { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6,  icon: "U" },
-  USDT: { address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6,  icon: "T" }
-};
 
-const DENOMS = {
-  ETH:  [0.01, 0.05, 0.1, 0.5, 1, 5],
-  USDC: [10, 50, 100, 500, 1000],
-  USDT: [10, 50, 100, 500, 1000]
-};
 
 function getTierInfo(usd) {
   if (usd >= 5000) return { label: "Premium", bps: 10, color: "#a78bfa" };
