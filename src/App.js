@@ -256,8 +256,8 @@ a{color:var(--accent);text-decoration:none}
 .denom-btn.on{background:var(--accent-dim);border-color:rgba(34,197,240,0.25);color:var(--accent)}
 .fee-row{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:var(--r4);background:var(--surface2);font-size:12px;color:var(--text2);margin-bottom:6px}
 .fee-val{font-weight:600;font-family:var(--mono)}
-.main-btn{width:100%;padding:16px;border-radius:var(--r2);background:var(--accent);color:#08090d;font-size:16px;font-weight:700;transition:all 0.22s;box-shadow:0 0 28px var(--accent-glow);display:flex;align-items:center;justify-content:center;gap:8px;margin-top:6px}
-.main-btn:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 4px 36px var(--accent-glow)}
+.main-btn{width:100%;padding:16px;border-radius:var(--r2);background:var(--net-color,var(--accent));color:#08090d;font-size:16px;font-weight:700;transition:all 0.22s;box-shadow:0 0 28px var(--net-glow,var(--accent-glow));display:flex;align-items:center;justify-content:center;gap:8px;margin-top:6px}
+.main-btn:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 4px 36px var(--net-glow,var(--accent-glow))}
 .main-btn:disabled{opacity:0.4;cursor:not-allowed;transform:none}
 .main-btn.ghost{background:transparent;border:1px solid var(--border2);color:var(--text2);box-shadow:none}
 .main-btn.ghost:hover:not(:disabled){border-color:var(--accent);color:var(--accent);box-shadow:none}
@@ -664,24 +664,33 @@ export default function App() {
           <div className="nav-brand">
             <img className="nav-logo" src="/logo.png" alt="SF" onError={e=>{e.target.style.display="none";}} />
             <span className="nav-name">SILENTFLOW</span>
-            <div className="rel" style={{display:"flex",gap:4}}>
+            <div style={{display:"flex",gap:4}}>
               <button
                 onClick={()=>{ setNetworkKey("base"); setToken("ETH"); setSelDenom(null); setAmount(""); setScanResults([]); }}
-                style={{fontSize:10,fontFamily:"var(--mono)",padding:"3px 8px",borderRadius:20,border:"1px solid",cursor:"pointer",transition:"all 0.2s",
-                  background: networkKey==="base" ? "rgba(34,197,240,0.1)" : "transparent",
-                  borderColor: networkKey==="base" ? "rgba(34,197,240,0.3)" : "rgba(255,255,255,0.1)",
-                  color: networkKey==="base" ? "#22c5f0" : "#64748b"
+                style={{display:"flex",alignItems:"center",gap:5,fontSize:10,fontFamily:"var(--mono)",padding:"4px 10px",borderRadius:20,border:"1.5px solid",cursor:"pointer",transition:"all 0.2s",fontWeight:600,
+                  background: networkKey==="base" ? "#22c5f0" : "rgba(255,255,255,0.04)",
+                  borderColor: networkKey==="base" ? "#22c5f0" : "rgba(255,255,255,0.1)",
+                  color: networkKey==="base" ? "#08090d" : "#64748b",
+                  boxShadow: networkKey==="base" ? "0 0 12px rgba(34,197,240,0.4)" : "none"
                 }}>
-                ● BASE
+                <svg width="12" height="12" viewBox="0 0 111 111" fill="none">
+                  <circle cx="55.5" cy="55.5" r="55.5" fill={networkKey==="base"?"#08090d":"#0052FF"}/>
+                  <path d="M55.5 22C37.1 22 22 37.1 22 55.5S37.1 89 55.5 89c16.7 0 30.5-12.1 33.1-28H62.4c-2.2 4.4-6.7 7.4-11.9 7.4-7.4 0-13.4-6-13.4-13.4s6-13.4 13.4-13.4c5.2 0 9.7 3 11.9 7.4h26.2C85.9 34.1 72.1 22 55.5 22z" fill={networkKey==="base"?"#22c5f0":"white"}/>
+                </svg>
+                BASE
               </button>
               <button
                 onClick={()=>{ setNetworkKey("polygon"); setToken("POL"); setSelDenom(null); setAmount(""); setScanResults([]); }}
-                style={{fontSize:10,fontFamily:"var(--mono)",padding:"3px 8px",borderRadius:20,border:"1px solid",cursor:"pointer",transition:"all 0.2s",
-                  background: networkKey==="polygon" ? "rgba(130,71,229,0.1)" : "transparent",
-                  borderColor: networkKey==="polygon" ? "rgba(130,71,229,0.3)" : "rgba(255,255,255,0.1)",
-                  color: networkKey==="polygon" ? "#8247e5" : "#64748b"
+                style={{display:"flex",alignItems:"center",gap:5,fontSize:10,fontFamily:"var(--mono)",padding:"4px 10px",borderRadius:20,border:"1.5px solid",cursor:"pointer",transition:"all 0.2s",fontWeight:600,
+                  background: networkKey==="polygon" ? "#8247e5" : "rgba(255,255,255,0.04)",
+                  borderColor: networkKey==="polygon" ? "#8247e5" : "rgba(255,255,255,0.1)",
+                  color: networkKey==="polygon" ? "#fff" : "#64748b",
+                  boxShadow: networkKey==="polygon" ? "0 0 12px rgba(130,71,229,0.4)" : "none"
                 }}>
-                ● POL
+                <svg width="12" height="12" viewBox="0 0 38 33" fill="none">
+                  <path d="M28.8 8.4l-1.4-.8c-.3-.2-.7-.2-1 0L19 12.4l-5.2-3c-.3-.2-.7-.2-1 0l-7.4 4.3c-.3.2-.5.5-.5.8v8.6c0 .3.2.6.5.8l7.4 4.3c.3.2.7.2 1 0l5.2-3 7.4 4.3c.3.2.7.2 1 0l7.4-4.3c.3-.2.5-.5.5-.8V9.2c0-.3-.2-.6-.5-.8l-6.4-3.7z" fill={networkKey==="polygon"?"#fff":"#8247e5"}/>
+                </svg>
+                POL
               </button>
             </div>
           </div>
