@@ -260,6 +260,7 @@ async function depositarTokenNoContrato(wallet, tokenAddress, valor, stealthAddr
 // - Dummies antes e depois dos hops tambem
 // ============================================================
 async function enviarDummy() {
+  return; // PAUSADO — reativar no lancamento
   if (pipelineAtivo) return;
   if (Math.random() > 0.7) return; // 70% chance de enviar (era 50%)
   try {
@@ -284,6 +285,7 @@ async function enviarDummy() {
 
 // Dummy periodico mesmo sem pipeline ativo — cria ruido de fundo
 async function dummyPeriodico() {
+  return; // PAUSADO
   if (pipelineAtivo) return;
   if (Math.random() > 0.3) return; // 30% chance a cada ciclo
   await enviarDummy();
