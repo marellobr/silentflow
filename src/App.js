@@ -172,7 +172,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font
 button{cursor:pointer;font-family:var(--sans);border:none;outline:none}
 input,textarea{font-family:var(--sans);outline:none;border:none}
 a{color:var(--accent);text-decoration:none}
-.app{min-height:100vh;display:flex;flex-direction:column;padding-bottom:80px}
+.app{min-height:100vh;display:flex;flex-direction:column}
 .glow{position:fixed;top:-300px;left:50%;transform:translateX(-50%);width:900px;height:600px;border-radius:50%;background:radial-gradient(ellipse,rgba(34,197,240,0.035) 0%,transparent 65%);pointer-events:none;z-index:0}
 .nav{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:rgba(8,9,13,0.9);backdrop-filter:blur(24px);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
 .nav-brand{display:flex;align-items:center;gap:10px}
@@ -249,13 +249,12 @@ a{color:var(--accent);text-decoration:none}
 .funds-alert-text strong{display:block;font-size:15px;font-weight:700;color:var(--text);margin-bottom:2px}
 .funds-alert-btn{padding:8px 14px;border-radius:var(--r4);background:var(--accent);color:#08090d;font-size:12px;font-weight:700;white-space:nowrap;transition:all 0.2s;flex-shrink:0}
 .funds-alert-btn:hover{opacity:0.9}
-.bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:20;display:flex;background:rgba(8,9,13,0.95);backdrop-filter:blur(24px);border-top:1px solid var(--border);padding:8px 12px calc(8px + env(safe-area-inset-bottom))}
-.nav-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 4px;border-radius:var(--r3);background:transparent;color:var(--text3);font-size:10px;font-weight:500;transition:all 0.2s}
-.nav-tab:hover{color:var(--text2)}
-.nav-tab.active{color:var(--accent)}
-.nav-tab-icon{font-size:20px;line-height:1}
-.nav-tab-dot{width:4px;height:4px;border-radius:50%;background:var(--accent);margin-top:2px;opacity:0;transition:opacity 0.2s}
-.nav-tab.active .nav-tab-dot{opacity:1}
+.bottom-nav{display:flex;gap:6px;margin-bottom:16px}
+.nav-tab{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 8px;border-radius:var(--r3);background:var(--surface2);border:1px solid var(--border);color:var(--text3);font-size:13px;font-weight:500;transition:all 0.2s}
+.nav-tab:hover{border-color:var(--border2);color:var(--text2)}
+.nav-tab.active{background:var(--accent-dim);border-color:rgba(34,197,240,0.25);color:var(--accent)}
+.nav-tab-icon{font-size:15px;line-height:1}
+.nav-tab-dot{display:none}
 .modal-bg{position:fixed;inset:0;z-index:50;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,0.6);backdrop-filter:blur(8px)}
 @media(min-width:600px){.modal-bg{align-items:center}.modal{border-radius:var(--r)!important;max-height:90vh!important}}
 .modal{width:100%;max-width:480px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--r) var(--r) 0 0;max-height:92vh;overflow-y:auto;animation:slide-up 0.3s cubic-bezier(0.34,1.56,0.64,1)}
@@ -645,6 +644,20 @@ export default function App() {
         <div className="main">
           <div className="card-wrap">
 
+            <div className="bottom-nav">
+              {[
+                {key:"send",    icon:"↗", label:t.send,    action:closeModal},
+                {key:"receive", icon:"⬇", label:t.receive, action:()=>setModal("receive")},
+                {key:"scan",    icon:"⬡", label:t.scan,    action:()=>{ setModal("scan"); if(sk&&vk&&!scanResults.length) scan(); }},
+                {key:"history", icon:"📋", label:t.history, action:()=>setModal("history")},
+              ].map(({key,icon,label,action})=>(
+                <button key={key} className={"nav-tab" + (modal===key||(modal===null&&key==="send")?" active":"")} onClick={action}>
+                  <span className="nav-tab-icon">{icon}</span>
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+
             {alert && <div className={"alert alert-" + alert.type + " fade"} style={{marginBottom:12}}>{alert.msg}</div>}
 
             {scanResults.length>0 && !modal && (
@@ -747,20 +760,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="bottom-nav">
-          {[
-            {key:"send",    icon:"↗", label:t.send,    action:closeModal},
-            {key:"receive", icon:"⬇", label:t.receive, action:()=>setModal("receive")},
-            {key:"scan",    icon:"⬡", label:t.scan,    action:()=>{ setModal("scan"); if(sk&&vk&&!scanResults.length) scan(); }},
-            {key:"history", icon:"📋", label:t.history, action:()=>setModal("history")},
-          ].map(({key,icon,label,action})=>(
-            <button key={key} className={"nav-tab" + (modal===key||(modal===null&&key==="send")?" active":"")} onClick={action}>
-              <span className="nav-tab-icon">{icon}</span>
-              <span>{label}</span>
-              <span className="nav-tab-dot"/>
-            </button>
-          ))}
-        </div>
+
 
         {modal==="history" && (
           <div className="modal-bg" onClick={closeModal}>
