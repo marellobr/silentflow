@@ -33,9 +33,9 @@ const TOKENS = {
 // Tier 3: acima de $5000  -> 0.10% (10 bps)
 // Para testnet usamos thresholds em ETH como proxy
 // ============================================================
-const TIER1_BPS = 20n; // 0.20%
-const TIER2_BPS = 15n; // 0.15%
-const TIER3_BPS = 10n; // 0.10%
+const TIER1_BPS = 50n; // 0.50%
+const TIER2_BPS = 35n; // 0.35%
+const TIER3_BPS = 20n; // 0.20%
 const TIER2_THRESHOLD_ETH = ethers.parseEther("0.15");  // ~$500
 const TIER3_THRESHOLD_ETH = ethers.parseEther("1.5");    // ~$5000
 const TIER2_THRESHOLD_USDC = ethers.parseUnits("500", 6);
