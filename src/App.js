@@ -2,6 +2,13 @@
 import { useState, useEffect, useRef } from "react";
 import { ethers } from "ethers";
 
+const TOKEN_ICONS = {
+  ETH:  <svg width="16" height="16" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><circle cx="16" cy="16" r="16" fill="#627EEA"/><path d="M16 5v8.7l7.4 3.3L16 5z" fill="white" opacity="0.6"/><path d="M16 5L8.6 17l7.4-3.3V5z" fill="white"/><path d="M16 21.9v5.1l7.4-10.2L16 21.9z" fill="white" opacity="0.6"/><path d="M16 27v-5.1L8.6 16.8 16 27z" fill="white"/><path d="M16 20.5l7.4-3.5-7.4-3.3v6.8z" fill="white" opacity="0.2"/><path d="M8.6 17l7.4 3.5v-6.8L8.6 17z" fill="white" opacity="0.6"/></svg>,
+  USDC: <svg width="16" height="16" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><circle cx="16" cy="16" r="16" fill="#2775CA"/><path d="M20 17.9c0-2-1.2-2.7-3.6-3-1.8-.2-2.1-.7-2.1-1.5s.6-1.3 1.8-1.3c1.1 0 1.7.4 2 1.3.1.2.2.3.4.3h.9c.2 0 .4-.2.3-.4-.3-1.4-1.3-2.4-2.7-2.6V9.4c0-.2-.2-.4-.4-.4h-.8c-.2 0-.4.2-.4.4v1.3c-1.7.3-2.8 1.4-2.8 2.9 0 1.9 1.2 2.6 3.5 2.9 1.7.3 2.2.7 2.2 1.6s-.8 1.5-2 1.5c-1.5 0-2.1-.6-2.3-1.5-.1-.2-.2-.3-.4-.3h-.9c-.2 0-.4.2-.3.4.3 1.5 1.2 2.5 2.9 2.8v1.4c0 .2.2.4.4.4h.8c.2 0 .4-.2.4-.4v-1.4c1.8-.3 3-1.4 3-3z" fill="white"/></svg>,
+  USDT: <svg width="16" height="16" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><circle cx="16" cy="16" r="16" fill="#26A17B"/><path d="M17.9 17.2v-.01c-.1 0-.65.04-1.87.04-1 0-1.69-.03-1.94-.04v.01c-3.84-.17-6.7-.84-6.7-1.64s2.86-1.47 6.7-1.64v2.61c.26.02.97.06 1.96.06 1.19 0 1.79-.05 1.85-.06v-2.61c3.83.17 6.69.84 6.69 1.64s-2.86 1.47-6.69 1.64zm0-3.55v-2.33h5.35V9H8.77v2.34h5.35v2.33c-4.35.2-7.62 1.05-7.62 2.07s3.27 1.87 7.62 2.07v7.41h3.77v-7.41c4.34-.2 7.6-1.05 7.6-2.07s-3.26-1.87-7.6-2.07z" fill="white"/></svg>,
+  POL:  <svg width="16" height="16" viewBox="0 0 38 33" xmlns="http://www.w3.org/2000/svg"><rect width="38" height="33" rx="8" fill="#8247e5"/><path d="M25.3 10.8l-1.2-.7c-.3-.2-.6-.2-.9 0L17 14l-4.5-2.6c-.3-.2-.6-.2-.9 0L5.2 15.6c-.3.2-.4.4-.4.7v7.5c0 .3.2.5.4.7l6.4 3.7c.3.2.6.2.9 0l4.5-2.6 6.2 3.6c.3.2.6.2.9 0l6.4-3.7c.3-.2.4-.4.4-.7V11.5c0-.3-.2-.5-.4-.7l-5.6-3.2z" fill="white"/></svg>,
+};
+
 const NETWORKS = {
   base: {
     name: "Base",
@@ -724,8 +731,8 @@ export default function App() {
               {/* NETWORK SELECTOR */}
               <div style={{display:"flex",gap:6,marginBottom:16,background:"var(--surface2)",padding:4,borderRadius:12,border:"1px solid var(--border)"}}>
                 {[
-                  {key:"base", label:"Base", color:"#22c5f0", svg:<svg width="14" height="14" viewBox="0 0 111 111" fill="none"><circle cx="55.5" cy="55.5" r="55.5" fill="#0052FF"/><path d="M55.5 22C37.1 22 22 37.1 22 55.5S37.1 89 55.5 89c16.7 0 30.5-12.1 33.1-28H62.4c-2.2 4.4-6.7 7.4-11.9 7.4-7.4 0-13.4-6-13.4-13.4s6-13.4 13.4-13.4c5.2 0 9.7 3 11.9 7.4h26.2C85.9 34.1 72.1 22 55.5 22z" fill="white"/></svg>},
-                  {key:"polygon", label:"Polygon", color:"#8247e5", svg:<svg width="14" height="14" viewBox="0 0 38 33" fill="none"><path d="M28.8 8.4l-1.4-.8c-.3-.2-.7-.2-1 0L19 12.4l-5.2-3c-.3-.2-.7-.2-1 0l-7.4 4.3c-.3.2-.5.5-.5.8v8.6c0 .3.2.6.5.8l7.4 4.3c.3.2.7.2 1 0l5.2-3 7.4 4.3c.3.2.7.2 1 0l7.4-4.3c.3-.2.5-.5.5-.8V9.2c0-.3-.2-.6-.5-.8l-6.4-3.7z" fill="#8247e5"/></svg>},
+                  {key:"base", label:"Base", color:"#22c5f0", svg:<svg width="16" height="16" viewBox="0 0 111 111" xmlns="http://www.w3.org/2000/svg"><circle cx="55.5" cy="55.5" r="55.5" fill="#0052FF"/><path d="M55.5 22C37.1 22 22 37.1 22 55.5S37.1 89 55.5 89c16.7 0 30.5-12.1 33.1-28H62.4c-2.2 4.4-6.7 7.4-11.9 7.4-7.4 0-13.4-6-13.4-13.4s6-13.4 13.4-13.4c5.2 0 9.7 3 11.9 7.4h26.2C85.9 34.1 72.1 22 55.5 22z" fill="white"/></svg>},
+                  {key:"polygon", label:"Polygon", color:"#8247e5", svg:<svg width="16" height="16" viewBox="0 0 38 33" xmlns="http://www.w3.org/2000/svg"><path d="M28.8 8.4l-1.4-.8c-.3-.2-.7-.2-1 0L19 12.4l-5.2-3c-.3-.2-.7-.2-1 0l-7.4 4.3c-.3.2-.5.5-.5.8v8.6c0 .3.2.6.5.8l7.4 4.3c.3.2.7.2 1 0l5.2-3 7.4 4.3c.3.2.7.2 1 0l7.4-4.3c.3-.2.5-.5.5-.8V9.2c0-.3-.2-.6-.5-.8l-6.4-3.7z" fill="white"/></svg>},
                 ].map(({key, label, color, svg})=>(
                   <button key={key}
                     onClick={()=>{ setNetworkKey(key); setToken("USDC"); setSelDenom(null); setAmount(""); setScanResults([]); }}
@@ -776,6 +783,7 @@ export default function App() {
                     <input className="amount-input" type="number" placeholder="0" value={amount} onChange={e=>setAmount(e.target.value)} step="any" min="0"/>
                     <div className="rel" ref={tokenRef}>
                       <button className="token-select" onClick={()=>setShowTokens(s=>!s)}>
+                        <span style={{display:"flex",alignItems:"center",flexShrink:0}}>{TOKEN_ICONS[token]}</span>
                         {token}
                         <span className="token-chevron">▾</span>
                       </button>
@@ -783,6 +791,7 @@ export default function App() {
                         <div className="token-dropdown">
                           {["USDC","USDT",...Object.keys(TOKENS).filter(k=>k!=="USDC"&&k!=="USDT")].map(tk=>(
                             <button key={tk} className={"token-option" + (token===tk?" on":"")} onClick={()=>{setToken(tk);setShowTokens(false);setAmount("");setSelDenom(null);}}>
+                              <span style={{display:"flex",alignItems:"center",flexShrink:0}}>{TOKEN_ICONS[tk]}</span>
                               {tk}
                             </button>
                           ))}
