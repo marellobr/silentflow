@@ -667,11 +667,11 @@ export default function App() {
             <div style={{display:"flex",gap:4}}>
               <button
                 onClick={()=>{ setNetworkKey("base"); setToken("ETH"); setSelDenom(null); setAmount(""); setScanResults([]); }}
-                style={{display:"flex",alignItems:"center",gap:5,fontSize:10,fontFamily:"var(--mono)",padding:"4px 10px",borderRadius:20,border:"1.5px solid",cursor:"pointer",transition:"all 0.2s",fontWeight:600,
-                  background: networkKey==="base" ? "#22c5f0" : "rgba(255,255,255,0.04)",
-                  borderColor: networkKey==="base" ? "#22c5f0" : "rgba(255,255,255,0.1)",
-                  color: networkKey==="base" ? "#08090d" : "#64748b",
-                  boxShadow: networkKey==="base" ? "0 0 12px rgba(34,197,240,0.4)" : "none"
+                style={{display:"flex",alignItems:"center",gap:5,fontSize:10,fontFamily:"var(--mono)",padding:"5px 12px",borderRadius:20,border:"1.5px solid",cursor:"pointer",transition:"all 0.2s",fontWeight:700,
+                  background: networkKey==="base" ? "#22c5f0" : "rgba(34,197,240,0.06)",
+                  borderColor: networkKey==="base" ? "#22c5f0" : "rgba(34,197,240,0.2)",
+                  color: networkKey==="base" ? "#08090d" : "#22c5f0",
+                  boxShadow: networkKey==="base" ? "0 0 14px rgba(34,197,240,0.5)" : "none"
                 }}>
                 <svg width="12" height="12" viewBox="0 0 111 111" fill="none">
                   <circle cx="55.5" cy="55.5" r="55.5" fill={networkKey==="base"?"#08090d":"#0052FF"}/>
@@ -681,11 +681,11 @@ export default function App() {
               </button>
               <button
                 onClick={()=>{ setNetworkKey("polygon"); setToken("POL"); setSelDenom(null); setAmount(""); setScanResults([]); }}
-                style={{display:"flex",alignItems:"center",gap:5,fontSize:10,fontFamily:"var(--mono)",padding:"4px 10px",borderRadius:20,border:"1.5px solid",cursor:"pointer",transition:"all 0.2s",fontWeight:600,
-                  background: networkKey==="polygon" ? "#8247e5" : "rgba(255,255,255,0.04)",
-                  borderColor: networkKey==="polygon" ? "#8247e5" : "rgba(255,255,255,0.1)",
-                  color: networkKey==="polygon" ? "#fff" : "#64748b",
-                  boxShadow: networkKey==="polygon" ? "0 0 12px rgba(130,71,229,0.4)" : "none"
+                style={{display:"flex",alignItems:"center",gap:5,fontSize:10,fontFamily:"var(--mono)",padding:"5px 12px",borderRadius:20,border:"1.5px solid",cursor:"pointer",transition:"all 0.2s",fontWeight:700,
+                  background: networkKey==="polygon" ? "#8247e5" : "rgba(130,71,229,0.06)",
+                  borderColor: networkKey==="polygon" ? "#8247e5" : "rgba(130,71,229,0.2)",
+                  color: networkKey==="polygon" ? "#fff" : "#8247e5",
+                  boxShadow: networkKey==="polygon" ? "0 0 14px rgba(130,71,229,0.5)" : "none"
                 }}>
                 <svg width="12" height="12" viewBox="0 0 38 33" fill="none">
                   <path d="M28.8 8.4l-1.4-.8c-.3-.2-.7-.2-1 0L19 12.4l-5.2-3c-.3-.2-.7-.2-1 0l-7.4 4.3c-.3.2-.5.5-.5.8v8.6c0 .3.2.6.5.8l7.4 4.3c.3.2.7.2 1 0l5.2-3 7.4 4.3c.3.2.7.2 1 0l7.4-4.3c.3-.2.5-.5.5-.8V9.2c0-.3-.2-.6-.5-.8l-6.4-3.7z" fill={networkKey==="polygon"?"#fff":"#8247e5"}/>
@@ -814,7 +814,8 @@ export default function App() {
                 </div>
               )}
 
-              <button className="main-btn" onClick={send} disabled={loading} style={{marginTop:8}}>
+              <button className="main-btn" onClick={send} disabled={loading}
+                style={{marginTop:8, background: network.color, boxShadow: "0 0 28px " + network.color + "44"}}>
                 {loading ? <><span className="spin"/>{t.sending}</> : ("→ " + t.sendBtn)}
               </button>
 
