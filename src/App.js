@@ -686,12 +686,12 @@ export default function App() {
                 <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
                   {useFixed && (
                     <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:"var(--accent)",background:"var(--accent-dim)",border:"1px solid rgba(34,197,240,0.15)",padding:"4px 10px",borderRadius:20}}>
-                      ✓ {lang==="pt"?"Valor padronizado ativo — seu valor se mistura com outros iguais, dificultando rastreamento":"Fixed amount active — your value blends with others, making tracking harder"}
+                      ✓ {lang==="pt"?"Valor padronizado ativo — maior controle sobre seus dados financeiros":"Fixed amount active — greater control over your financial data"}
                     </div>
                   )}
                   {useLock && (
                     <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:"var(--amber)",background:"rgba(251,191,36,0.06)",border:"1px solid rgba(251,191,36,0.15)",padding:"4px 10px",borderRadius:20}}>
-                      ✓ {lang==="pt"?"Atraso de 6h ativo — quebra a correlação temporal entre envio e saque":"6h delay active — breaks the time correlation between send and withdraw"}
+                      ✓ {lang==="pt"?"Atraso de 6h ativo — processamento em janela coletiva para mais privacidade":"6h delay active — processed in a collective window for enhanced privacy"}
                     </div>
                   )}
                 </div>
