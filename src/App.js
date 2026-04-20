@@ -376,7 +376,7 @@ export default function App() {
   const DENOMS = Object.fromEntries(Object.keys(network.tokens).map(k => [k, DENOMS_BY_TOKEN[k] || [10, 50, 100, 500, 1000]]));
   const [account, setAccount]       = useState("");
   const [loading, setLoading]       = useState(false);
-  const [token, setToken]           = useState("ETH");
+  const [token, setToken]           = useState("USDC");
   const [amount, setAmount]         = useState("");
   const [recipient, setRecipient]   = useState("");
   const [useFixed, setUseFixed]     = useState(false);
@@ -728,7 +728,7 @@ export default function App() {
                   {key:"polygon", label:"Polygon", color:"#8247e5", svg:<svg width="14" height="14" viewBox="0 0 38 33" fill="none"><path d="M28.8 8.4l-1.4-.8c-.3-.2-.7-.2-1 0L19 12.4l-5.2-3c-.3-.2-.7-.2-1 0l-7.4 4.3c-.3.2-.5.5-.5.8v8.6c0 .3.2.6.5.8l7.4 4.3c.3.2.7.2 1 0l5.2-3 7.4 4.3c.3.2.7.2 1 0l7.4-4.3c.3-.2.5-.5.5-.8V9.2c0-.3-.2-.6-.5-.8l-6.4-3.7z" fill="#8247e5"/></svg>},
                 ].map(({key, label, color, svg})=>(
                   <button key={key}
-                    onClick={()=>{ setNetworkKey(key); setToken(key==="base"?"ETH":"POL"); setSelDenom(null); setAmount(""); setScanResults([]); }}
+                    onClick={()=>{ setNetworkKey(key); setToken("USDC"); setSelDenom(null); setAmount(""); setScanResults([]); }}
                     style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7,
                       padding:"9px 12px",borderRadius:9,border:"none",cursor:"pointer",
                       transition:"all 0.2s",fontWeight:600,fontSize:13,fontFamily:"var(--sans)",
@@ -781,7 +781,7 @@ export default function App() {
                       </button>
                       {showTokens && (
                         <div className="token-dropdown">
-                          {Object.keys(TOKENS).map(tk=>(
+                          {["USDC","USDT",...Object.keys(TOKENS).filter(k=>k!=="USDC"&&k!=="USDT")].map(tk=>(
                             <button key={tk} className={"token-option" + (token===tk?" on":"")} onClick={()=>{setToken(tk);setShowTokens(false);setAmount("");setSelDenom(null);}}>
                               {tk}
                             </button>
