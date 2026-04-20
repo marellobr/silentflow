@@ -2,9 +2,40 @@
 import { useState, useEffect, useRef } from "react";
 import { ethers } from "ethers";
 
-const CONTRACT_ADDRESS = "0x99f4a6Deb7643a1DDa10115BFE3c7a4D9C4Ef09B";
-const BACKEND_URL      = "https://silentflow-production.up.railway.app";
-const BASE_CHAIN_ID    = 8453;
+const NETWORKS = {
+  base: {
+    name: "Base",
+    chainId: 8453,
+    chainHex: "0x2105",
+    contractAddress: "0x99f4a6Deb7643a1DDa10115BFE3c7a4D9C4Ef09B",
+    backendUrl: "https://silentflow-production.up.railway.app",
+    explorer: "https://basescan.org",
+    rpc: "https://mainnet.base.org",
+    tokens: {
+      ETH:  { address: "0x0000000000000000000000000000000000000000", decimals: 18 },
+      USDC: { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 },
+      USDT: { address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6 }
+    },
+    nativeSymbol: "ETH",
+    color: "#22c5f0",
+  },
+  polygon: {
+    name: "Polygon",
+    chainId: 137,
+    chainHex: "0x89",
+    contractAddress: "0x074c000416A4725EDA5F53EE7b690f82f250847B",
+    backendUrl: "https://silentflow-production-4600.up.railway.app",
+    explorer: "https://polygonscan.com",
+    rpc: "https://polygon-rpc.com",
+    tokens: {
+      POL:  { address: "0x0000000000000000000000000000000000000000", decimals: 18 },
+      USDC: { address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6 },
+      USDT: { address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", decimals: 6 }
+    },
+    nativeSymbol: "POL",
+    color: "#8247e5",
+  }
+};
 
 const ABI = [
   "function withdrawFor(address stealthAddress, address token, address recipient, bytes calldata sig) external",
@@ -340,6 +371,12 @@ a{color:var(--accent);text-decoration:none}
 export default function App() {
   const [lang, setLang]             = useState("pt");
   const t = T[lang];
+  const [networkKey, setNetworkKey] = useState("base");
+  const network = NETWORKS[networkKey];
+  const CONTRACT_ADDRESS = network.contractAddress;
+  const BACKEND_URL = network.backendUrl;
+  const TOKENS = network.tokens;
+  const DENOMS = Object.fromEntries(Object.keys(network.tokens).map(k => [k, DENOMS_BY_TOKEN[k] || [10, 50, 100, 500, 1000]]));
   const [account, setAccount]       = useState("");
   const [loading, setLoading]       = useState(false);
   const [token, setToken]           = useState("ETH");
@@ -376,7 +413,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const raw = decodeURIComponent(window.location.pathname); const m = raw.match(/\/p\/(st:.+)/);
+    const m = window.location.pathname.match(/\/p\/(st:.+)/);
     if (m) setRecipient(decodeURIComponent(m[1]));
   }, []);
 
@@ -448,8 +485,8 @@ export default function App() {
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const net = await provider.getNetwork();
-      if (Number(net.chainId) !== BASE_CHAIN_ID) {
-        try { await window.ethereum.request({ method:"wallet_switchEthereumChain", params:[{chainId:"0x2105"}] }); }
+      if (Number(net.chainId) !== network.chainId) {
+        try { await window.ethereum.request({ method:"wallet_switchEthereumChain", params:[{chainId:network.chainHex}] }); }
         catch { showAlert(t.wrongNet,"err"); setLoading(false); return; }
       }
       const accs = await provider.send("eth_requestAccounts",[]);
@@ -526,7 +563,7 @@ export default function App() {
     if (!sk||!vk) return showAlert(t.noKeysForScan,"warn");
     setScanning(true); setScanResults([]);
     try {
-      const provider = new ethers.JsonRpcProvider("https://mainnet.base.org");
+      const provider = new ethers.JsonRpcProvider(network.rpc);
       const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
       const filter = contract.filters.StealthDeposit();
       const current = await provider.getBlockNumber();
@@ -563,12 +600,12 @@ export default function App() {
     setWithdrawingId(item.stealthAddress);
     try {
       const sw = new ethers.Wallet(item.stealthPrivKey);
-      const provider = new ethers.JsonRpcProvider("https://mainnet.base.org");
+      const provider = new ethers.JsonRpcProvider(network.rpc);
       const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
       const nonce = await contract.withdrawNonces(item.stealthAddress);
-      const packed = ethers.keccak256(ethers.solidityPacked(["address","address","address","uint256","uint256"],[item.stealthAddress,item.tokenAddr,account,nonce,BigInt(BASE_CHAIN_ID)]));
+      const packed = ethers.keccak256(ethers.solidityPacked(["address","address","address","uint256","uint256"],[item.stealthAddress,item.tokenAddr,account,nonce,BigInt(network.chainId)]));
       const sig = await sw.signMessage(ethers.getBytes(packed));
-      const res = await fetch(BACKEND_URL + "/withdraw",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({stealthAddress:item.stealthAddress,token:item.tokenAddr,recipient:account,sig})});
+      const res = await fetch(network.backendUrl + "/withdraw",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({stealthAddress:item.stealthAddress,token:item.tokenAddr,recipient:account,sig})});
       const d = await res.json();
       if (d.ok) {
         showAlert(t.withdrawDone,"ok");
@@ -630,7 +667,26 @@ export default function App() {
           <div className="nav-brand">
             <img className="nav-logo" src="/logo.png" alt="SF" onError={e=>{e.target.style.display="none";}} />
             <span className="nav-name">SILENTFLOW</span>
-            <span className="nav-badge">BASE</span>
+            <div className="rel" style={{display:"flex",gap:4}}>
+              <button
+                onClick={()=>{ setNetworkKey("base"); setToken("ETH"); setSelDenom(null); setAmount(""); setScanResults([]); }}
+                style={{fontSize:10,fontFamily:"var(--mono)",padding:"3px 8px",borderRadius:20,border:"1px solid",cursor:"pointer",transition:"all 0.2s",
+                  background: networkKey==="base" ? "rgba(34,197,240,0.1)" : "transparent",
+                  borderColor: networkKey==="base" ? "rgba(34,197,240,0.3)" : "rgba(255,255,255,0.1)",
+                  color: networkKey==="base" ? "#22c5f0" : "#64748b"
+                }}>
+                ● BASE
+              </button>
+              <button
+                onClick={()=>{ setNetworkKey("polygon"); setToken("POL"); setSelDenom(null); setAmount(""); setScanResults([]); }}
+                style={{fontSize:10,fontFamily:"var(--mono)",padding:"3px 8px",borderRadius:20,border:"1px solid",cursor:"pointer",transition:"all 0.2s",
+                  background: networkKey==="polygon" ? "rgba(130,71,229,0.1)" : "transparent",
+                  borderColor: networkKey==="polygon" ? "rgba(130,71,229,0.3)" : "rgba(255,255,255,0.1)",
+                  color: networkKey==="polygon" ? "#8247e5" : "#64748b"
+                }}>
+                ● POL
+              </button>
+            </div>
           </div>
           <div className="nav-right">
             <a href="https://silentflow-landing-wine.vercel.app" target="_blank" rel="noreferrer" style={{fontSize:12,color:"var(--text2)",padding:"5px 10px",border:"1px solid var(--border2)",borderRadius:20,transition:"all 0.2s",textDecoration:"none"}}>
@@ -800,7 +856,7 @@ export default function App() {
                     <div className="hist-body">
                       <div className="hist-amount">{h.amount} {h.token}</div>
                       <div className="hist-dest">{h.to ? h.to.slice(0,30) : ""}...</div>
-                      <a className="hist-link" href={"https://basescan.org/tx/" + h.hash} target="_blank" rel="noreferrer">{t.basescan} ↗</a>
+                      <a className="hist-link" href={network.explorer + "/tx/" + h.hash} target="_blank" rel="noreferrer">{t.basescan} ↗</a>
                     </div>
                     <span className={"hist-badge " + (h.status==="done"?"badge-ok":"badge-pend")}>
                       {h.status==="done"?"✓":"..."}
@@ -902,7 +958,7 @@ export default function App() {
                               <div style={{fontSize:11,marginTop:4,color:isLocked?"var(--amber)":"var(--green)"}}>
                                 {isLocked ? ("🔒 " + t.locked + ": " + new Date(r.unlockAt*1000).toLocaleString()) : ("✓ " + t.unlocked)}
                               </div>
-                              <a className="scan-item-link" href={"https://basescan.org/tx/" + r.txHash} target="_blank" rel="noreferrer">Basescan ↗</a>
+                              <a className="scan-item-link" href={network.explorer + "/tx/" + r.txHash} target="_blank" rel="noreferrer">Basescan ↗</a>
                               <button className="scan-withdraw-btn" onClick={()=>doWithdraw(r)} disabled={isWd||isLocked||!account}>
                                 {isWd ? <><span className="spin"/>{t.withdrawing}</> : ("→ " + t.withdrawBtn)}
                               </button>
