@@ -376,7 +376,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const m = window.location.pathname.match(/\/p\/(st:.+)/);
+    const raw = decodeURIComponent(window.location.pathname); const m = raw.match(/\/p\/(st:.+)/);
     if (m) setRecipient(decodeURIComponent(m[1]));
   }, []);
 
