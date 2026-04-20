@@ -400,6 +400,7 @@ export default function App() {
   const TOKENS = network.tokens;
   const DENOMS = Object.fromEntries(Object.keys(network.tokens).map(k => [k, DENOMS_BY_TOKEN[k] || [10, 50, 100, 500, 1000]]));
   const [account, setAccount]       = useState("");
+  const [brlRate, setBrlRate]       = useState(null); // USD to BRL rate
   const [loading, setLoading]       = useState(false);
   const [token, setToken]           = useState("USDC");
   const [amount, setAmount]         = useState("");
@@ -425,6 +426,14 @@ export default function App() {
   const [importData, setImportData] = useState("");
   const [importPwd, setImportPwd]   = useState("");
   const tokenRef = useRef(null);
+
+  useEffect(() => {
+    // Fetch USD/BRL rate
+    fetch("https://api.exchangerate-api.com/v4/latest/USD")
+      .then(r => r.json())
+      .then(d => setBrlRate(d.rates?.BRL || 5.7))
+      .catch(() => setBrlRate(5.7));
+  }, []);
 
   useEffect(() => {
     const s = localStorage.getItem("sf_sk");
@@ -674,7 +683,9 @@ export default function App() {
   const usdVal = (() => {
     const v = useFixed ? (selDenom||0) : (parseFloat(amount)||0);
     if (!v) return null;
-    return token==="ETH" ? ("approx $" + (v*2200).toFixed(2)) : ("approx $" + v.toFixed(2));
+    const usd = token==="ETH"||token==="BNB"||token==="POL" ? v*2200 : v;
+    const brl = brlRate ? (usd * brlRate).toFixed(2) : null;
+    return brl ? ("≈ $" + usd.toFixed(2) + " · R$ " + Number(brl).toLocaleString("pt-BR", {minimumFractionDigits:2})) : ("≈ $" + usd.toFixed(2));
   })();
 
   const closeModal = () => setModal(null);
@@ -937,6 +948,15 @@ export default function App() {
                     <div style={{fontSize:11,color:"var(--text3)",textAlign:"center",margin:"6px 0 12px"}}>{t.keysHint}</div>
                     <div className="paylink-box">
                       <div className="paylink-label">🔗 {t.paylink}</div>
+                      {/* QR Code */}
+                      <div style={{display:"flex",justifyContent:"center",margin:"12px 0"}}>
+                        <img
+                          src={"https://api.qrserver.com/v1/create-qr-code/?size=160x160&bgcolor=111520&color=22c5f0&data=" + encodeURIComponent(payLink)}
+                          width="160" height="160"
+                          style={{borderRadius:12,border:"1px solid rgba(34,197,240,0.2)"}}
+                          alt="QR Code"
+                        />
+                      </div>
                       <div className="paylink-url">{payLink}</div>
                       <button className={"copy-btn" + (copied==="link"?" ok":"")} onClick={()=>copyText(payLink,"link")}>
                         {copied==="link" ? ("✓ " + t.copied) : t.copyLink}
