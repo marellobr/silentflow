@@ -731,7 +731,7 @@ export default function App() {
               {/* NETWORK SELECTOR */}
               <div style={{display:"flex",gap:6,marginBottom:16,background:"var(--surface2)",padding:4,borderRadius:12,border:"1px solid var(--border)"}}>
                 {[
-                  {key:"base", label:"Base", color:"#22c5f0", svg:<img src="https://assets.coingecko.com/coins/images/33613/small/base.png" width="16" height="16" style={{borderRadius:"50%"}} alt="Base"/>},
+                  {key:"base", label:"Base", color:"#22c5f0", svg:<img src="https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/base/info/logo.png" width="16" height="16" style={{borderRadius:"50%"}} alt="Base"/>},
                   {key:"polygon", label:"Polygon", color:"#8247e5", svg:<img src="https://assets.coingecko.com/coins/images/4713/small/polygon.png" width="16" height="16" style={{borderRadius:"50%"}} alt="Polygon"/>},
                 ].map(({key, label, color, svg})=>(
                   <button key={key}
