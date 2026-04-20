@@ -7,6 +7,7 @@ const TOKEN_ICONS = {
   USDC: <img src="https://assets.coingecko.com/coins/images/6319/small/usdc.png" width="18" height="18" style={{borderRadius:"50%"}} alt="USDC"/>,
   USDT: <img src="https://assets.coingecko.com/coins/images/325/small/tether.png" width="18" height="18" style={{borderRadius:"50%"}} alt="USDT"/>,
   POL:  <img src="https://assets.coingecko.com/coins/images/4713/small/polygon.png" width="18" height="18" style={{borderRadius:"50%"}} alt="POL"/>,
+  BNB:  <img src="https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png" width="18" height="18" style={{borderRadius:"50%"}} alt="BNB"/>,
 };
 
 const NETWORKS = {
@@ -41,6 +42,22 @@ const NETWORKS = {
     },
     nativeSymbol: "POL",
     color: "#8247e5",
+  },
+  bnb: {
+    name: "BNB",
+    chainId: 56,
+    chainHex: "0x38",
+    contractAddress: "0x3d2E4d11Be4B2c1747eb0ABDC7f3118CA33d59c6",
+    backendUrl: "https://silentflow-production-675a.up.railway.app",
+    explorer: "https://bscscan.com",
+    rpc: "https://bsc-dataseed.binance.org",
+    tokens: {
+      BNB:  { address: "0x0000000000000000000000000000000000000000", decimals: 18 },
+      USDC: { address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", decimals: 18 },
+      USDT: { address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18 }
+    },
+    nativeSymbol: "BNB",
+    color: "#F0B90B",
   }
 };
 
@@ -61,6 +78,7 @@ const ERC20_ABI = [
 const DENOMS_BY_TOKEN = {
   ETH:  [0.01, 0.05, 0.1, 0.5, 1, 5],
   POL:  [1, 5, 10, 50, 100],
+  BNB:  [0.01, 0.05, 0.1, 0.5, 1],
   USDC: [10, 50, 100, 500, 1000],
   USDT: [10, 50, 100, 500, 1000]
 };
@@ -733,6 +751,7 @@ export default function App() {
                 {[
                   {key:"base", label:"Base", color:"#22c5f0", svg:<img src="https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/base/info/logo.png" width="16" height="16" style={{borderRadius:"50%"}} alt="Base"/>},
                   {key:"polygon", label:"Polygon", color:"#8247e5", svg:<img src="https://assets.coingecko.com/coins/images/4713/small/polygon.png" width="16" height="16" style={{borderRadius:"50%"}} alt="Polygon"/>},
+                  {key:"bnb", label:"BNB", color:"#F0B90B", svg:<img src="https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png" width="16" height="16" style={{borderRadius:"50%"}} alt="BNB"/>},
                 ].map(({key, label, color, svg})=>(
                   <button key={key}
                     onClick={()=>{ setNetworkKey(key); setToken("USDC"); setSelDenom(null); setAmount(""); setScanResults([]); }}
