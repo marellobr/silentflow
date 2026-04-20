@@ -682,6 +682,20 @@ export default function App() {
                   </button>
                 </div>
               </div>
+              {(useFixed||useLock) && (
+                <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
+                  {useFixed && (
+                    <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:"var(--accent)",background:"var(--accent-dim)",border:"1px solid rgba(34,197,240,0.15)",padding:"4px 10px",borderRadius:20}}>
+                      ✓ {lang==="pt"?"Valor padronizado ativo — seu valor se mistura com outros iguais, dificultando rastreamento":"Fixed amount active — your value blends with others, making tracking harder"}
+                    </div>
+                  )}
+                  {useLock && (
+                    <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:"var(--amber)",background:"rgba(251,191,36,0.06)",border:"1px solid rgba(251,191,36,0.15)",padding:"4px 10px",borderRadius:20}}>
+                      ✓ {lang==="pt"?"Atraso de 6h ativo — quebra a correlação temporal entre envio e saque":"6h delay active — breaks the time correlation between send and withdraw"}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {useFixed ? (
                 <div className="denom-box">
