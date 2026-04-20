@@ -633,6 +633,9 @@ export default function App() {
             <span className="nav-badge">BASE</span>
           </div>
           <div className="nav-right">
+            <a href="https://silentflow-landing-wine.vercel.app" target="_blank" rel="noreferrer" style={{fontSize:12,color:"var(--text2)",padding:"5px 10px",border:"1px solid var(--border2)",borderRadius:20,transition:"all 0.2s",textDecoration:"none"}}>
+              {lang==="pt"?"Sobre":"About"}
+            </a>
             <button className="nav-lang" onClick={()=>setLang(l=>l==="pt"?"en":"pt")}>{lang==="pt"?"EN":"PT"}</button>
             {account
               ? <div className="nav-wallet" onClick={()=>setModal("history")}><span className="wallet-dot"/>{fmtAddr(account)}</div>
