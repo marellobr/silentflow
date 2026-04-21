@@ -227,7 +227,7 @@ input,textarea{font-family:var(--sans);outline:none;border:none}
 a{color:var(--accent);text-decoration:none}
 .app{min-height:100vh;display:flex;flex-direction:column}
 
-.nav{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:rgba(8,9,13,0.9);backdrop-filter:blur(24px);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
+.nav{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:rgba(8,9,13,0.9);backdrop-filter:blur(24px);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
 .nav-brand{display:flex;align-items:center;gap:10px}
 .nav-logo{width:28px;height:28px;filter:drop-shadow(0 0 12px rgba(34,197,240,0.5))}
 .nav-name{font-size:15px;font-weight:700;letter-spacing:0.05em;color:#fff}
@@ -242,8 +242,8 @@ a{color:var(--accent);text-decoration:none}
 .wallet-dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0}
 .nav-connect{background:var(--accent);color:#08090d;font-weight:700;font-size:13px;padding:8px 18px;border-radius:var(--r3);transition:all 0.2s;box-shadow:0 0 20px var(--accent-glow)}
 .nav-connect:hover{opacity:0.9;transform:translateY(-1px)}
-.main{flex:1;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px 0;position:relative;z-index:1}
-.card-wrap{width:100%;max-width:460px}
+.main{flex:1;display:flex;align-items:flex-start;justify-content:center;padding:16px 12px 100px;position:relative;z-index:1}
+.card-wrap{width:100%;max-width:460px;min-width:0}
 .swap-card{background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);padding:20px;box-shadow:0 8px 40px rgba(0,0,0,0.4)}
 .card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
 .card-title{font-size:16px;font-weight:600;color:var(--text)}
@@ -302,8 +302,9 @@ a{color:var(--accent);text-decoration:none}
 .funds-alert-text strong{display:block;font-size:15px;font-weight:700;color:var(--text);margin-bottom:2px}
 .funds-alert-btn{padding:8px 14px;border-radius:var(--r4);background:var(--accent);color:#08090d;font-size:12px;font-weight:700;white-space:nowrap;transition:all 0.2s;flex-shrink:0}
 .funds-alert-btn:hover{opacity:0.9}
-.bottom-nav{display:flex;gap:6px;margin-bottom:16px}
-.nav-tab{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 8px;border-radius:var(--r3);background:var(--surface2);border:1px solid var(--border);color:var(--text3);font-size:13px;font-weight:500;transition:all 0.2s}
+.bottom-nav{display:flex;gap:6px;margin-bottom:16px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+.bottom-nav::-webkit-scrollbar{display:none}
+.nav-tab{flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 14px;border-radius:var(--r3);background:var(--surface2);border:1px solid var(--border);color:var(--text3);font-size:13px;font-weight:500;transition:all 0.2s;white-space:nowrap}
 .nav-tab:hover{border-color:var(--border2);color:var(--text2)}
 .nav-tab.active{background:var(--accent-dim);border-color:rgba(34,197,240,0.25);color:var(--accent)}
 .nav-tab-icon{font-size:15px;line-height:1}
@@ -378,6 +379,14 @@ a{color:var(--accent);text-decoration:none}
 .btn-cancel:hover{border-color:var(--border2);color:var(--text)}
 .btn-confirm{flex:1;padding:10px;border-radius:var(--r4);background:var(--accent);color:#08090d;font-size:13px;font-weight:700;cursor:pointer;transition:all 0.2s}
 .btn-confirm:hover{opacity:0.9}
+@media(max-width:480px){
+  .nav-name{font-size:13px}
+  .nav-connect{font-size:12px;padding:7px 12px}
+  .nav-wallet{font-size:10px;padding:6px 10px}
+  .swap-card{padding:14px}
+  .amount-input{font-size:26px}
+  a[href*="silentflow-landing"]{display:none!important}
+}
 .spin{width:16px;height:16px;border:2px solid rgba(8,9,13,0.25);border-top-color:#08090d;border-radius:50%;animation:spinning 0.65s linear infinite;display:inline-block;flex-shrink:0}
 .spin-blue{border-color:rgba(34,197,240,0.2);border-top-color:var(--accent)}
 @keyframes spinning{to{transform:rotate(360deg)}}
@@ -767,7 +776,7 @@ export default function App() {
             </span>
           </div>
           <div className="nav-right">
-            <a href="https://silentflow-landing-wine.vercel.app" target="_blank" rel="noreferrer" style={{fontSize:12,color:"var(--text2)",padding:"5px 10px",border:"1px solid var(--border2)",borderRadius:20,transition:"all 0.2s",textDecoration:"none"}}>
+            <a href="https://silentflow-landing-wine.vercel.app" target="_blank" rel="noreferrer" style={{fontSize:12,color:"var(--text2)",padding:"5px 10px",border:"1px solid var(--border2)",borderRadius:20,transition:"all 0.2s",textDecoration:"none",display:"var(--show-desktop, flex)"}}>
               {lang==="pt"?"Sobre":"About"}
             </a>
             <button className="nav-lang" onClick={()=>setLang(l=>l==="pt"?"en":"pt")}>{lang==="pt"?"EN":"PT"}</button>
