@@ -84,9 +84,9 @@ const DENOMS_BY_TOKEN = {
 };
 
 function getTierInfo(usd) {
-  if (usd >= 5000) return { label: "Premium", bps: 10, color: "#a78bfa" };
-  if (usd >= 500)  return { label: "Volume",  bps: 15, color: "#34d399" };
-  return                  { label: "Standard", bps: 20, color: "#22c5f0" };
+  if (usd >= 5000) return { label: "Premium", bps: 20, color: "#a78bfa" };
+  if (usd >= 500)  return { label: "Volume",  bps: 35, color: "#34d399" };
+  return                  { label: "Standard", bps: 50, color: "#22c5f0" };
 }
 
 function fmtAddr(addr) {
@@ -429,9 +429,9 @@ export default function App() {
 
   useEffect(() => {
     // Fetch USD/BRL rate
-    fetch("https://api.exchangerate-api.com/v4/latest/USD")
+    fetch("https://economia.awesomeapi.com.br/json/last/USD-BRL")
       .then(r => r.json())
-      .then(d => setBrlRate(d.rates?.BRL || 5.7))
+      .then(d => setBrlRate(parseFloat(d.USDBRL?.bid) || 5.7))
       .catch(() => setBrlRate(5.7));
   }, []);
 
