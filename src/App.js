@@ -129,10 +129,10 @@ async function decryptKeys(b64, pwd) {
 const T = {
   pt: {
     send:"Enviar", receive:"Receber", history:"Historico", scan:"Recebidos",
-    sendTitle:"Envio privado", amount:"Voce envia", to:"Para",
+    sendTitle:"Envio protegido", amount:"Voce envia", to:"Para",
     toPlaceholder:"Endereco ou link de pagamento",
     fixedDenom:"Valor fixo", timelock:"Atraso 6h",
-    sendBtn:"Enviar com privacidade", sending:"Processando...",
+    sendBtn:"Enviar sem expor sua carteira", sending:"Processando...",
     connectBtn:"Conectar carteira", connecting:"Conectando...",
     wrongNet:"Mude para a rede Base no MetaMask.",
     fee:"Taxa de privacidade",
@@ -168,10 +168,10 @@ const T = {
   },
   en: {
     send:"Send", receive:"Receive", history:"History", scan:"Received",
-    sendTitle:"Private transfer", amount:"You send", to:"To",
+    sendTitle:"Protected transfer", amount:"You send", to:"To",
     toPlaceholder:"Address or payment link",
     fixedDenom:"Fixed amount", timelock:"6h delay",
-    sendBtn:"Send privately", sending:"Processing...",
+    sendBtn:"Send without exposing your wallet", sending:"Processing...",
     connectBtn:"Connect wallet", connecting:"Connecting...",
     wrongNet:"Switch to Base network in MetaMask.",
     fee:"Privacy fee",
@@ -467,6 +467,12 @@ export default function App() {
           clearInterval(iv);
           setPipelineId(null);
           showAlert(t.txDone, "ok");
+          // Update history status to done
+          setHistory(prev => {
+            const updated = prev.map((h, i) => i === 0 ? {...h, status:"done"} : h);
+            localStorage.setItem("sf_hist", JSON.stringify(updated));
+            return updated;
+          });
         }
       } catch {}
     }, 5000);
@@ -537,6 +543,10 @@ export default function App() {
     const val = useFixed ? selDenom : parseFloat(amount);
     if (!val||val<=0) return showAlert(t.enterAmount,"err");
     if (!recipient.trim()) return showAlert(t.enterTo,"err");
+    // Minimum value check
+    const minUsd = networkKey==="polygon" ? 10 : 25;
+    const valUsd = token==="ETH"||token==="BNB"||token==="POL" ? val*2200 : val;
+    if (valUsd < minUsd) return showAlert(lang==="pt" ? "Valor minimo: $" + minUsd + " (R$ " + (minUsd*(brlRate||5.7)).toFixed(0) + ")" : "Minimum amount: $" + minUsd, "err");
     setLoading(true); setPipeData(null);
     try {
       let stealthAddress, ephemeralPubKey, viewTag;
@@ -852,6 +862,10 @@ export default function App() {
               <button className="main-btn" onClick={send} disabled={loading}
                 style={{marginTop:8, background: network.color, boxShadow: "0 0 28px " + network.color + "44"}}>
                 {loading ? <><span className="spin"/>{t.sending}</> : ("→ " + t.sendBtn)}
+              </button>
+              <button className="main-btn ghost" onClick={()=>{ if(!sk){generateKeys();} setModal("receive"); }}
+                style={{marginTop:8}}>
+                ⬇ {lang==="pt" ? "Gerar link para receber" : "Generate payment link"}
               </button>
 
               {pipeData && (
