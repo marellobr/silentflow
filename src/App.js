@@ -579,7 +579,7 @@ export default function App() {
         ephemeralPubKey = ethers.hexlify(ethers.randomBytes(33));
         viewTag = 0;
       }
-      const params = new URLSearchParams({ token, stealthAddress, ephemeralPubKey, viewTag:String(viewTag), timelocked:String(useLock) });
+      const params = new URLSearchParams({ token, stealthAddress, ephemeralPubKey, viewTag:String(viewTag), timelocked:"false" });
       const er = await fetch(BACKEND_URL + "/entrada?" + params);
       const ed = await er.json();
       if (ed.erro) throw new Error(ed.erro);
@@ -818,7 +818,7 @@ export default function App() {
                 ))}
               </div>
 
-              {(useFixed||useLock) && (
+              {useFixed && (
                 <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
                   {useFixed && (
                     <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:"var(--accent)",background:"var(--accent-dim)",border:"1px solid rgba(34,197,240,0.15)",padding:"4px 10px",borderRadius:20}}>
