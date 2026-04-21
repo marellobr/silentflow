@@ -877,11 +877,16 @@ export default function App() {
                   <input
                     className="amount-input"
                     type="number" placeholder="0"
-                    value={recipientAmt}
+                    value={recipientAmt || (() => {
+                      const v = useFixed ? (selDenom||0) : (parseFloat(amount)||0);
+                      if (!v) return "";
+                      const usd = token==="ETH"||token==="BNB"||token==="POL" ? v*2200 : v;
+                      const tier = getTierInfo(usd);
+                      return (v * (1 - tier.bps/10000)).toFixed(token==="ETH"||token==="BNB"||token==="POL"?5:2);
+                    })()}
                     onChange={e=>{
                       setRecipientAmt(e.target.value);
-                      // Clear sender amount when typing recipient amount
-                      if(e.target.value) setAmount("");
+                      if(e.target.value) { setAmount(""); setSelDenom(null); }
                     }}
                     step="any" min="0"
                   />
