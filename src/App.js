@@ -738,19 +738,19 @@ export default function App() {
       {/* ANIMATED BACKGROUND ORBS */}
       <div style={{position:"fixed",inset:0,zIndex:0,overflow:"hidden",pointerEvents:"none"}}>
         {/* Main glow */}
-        <div style={{position:"absolute",top:"-20%",left:"50%",transform:"translateX(-50%)",width:800,height:800,borderRadius:"50%",background:"radial-gradient(circle,rgba(34,197,240,0.06) 0%,transparent 65%)"}}/>
-        {/* Orb 1 - cyan */}
-        <div style={{position:"absolute",top:"10%",left:"8%",width:280,height:280,borderRadius:"50%",background:"radial-gradient(circle,rgba(34,197,240,0.12) 0%,transparent 70%)",animation:"float1 12s ease-in-out infinite"}}/>
-        {/* Orb 2 - purple */}
-        <div style={{position:"absolute",top:"20%",right:"6%",width:220,height:220,borderRadius:"50%",background:"radial-gradient(circle,rgba(130,71,229,0.1) 0%,transparent 70%)",animation:"float2 15s ease-in-out infinite"}}/>
+        <div style={{position:"absolute",top:"-10%",left:"50%",transform:"translateX(-50%)",width:900,height:900,borderRadius:"50%",background:"radial-gradient(circle,rgba(34,197,240,0.08) 0%,transparent 65%)"}}/>
+        {/* Orb 1 - cyan large */}
+        <div style={{position:"absolute",top:"5%",left:"3%",width:420,height:420,borderRadius:"50%",background:"radial-gradient(circle,rgba(34,197,240,0.18) 0%,rgba(34,197,240,0.04) 50%,transparent 70%)",animation:"float1 12s ease-in-out infinite",filter:"blur(2px)"}}/>
+        {/* Orb 2 - purple large */}
+        <div style={{position:"absolute",top:"15%",right:"2%",width:360,height:360,borderRadius:"50%",background:"radial-gradient(circle,rgba(130,71,229,0.16) 0%,rgba(130,71,229,0.04) 50%,transparent 70%)",animation:"float2 15s ease-in-out infinite",filter:"blur(2px)"}}/>
         {/* Orb 3 - amber */}
-        <div style={{position:"absolute",bottom:"25%",left:"12%",width:180,height:180,borderRadius:"50%",background:"radial-gradient(circle,rgba(240,185,11,0.08) 0%,transparent 70%)",animation:"float3 18s ease-in-out infinite"}}/>
-        {/* Orb 4 - cyan small */}
-        <div style={{position:"absolute",bottom:"15%",right:"10%",width:150,height:150,borderRadius:"50%",background:"radial-gradient(circle,rgba(34,197,240,0.08) 0%,transparent 70%)",animation:"float4 10s ease-in-out infinite"}}/>
-        {/* Orb 5 - green */}
-        <div style={{position:"absolute",top:"55%",left:"35%",width:120,height:120,borderRadius:"50%",background:"radial-gradient(circle,rgba(52,211,153,0.07) 0%,transparent 70%)",animation:"float5 20s ease-in-out infinite"}}/>
+        <div style={{position:"absolute",bottom:"20%",left:"5%",width:300,height:300,borderRadius:"50%",background:"radial-gradient(circle,rgba(240,185,11,0.14) 0%,rgba(240,185,11,0.03) 50%,transparent 70%)",animation:"float3 18s ease-in-out infinite",filter:"blur(2px)"}}/>
+        {/* Orb 4 - cyan bottom right */}
+        <div style={{position:"absolute",bottom:"10%",right:"5%",width:280,height:280,borderRadius:"50%",background:"radial-gradient(circle,rgba(34,197,240,0.12) 0%,transparent 70%)",animation:"float4 10s ease-in-out infinite",filter:"blur(1px)"}}/>
+        {/* Orb 5 - green mid */}
+        <div style={{position:"absolute",top:"50%",left:"30%",width:200,height:200,borderRadius:"50%",background:"radial-gradient(circle,rgba(52,211,153,0.1) 0%,transparent 70%)",animation:"float5 20s ease-in-out infinite",filter:"blur(1px)"}}/>
         {/* Orb 6 - purple small */}
-        <div style={{position:"absolute",top:"70%",right:"25%",width:100,height:100,borderRadius:"50%",background:"radial-gradient(circle,rgba(130,71,229,0.08) 0%,transparent 70%)",animation:"float1 14s ease-in-out infinite reverse"}}/>
+        <div style={{position:"absolute",top:"65%",right:"20%",width:180,height:180,borderRadius:"50%",background:"radial-gradient(circle,rgba(130,71,229,0.12) 0%,transparent 70%)",animation:"float1 14s ease-in-out infinite reverse",filter:"blur(1px)"}}/>
       </div>
       <div className="app">
 
