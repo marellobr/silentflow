@@ -226,7 +226,7 @@ button{cursor:pointer;font-family:var(--sans);border:none;outline:none}
 input,textarea{font-family:var(--sans);outline:none;border:none}
 a{color:var(--accent);text-decoration:none}
 .app{min-height:100vh;display:flex;flex-direction:column}
-.glow{position:fixed;top:-300px;left:50%;transform:translateX(-50%);width:900px;height:600px;border-radius:50%;background:radial-gradient(ellipse,rgba(34,197,240,0.035) 0%,transparent 65%);pointer-events:none;z-index:0}
+
 .nav{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:rgba(8,9,13,0.9);backdrop-filter:blur(24px);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
 .nav-brand{display:flex;align-items:center;gap:10px}
 .nav-logo{width:28px;height:28px;filter:drop-shadow(0 0 12px rgba(34,197,240,0.5))}
@@ -381,6 +381,11 @@ a{color:var(--accent);text-decoration:none}
 .spin{width:16px;height:16px;border:2px solid rgba(8,9,13,0.25);border-top-color:#08090d;border-radius:50%;animation:spinning 0.65s linear infinite;display:inline-block;flex-shrink:0}
 .spin-blue{border-color:rgba(34,197,240,0.2);border-top-color:var(--accent)}
 @keyframes spinning{to{transform:rotate(360deg)}}
+@keyframes float1{0%,100%{transform:translate(0,0) scale(1)}25%{transform:translate(30px,-20px) scale(1.05)}50%{transform:translate(-15px,30px) scale(0.95)}75%{transform:translate(20px,15px) scale(1.02)}}
+@keyframes float2{0%,100%{transform:translate(0,0) scale(1)}30%{transform:translate(-25px,20px) scale(1.08)}60%{transform:translate(15px,-25px) scale(0.93)}80%{transform:translate(-10px,10px) scale(1.03)}}
+@keyframes float3{0%,100%{transform:translate(0,0) scale(1)}20%{transform:translate(20px,15px) scale(0.97)}50%{transform:translate(-20px,-20px) scale(1.06)}75%{transform:translate(10px,-10px) scale(0.98)}}
+@keyframes float4{0%,100%{transform:translate(0,0)}35%{transform:translate(-15px,-25px)}65%{transform:translate(25px,10px)}}
+@keyframes float5{0%,100%{transform:translate(0,0) scale(1)}40%{transform:translate(15px,-15px) scale(1.1)}70%{transform:translate(-20px,20px) scale(0.9)}}
 .divider-label{text-align:center;font-size:11px;color:var(--text3);position:relative;margin:16px 0}
 .divider-label::before,.divider-label::after{content:'';position:absolute;top:50%;width:calc(50% - 20px);height:1px;background:var(--border)}
 .divider-label::before{left:0}
@@ -730,7 +735,23 @@ export default function App() {
   return (
     <>
       <style>{S}</style>
-      <div className="glow" />
+      {/* ANIMATED BACKGROUND ORBS */}
+      <div style={{position:"fixed",inset:0,zIndex:0,overflow:"hidden",pointerEvents:"none"}}>
+        {/* Main glow */}
+        <div style={{position:"absolute",top:"-20%",left:"50%",transform:"translateX(-50%)",width:800,height:800,borderRadius:"50%",background:"radial-gradient(circle,rgba(34,197,240,0.06) 0%,transparent 65%)"}}/>
+        {/* Orb 1 - cyan */}
+        <div style={{position:"absolute",top:"10%",left:"8%",width:280,height:280,borderRadius:"50%",background:"radial-gradient(circle,rgba(34,197,240,0.12) 0%,transparent 70%)",animation:"float1 12s ease-in-out infinite"}}/>
+        {/* Orb 2 - purple */}
+        <div style={{position:"absolute",top:"20%",right:"6%",width:220,height:220,borderRadius:"50%",background:"radial-gradient(circle,rgba(130,71,229,0.1) 0%,transparent 70%)",animation:"float2 15s ease-in-out infinite"}}/>
+        {/* Orb 3 - amber */}
+        <div style={{position:"absolute",bottom:"25%",left:"12%",width:180,height:180,borderRadius:"50%",background:"radial-gradient(circle,rgba(240,185,11,0.08) 0%,transparent 70%)",animation:"float3 18s ease-in-out infinite"}}/>
+        {/* Orb 4 - cyan small */}
+        <div style={{position:"absolute",bottom:"15%",right:"10%",width:150,height:150,borderRadius:"50%",background:"radial-gradient(circle,rgba(34,197,240,0.08) 0%,transparent 70%)",animation:"float4 10s ease-in-out infinite"}}/>
+        {/* Orb 5 - green */}
+        <div style={{position:"absolute",top:"55%",left:"35%",width:120,height:120,borderRadius:"50%",background:"radial-gradient(circle,rgba(52,211,153,0.07) 0%,transparent 70%)",animation:"float5 20s ease-in-out infinite"}}/>
+        {/* Orb 6 - purple small */}
+        <div style={{position:"absolute",top:"70%",right:"25%",width:100,height:100,borderRadius:"50%",background:"radial-gradient(circle,rgba(130,71,229,0.08) 0%,transparent 70%)",animation:"float1 14s ease-in-out infinite reverse"}}/>
+      </div>
       <div className="app">
 
         <nav className="nav">
