@@ -738,9 +738,9 @@ export default function App() {
             <img className="nav-logo" src="/logo.png" alt="SF" onError={e=>{e.target.style.display="none";}} />
             <span className="nav-name">SILENTFLOW</span>
             <span className="nav-badge" style={{
-              color: networkKey==="base" ? "var(--green)" : networkKey==="polygon" ? "#8247e5" : "#F0B90B",
-              background: networkKey==="base" ? "rgba(52,211,153,0.1)" : networkKey==="polygon" ? "rgba(130,71,229,0.1)" : "rgba(240,185,11,0.1)",
-              borderColor: networkKey==="base" ? "rgba(52,211,153,0.25)" : networkKey==="polygon" ? "rgba(130,71,229,0.25)" : "rgba(240,185,11,0.25)"
+              color: networkKey==="base" ? "#22c5f0" : networkKey==="polygon" ? "#8247e5" : "#F0B90B",
+              background: networkKey==="base" ? "rgba(34,197,240,0.1)" : networkKey==="polygon" ? "rgba(130,71,229,0.1)" : "rgba(240,185,11,0.1)",
+              borderColor: networkKey==="base" ? "rgba(34,197,240,0.25)" : networkKey==="polygon" ? "rgba(130,71,229,0.25)" : "rgba(240,185,11,0.25)"
             }}>
               {networkKey === "base" ? "● BASE" : networkKey === "polygon" ? "● POLYGON" : "● BNB"}
             </span>
