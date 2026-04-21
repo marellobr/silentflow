@@ -487,7 +487,8 @@ export default function App() {
       const vp = ethers.SigningKey.computePublicKey(v, true);
       const m  = "st:" + sp + ":" + vp;
       setMeta(m);
-      setPayLink(window.location.origin + "/p/" + encodeURIComponent(m));
+      const base = window.location.origin === "http://localhost:3000" ? "https://silentflow.vercel.app" : window.location.origin;
+      setPayLink(base + "/p/" + encodeURIComponent(m));
     } catch {}
   }
 
@@ -737,8 +738,12 @@ export default function App() {
           <div className="nav-brand">
             <img className="nav-logo" src="/logo.png" alt="SF" onError={e=>{e.target.style.display="none";}} />
             <span className="nav-name">SILENTFLOW</span>
-            <span className="nav-badge">
-              {networkKey === "base" ? "BASE" : "POLYGON"}
+            <span className="nav-badge" style={{
+              color: networkKey==="base" ? "var(--green)" : networkKey==="polygon" ? "#8247e5" : "#F0B90B",
+              background: networkKey==="base" ? "rgba(52,211,153,0.1)" : networkKey==="polygon" ? "rgba(130,71,229,0.1)" : "rgba(240,185,11,0.1)",
+              borderColor: networkKey==="base" ? "rgba(52,211,153,0.25)" : networkKey==="polygon" ? "rgba(130,71,229,0.25)" : "rgba(240,185,11,0.25)"
+            }}>
+              {networkKey === "base" ? "● BASE" : networkKey === "polygon" ? "● POLYGON" : "● BNB"}
             </span>
           </div>
           <div className="nav-right">
@@ -786,11 +791,8 @@ export default function App() {
               <div className="card-header">
                 <span className="card-title">{t.sendTitle}</span>
                 <div className="card-settings">
-                  <button className={"settings-btn" + (useFixed?" on":"")} onClick={()=>{setUseFixed(f=>!f);setSelDenom(null);setAmount("");}}>
-                    {t.fixedDenom}
-                  </button>
-                  <button className={"settings-btn" + (useLock?" on":"")} onClick={()=>setUseLock(l=>!l)}>
-                    {t.timelock}
+                  <button className={"settings-btn" + (useFixed?" on":"")} onClick={()=>{setUseFixed(f=>!f);setSelDenom(null);setAmount(""); setRecipientAmt("");}}>
+                    {lang==="pt"?"Denominação":"Denomination"}
                   </button>
                 </div>
               </div>
@@ -824,11 +826,7 @@ export default function App() {
                       ✓ {lang==="pt"?"Valor padronizado ativo — maior controle sobre seus dados financeiros":"Fixed amount active — greater control over your financial data"}
                     </div>
                   )}
-                  {useLock && (
-                    <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:"var(--amber)",background:"rgba(251,191,36,0.06)",border:"1px solid rgba(251,191,36,0.15)",padding:"4px 10px",borderRadius:20}}>
-                      ✓ {lang==="pt"?"Atraso de 6h ativo — processamento em janela coletiva para mais privacidade":"6h delay active — processed in a collective window for enhanced privacy"}
-                    </div>
-                  )}
+
                 </div>
               )}
 
@@ -847,7 +845,7 @@ export default function App() {
                 <div className="amount-box">
                   <div className="amount-label">{t.amount}</div>
                   <div className="amount-row">
-                    <input className="amount-input" type="number" placeholder="0" value={amount || (senderCalc ? senderCalc.val : "")} onChange={e=>{ setAmount(e.target.value); if(e.target.value) setRecipientAmt(""); }} step="any" min="0"/>
+                    <input className="amount-input" type="number" placeholder="0" value={amount} onChange={e=>setAmount(e.target.value)} step="any" min="0"/>
                     <div className="rel" ref={tokenRef}>
                       <button className="token-select" onClick={()=>setShowTokens(s=>!s)}>
                         <span style={{display:"flex",alignItems:"center",flexShrink:0}}>{TOKEN_ICONS[token]}</span>
