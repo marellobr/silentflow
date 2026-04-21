@@ -847,7 +847,7 @@ export default function App() {
                 <div className="amount-box">
                   <div className="amount-label">{t.amount}</div>
                   <div className="amount-row">
-                    <input className="amount-input" type="number" placeholder="0" value={amount || (() => { const v = parseFloat(recipientAmt)||0; if (!v) return " \; const usd = token===\ETH\||token===\BNB\||token===\POL\ ? v*2200 : v; const tier = getTierInfo(usd); return (v / (1 - tier.bps/10000)).toFixed(token===\ETH\||token===\BNB\||token===\POL\?5:2); })()} onChange={e=>{ setAmount(e.target.value); if(e.target.value) setRecipientAmt(\\); }} step="any" min="0"/>
+                    <input className="amount-input" type="number" placeholder="0" value={amount} onChange={e=>setAmount(e.target.value)} step="any" min="0"/>
                     <div className="rel" ref={tokenRef}>
                       <button className="token-select" onClick={()=>setShowTokens(s=>!s)}>
                         <span style={{display:"flex",alignItems:"center",flexShrink:0}}>{TOKEN_ICONS[token]}</span>
