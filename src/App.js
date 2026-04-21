@@ -711,16 +711,6 @@ export default function App() {
     return "≈ $" + usd.toFixed(2) + brlStr;
   })();
 
-  // Calculate recipient amount from sender amount
-  const recipientCalc = (() => {
-    const v = useFixed ? (selDenom||0) : (parseFloat(amount)||0);
-    if (!v) return null;
-    const usd = token==="ETH"||token==="BNB"||token==="POL" ? v*2200 : v;
-    const tier = getTierInfo(usd);
-    const rec = v * (1 - tier.bps/10000);
-    return rec.toFixed(token==="ETH"||token==="BNB"||token==="POL"?5:2);
-  })();
-
   // Calculate sender amount from recipient amount
   const senderCalc = (() => {
     const v = parseFloat(recipientAmt)||0;
