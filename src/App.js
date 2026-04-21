@@ -408,7 +408,7 @@ export default function App() {
   const [useFixed, setUseFixed]     = useState(false);
   const [useLock, setUseLock]       = useState(false);
   const [selDenom, setSelDenom]     = useState(null);
-  const [exactMode, setExactMode]   = useState(false); // destinatario recebe valor exato
+  const [recipientAmt, setRecipientAmt] = useState(""); // what recipient gets
   const [showTokens, setShowTokens] = useState(false);
   const [pipelineId, setPipelineId] = useState(null);
   const [pipeData, setPipeData]     = useState(null);
@@ -541,15 +541,23 @@ export default function App() {
 
   async function send() {
     if (!account) return connect();
-    const val = useFixed ? selDenom : parseFloat(amount);
+    // If recipient amount is set, calculate gross amount to send
+    const recAmt = parseFloat(recipientAmt)||0;
+    let val;
+    if (recAmt > 0) {
+      const usd = token==="ETH"||token==="BNB"||token==="POL" ? recAmt*2200 : recAmt;
+      const tier = getTierInfo(usd);
+      val = recAmt / (1 - tier.bps/10000);
+    } else {
+      val = useFixed ? selDenom : parseFloat(amount);
+    }
     if (!val||val<=0) return showAlert(t.enterAmount,"err");
     if (!recipient.trim()) return showAlert(t.enterTo,"err");
-    // In exact mode, calculate gross amount to send so recipient gets exact val
-    const tier = getTierInfo(token==="ETH"||token==="BNB"||token==="POL" ? val*2200 : val);
-    const actualVal = exactMode ? val / (1 - tier.bps/10000) : val;
+
     // Minimum value check
     const minUsd = networkKey==="polygon" ? 10 : 25;
-    const valUsd = token==="ETH"||token==="BNB"||token==="POL" ? actualVal*2200 : actualVal;
+    const checkVal = recAmt > 0 ? recAmt : val;
+    const valUsd = token==="ETH"||token==="BNB"||token==="POL" ? checkVal*2200 : checkVal;
     if (valUsd < minUsd) return showAlert(lang==="pt" ? "Valor minimo: $" + minUsd + " (R$ " + (minUsd*(brlRate||5.7)).toFixed(0) + ")" : "Minimum amount: $" + minUsd, "err");
     setLoading(true); setPipeData(null);
     try {
@@ -579,7 +587,7 @@ export default function App() {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const decimals = TOKENS[token].decimals;
-      const valBig = ethers.parseUnits(actualVal.toFixed(decimals > 6 ? 8 : 6), decimals);
+      const valBig = ethers.parseUnits(val.toFixed(decimals > 6 ? 8 : 6), decimals);
       let txHash;
       if (token==="ETH") {
         const tx = await signer.sendTransaction({ to:ed.entradaAddress, value:valBig });
@@ -700,16 +708,31 @@ export default function App() {
     const usd = token==="ETH"||token==="BNB"||token==="POL" ? v*2200 : v;
     const brl = brlRate ? (usd * brlRate).toFixed(2) : null;
     const brlStr = brl ? " · R$ " + Number(brl).toLocaleString("pt-BR",{minimumFractionDigits:2}) : "";
-    if (exactMode) {
-      // Exact mode: v = what recipient receives, show how much sender pays
-      const tier = getTierInfo(usd);
-      const sendVal = v / (1 - tier.bps/10000);
-      const sendBrl = brlRate ? (sendVal * (token==="ETH"||token==="BNB"||token==="POL"?2200:1) * brlRate).toFixed(2) : null;
-      const sendBrlStr = sendBrl ? " (R$ " + Number(sendBrl).toLocaleString("pt-BR",{minimumFractionDigits:2}) + ")" : "";
-      return (lang==="pt"?"→ Voce envia ":"→ You send ") + sendVal.toFixed(token==="ETH"||token==="BNB"||token==="POL"?5:2) + " " + token + sendBrlStr;
-    }
-    // Normal mode: show approximate value
     return "≈ $" + usd.toFixed(2) + brlStr;
+  })();
+
+  // Calculate recipient amount from sender amount
+  const recipientCalc = (() => {
+    const v = useFixed ? (selDenom||0) : (parseFloat(amount)||0);
+    if (!v) return null;
+    const usd = token==="ETH"||token==="BNB"||token==="POL" ? v*2200 : v;
+    const tier = getTierInfo(usd);
+    const rec = v * (1 - tier.bps/10000);
+    return rec.toFixed(token==="ETH"||token==="BNB"||token==="POL"?5:2);
+  })();
+
+  // Calculate sender amount from recipient amount
+  const senderCalc = (() => {
+    const v = parseFloat(recipientAmt)||0;
+    if (!v) return null;
+    const usd = token==="ETH"||token==="BNB"||token==="POL" ? v*2200 : v;
+    const tier = getTierInfo(usd);
+    const send = v / (1 - tier.bps/10000);
+    const sendBrl = brlRate ? (send * (token==="ETH"||token==="BNB"||token==="POL"?2200:1) * brlRate) : null;
+    return {
+      val: send.toFixed(token==="ETH"||token==="BNB"||token==="POL"?5:2),
+      brl: sendBrl ? "R$ " + sendBrl.toLocaleString("pt-BR",{minimumFractionDigits:2, maximumFractionDigits:2}) : null
+    };
   })();
 
   const closeModal = () => setModal(null);
@@ -804,15 +827,6 @@ export default function App() {
                 ))}
               </div>
 
-              {/* EXACT MODE TOGGLE */}
-              <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
-                <button className={"opt-chip" + (exactMode?" on":"")} onClick={()=>setExactMode(e=>!e)}>
-                  <span>🎯</span>
-                  {lang==="pt" ? "Destinatário recebe valor exato" : "Recipient gets exact amount"}
-                  <span className={"chip-check" + (exactMode?" on":"")}>{exactMode?"✓":""}</span>
-                </button>
-              </div>
-
               {(useFixed||useLock) && (
                 <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
                   {useFixed && (
@@ -841,7 +855,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className="amount-box">
-                  <div className="amount-label">{exactMode ? (lang==="pt"?"Destinatario recebe":"Recipient gets") : t.amount}</div>
+                  <div className="amount-label">{t.amount}</div>
                   <div className="amount-row">
                     <input className="amount-input" type="number" placeholder="0" value={amount} onChange={e=>setAmount(e.target.value)} step="any" min="0"/>
                     <div className="rel" ref={tokenRef}>
@@ -865,6 +879,33 @@ export default function App() {
                   {usdVal && <div className="amount-usd">{usdVal}</div>}
                 </div>
               )}
+
+              {/* RECIPIENT AMOUNT BOX */}
+              <div className="amount-box" style={{marginBottom:6}}>
+                <div className="amount-label">{lang==="pt"?"Destinatário recebe":"Recipient gets"}</div>
+                <div className="amount-row">
+                  <input
+                    className="amount-input"
+                    type="number" placeholder="0"
+                    value={recipientAmt}
+                    onChange={e=>{
+                      setRecipientAmt(e.target.value);
+                      // Clear sender amount when typing recipient amount
+                      if(e.target.value) setAmount("");
+                    }}
+                    step="any" min="0"
+                  />
+                  <div style={{fontSize:13,fontWeight:600,color:"var(--text2)",fontFamily:"var(--mono)",flexShrink:0,padding:"8px 14px",background:"var(--surface3)",border:"1px solid var(--border2)",borderRadius:20}}>
+                    {token}
+                  </div>
+                </div>
+                {senderCalc && (
+                  <div className="amount-usd">
+                    {lang==="pt"?"→ Você envia ":"→ You send "}{senderCalc.val} {token}
+                    {senderCalc.brl ? " (" + senderCalc.brl + ")" : ""}
+                  </div>
+                )}
+              </div>
 
               <div className="arrow-divider">
                 <button className="arrow-btn">↓</button>
