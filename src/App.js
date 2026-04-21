@@ -458,8 +458,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const m = window.location.pathname.match(/\/p\/(st:.+)/);
-    if (m) setRecipient(decodeURIComponent(m[1]));
+    function detectPayLink() {
+      const raw = decodeURIComponent(window.location.pathname + window.location.search + window.location.hash);
+      const m = raw.match(/\/p\/(st:[^\s]+)/);
+      if (m) setRecipient(m[1]);
+    }
+    detectPayLink();
+    // retry after render on mobile
+    const t = setTimeout(detectPayLink, 300);
+    return () => clearTimeout(t);
   }, []);
 
   useEffect(() => {
