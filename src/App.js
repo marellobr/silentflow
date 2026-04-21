@@ -408,6 +408,7 @@ export default function App() {
   const [useFixed, setUseFixed]     = useState(false);
   const [useLock, setUseLock]       = useState(false);
   const [selDenom, setSelDenom]     = useState(null);
+  const [exactMode, setExactMode]   = useState(false); // destinatario recebe valor exato
   const [showTokens, setShowTokens] = useState(false);
   const [pipelineId, setPipelineId] = useState(null);
   const [pipeData, setPipeData]     = useState(null);
@@ -543,9 +544,12 @@ export default function App() {
     const val = useFixed ? selDenom : parseFloat(amount);
     if (!val||val<=0) return showAlert(t.enterAmount,"err");
     if (!recipient.trim()) return showAlert(t.enterTo,"err");
+    // In exact mode, calculate gross amount to send so recipient gets exact val
+    const tier = getTierInfo(token==="ETH"||token==="BNB"||token==="POL" ? val*2200 : val);
+    const actualVal = exactMode ? val / (1 - tier.bps/10000) : val;
     // Minimum value check
     const minUsd = networkKey==="polygon" ? 10 : 25;
-    const valUsd = token==="ETH"||token==="BNB"||token==="POL" ? val*2200 : val;
+    const valUsd = token==="ETH"||token==="BNB"||token==="POL" ? actualVal*2200 : actualVal;
     if (valUsd < minUsd) return showAlert(lang==="pt" ? "Valor minimo: $" + minUsd + " (R$ " + (minUsd*(brlRate||5.7)).toFixed(0) + ")" : "Minimum amount: $" + minUsd, "err");
     setLoading(true); setPipeData(null);
     try {
@@ -575,7 +579,7 @@ export default function App() {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const decimals = TOKENS[token].decimals;
-      const valBig = ethers.parseUnits(val.toString(), decimals);
+      const valBig = ethers.parseUnits(actualVal.toFixed(decimals > 6 ? 8 : 6), decimals);
       let txHash;
       if (token==="ETH") {
         const tx = await signer.sendTransaction({ to:ed.entradaAddress, value:valBig });
@@ -695,7 +699,20 @@ export default function App() {
     if (!v) return null;
     const usd = token==="ETH"||token==="BNB"||token==="POL" ? v*2200 : v;
     const brl = brlRate ? (usd * brlRate).toFixed(2) : null;
-    return brl ? ("≈ $" + usd.toFixed(2) + " · R$ " + Number(brl).toLocaleString("pt-BR", {minimumFractionDigits:2})) : ("≈ $" + usd.toFixed(2));
+    if (exactMode) {
+      // In exact mode: amount IS what recipient receives, sender pays more
+      const tier = getTierInfo(usd);
+      const sendVal = v / (1 - tier.bps/10000);
+      const sendUsd = token==="ETH"||token==="BNB"||token==="POL" ? sendVal*2200 : sendVal;
+      const sendBrl = brlRate ? (sendUsd * brlRate).toFixed(2) : null;
+      return (lang==="pt"?"Voce envia ":"You send ") + sendVal.toFixed(token==="ETH"||token==="BNB"||token==="POL"?5:2) + " " + token +
+        (sendBrl ? " (R$ " + Number(sendBrl).toLocaleString("pt-BR",{minimumFractionDigits:2}) + ")" : "");
+    }
+    // Normal mode: show what recipient receives after fee
+    const tier = getTierInfo(usd);
+    const receiveVal = v * (1 - tier.bps/10000);
+    return (lang==="pt"?"Destinatario recebe ":"Recipient gets ") + receiveVal.toFixed(token==="ETH"||token==="BNB"||token==="POL"?5:2) + " " + token +
+      (brl ? " · R$ " + Number(brl).toLocaleString("pt-BR",{minimumFractionDigits:2}) : "");
   })();
 
   const closeModal = () => setModal(null);
@@ -788,6 +805,15 @@ export default function App() {
                     {networkKey===key && <span style={{fontSize:10,opacity:0.7}}>✓</span>}
                   </button>
                 ))}
+              </div>
+
+              {/* EXACT MODE TOGGLE */}
+              <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
+                <button className={"opt-chip" + (exactMode?" on":"")} onClick={()=>setExactMode(e=>!e)}>
+                  <span>🎯</span>
+                  {lang==="pt" ? "Destinatário recebe valor exato" : "Recipient gets exact amount"}
+                  <span className={"chip-check" + (exactMode?" on":"")}>{exactMode?"✓":""}</span>
+                </button>
               </div>
 
               {(useFixed||useLock) && (
