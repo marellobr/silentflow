@@ -847,7 +847,7 @@ export default function App() {
                 <div className="amount-box">
                   <div className="amount-label">{t.amount}</div>
                   <div className="amount-row">
-                    <input className="amount-input" type="number" placeholder="0" value={amount} onChange={e=>setAmount(e.target.value)} step="any" min="0"/>
+                    <input className="amount-input" type="number" placeholder="0" value={amount || (senderCalc ? senderCalc.val : "")} onChange={e=>{ setAmount(e.target.value); if(e.target.value) setRecipientAmt(""); }} step="any" min="0"/>
                     <div className="rel" ref={tokenRef}>
                       <button className="token-select" onClick={()=>setShowTokens(s=>!s)}>
                         <span style={{display:"flex",alignItems:"center",flexShrink:0}}>{TOKEN_ICONS[token]}</span>
