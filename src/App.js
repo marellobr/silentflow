@@ -1028,15 +1028,20 @@ export default function App() {
                         {copied==="meta" ? ("✓ " + t.copied) : t.copy}
                       </button>
                     </div>
-                    <div className="key-row">
-                      <span className="key-label">🔑 {t.spendKey}</span>
-                      <span className="key-val">{sk}</span>
+                    <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r4)",padding:"14px 16px",marginBottom:12}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                        <span style={{fontSize:12,fontWeight:600,color:"var(--text2)"}}>🔐 {lang==="pt"?"Sua chave de privacidade":"Your privacy key"}</span>
+                        <span style={{fontSize:10,color:"var(--text3)"}}>{lang==="pt"?"passe o mouse para ver":"hover to reveal"}</span>
+                      </div>
+                      <div style={{fontFamily:"var(--mono)",fontSize:11,color:"var(--accent2)",filter:"blur(5px)",transition:"filter 0.2s",cursor:"pointer",lineHeight:1.6,wordBreak:"break-all"}}
+                        onMouseEnter={e=>e.currentTarget.style.filter="none"}
+                        onMouseLeave={e=>e.currentTarget.style.filter="blur(5px)"}>
+                        {sk.slice(0,20)}...{sk.slice(-10)}
+                      </div>
+                      <div style={{marginTop:8,fontSize:11,color:"var(--text3)"}}>
+                        {lang==="pt"?"⚠️ Necessária para sacar seus fundos. Nunca compartilhe.":"⚠️ Required to withdraw your funds. Never share."}
+                      </div>
                     </div>
-                    <div className="key-row">
-                      <span className="key-label">👁 {t.viewKey}</span>
-                      <span className="key-val">{vk}</span>
-                    </div>
-                    <div style={{fontSize:11,color:"var(--text3)",textAlign:"center",margin:"6px 0 12px"}}>{t.keysHint}</div>
                     <div className="paylink-box">
                       <div className="paylink-label">🔗 {t.paylink}</div>
                       {/* QR Code */}
@@ -1054,9 +1059,17 @@ export default function App() {
                       </button>
                     </div>
                     <div className="action-row">
-                      <button className="action-btn" onClick={()=>setModal("export")}>{t.exportKeys}</button>
-                      <button className="action-btn" onClick={()=>setModal("import")}>{t.importKeys}</button>
-                      <button className="action-btn" onClick={generateKeys}>{t.newKeys}</button>
+                      <button className="action-btn" onClick={()=>setModal("export")}>
+                        💾 {lang==="pt"?"Fazer backup":"Backup"}
+                      </button>
+                      <button className="action-btn" onClick={()=>setModal("import")}>
+                        📥 {lang==="pt"?"Restaurar":"Restore"}
+                      </button>
+                    </div>
+                    <div style={{textAlign:"center",marginTop:8}}>
+                      <button onClick={generateKeys} style={{background:"transparent",border:"none",color:"var(--text3)",fontSize:11,cursor:"pointer",textDecoration:"underline"}}>
+                        {lang==="pt"?"Gerar novo endereço":"Generate new address"}
+                      </button>
                     </div>
                   </>
                 )}
