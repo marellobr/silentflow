@@ -406,7 +406,6 @@ export default function App() {
   const [amount, setAmount]         = useState("");
   const [recipient, setRecipient]   = useState("");
   const [useFixed, setUseFixed]     = useState(false);
-  const [useLock, setUseLock]       = useState(false);
   const [selDenom, setSelDenom]     = useState(null);
   const [recipientAmt, setRecipientAmt] = useState(""); // what recipient gets
   const [showTokens, setShowTokens] = useState(false);
