@@ -699,20 +699,17 @@ export default function App() {
     if (!v) return null;
     const usd = token==="ETH"||token==="BNB"||token==="POL" ? v*2200 : v;
     const brl = brlRate ? (usd * brlRate).toFixed(2) : null;
+    const brlStr = brl ? " · R$ " + Number(brl).toLocaleString("pt-BR",{minimumFractionDigits:2}) : "";
     if (exactMode) {
-      // In exact mode: amount IS what recipient receives, sender pays more
+      // Exact mode: v = what recipient receives, show how much sender pays
       const tier = getTierInfo(usd);
       const sendVal = v / (1 - tier.bps/10000);
-      const sendUsd = token==="ETH"||token==="BNB"||token==="POL" ? sendVal*2200 : sendVal;
-      const sendBrl = brlRate ? (sendUsd * brlRate).toFixed(2) : null;
-      return (lang==="pt"?"Voce envia ":"You send ") + sendVal.toFixed(token==="ETH"||token==="BNB"||token==="POL"?5:2) + " " + token +
-        (sendBrl ? " (R$ " + Number(sendBrl).toLocaleString("pt-BR",{minimumFractionDigits:2}) + ")" : "");
+      const sendBrl = brlRate ? (sendVal * (token==="ETH"||token==="BNB"||token==="POL"?2200:1) * brlRate).toFixed(2) : null;
+      const sendBrlStr = sendBrl ? " (R$ " + Number(sendBrl).toLocaleString("pt-BR",{minimumFractionDigits:2}) + ")" : "";
+      return (lang==="pt"?"→ Voce envia ":"→ You send ") + sendVal.toFixed(token==="ETH"||token==="BNB"||token==="POL"?5:2) + " " + token + sendBrlStr;
     }
-    // Normal mode: show what recipient receives after fee
-    const tier = getTierInfo(usd);
-    const receiveVal = v * (1 - tier.bps/10000);
-    return (lang==="pt"?"Destinatario recebe ":"Recipient gets ") + receiveVal.toFixed(token==="ETH"||token==="BNB"||token==="POL"?5:2) + " " + token +
-      (brl ? " · R$ " + Number(brl).toLocaleString("pt-BR",{minimumFractionDigits:2}) : "");
+    // Normal mode: show approximate value
+    return "≈ $" + usd.toFixed(2) + brlStr;
   })();
 
   const closeModal = () => setModal(null);
@@ -844,7 +841,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className="amount-box">
-                  <div className="amount-label">{t.amount}</div>
+                  <div className="amount-label">{exactMode ? (lang==="pt"?"Destinatario recebe":"Recipient gets") : t.amount}</div>
                   <div className="amount-row">
                     <input className="amount-input" type="number" placeholder="0" value={amount} onChange={e=>setAmount(e.target.value)} step="any" min="0"/>
                     <div className="rel" ref={tokenRef}>
