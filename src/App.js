@@ -733,12 +733,6 @@ export default function App() {
   }
 
   // Convert BRL input to token amount
-  const brlToToken = (brl) => {
-    if (!brl || !brlRate) return 0;
-    const usd = brl / brlRate;
-    return token==="ETH"||token==="BNB"||token==="POL" ? usd/2200 : usd;
-  };
-
   const effectiveAmount = useFixed ? (selDenom||0) : (parseFloat(amount)||0);
 
   const tier = (() => {
