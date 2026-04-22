@@ -438,7 +438,7 @@ export default function App() {
   const [useFixed, setUseFixed]     = useState(false);
   const [selDenom, setSelDenom]     = useState(null);
   const [recipientAmt, setRecipientAmt] = useState(""); // what recipient gets
-  const [brlMode, setBrlMode]           = useState(false); // input in BRL
+  const [brlAmount, setBrlAmount]       = useState(""); // BRL input field
   const [showTokens, setShowTokens] = useState(false);
   const [pipelineId, setPipelineId] = useState(null);
   const [pipeData, setPipeData]     = useState(null);
@@ -581,8 +581,6 @@ export default function App() {
       const usd = token==="ETH"||token==="BNB"||token==="POL" ? recAmt*2200 : recAmt;
       const tier2 = getTierInfo(usd);
       val = recAmt / (1 - tier2.bps/10000);
-    } else if (brlMode) {
-      val = brlToToken(parseFloat(amount)||0);
     } else {
       val = useFixed ? selDenom : parseFloat(amount);
     }
@@ -637,7 +635,7 @@ export default function App() {
       }
       saveHistory({ hash:txHash, token, amount:val, to:recip, ts:Date.now(), status:"pending" });
       setComprovante({ hash:txHash, token, amount:val, to:recip, ts:Date.now(), network:network.name, explorer:network.explorer });
-      setAmount(""); setSelDenom(null); setRecipientAmt("");
+      setAmount(""); setSelDenom(null); setRecipientAmt(""); setBrlAmount("");
       try {
         const ar = await fetch(BACKEND_URL + "/aguardar/" + ed.entradaAddress);
         const ad = await ar.json();
@@ -742,7 +740,7 @@ export default function App() {
     return token==="ETH"||token==="BNB"||token==="POL" ? usd/2200 : usd;
   };
 
-  const effectiveAmount = brlMode ? brlToToken(parseFloat(amount)||0) : (useFixed ? (selDenom||0) : (parseFloat(amount)||0));
+  const effectiveAmount = useFixed ? (selDenom||0) : (parseFloat(amount)||0);
 
   const tier = (() => {
     const v = effectiveAmount;
@@ -750,7 +748,7 @@ export default function App() {
     return getTierInfo(usd);
   })();
 
-  const hasAmount = brlMode ? !!(parseFloat(amount)>0) : (useFixed ? !!selDenom : !!(parseFloat(amount)>0));
+  const hasAmount = useFixed ? !!selDenom : !!(parseFloat(amount)>0);
 
   const usdVal = (() => {
     const v = effectiveAmount;
@@ -887,28 +885,6 @@ export default function App() {
                 ))}
               </div>
 
-              {/* CURRENCY TOGGLE */}
-              <div style={{display:"flex",background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:10,padding:3,marginBottom:12}}>
-                <button onClick={()=>{ setBrlMode(false); setAmount(""); setRecipientAmt(""); }}
-                  style={{flex:1,padding:"8px 0",borderRadius:8,border:"none",cursor:"pointer",transition:"all 0.2s",
-                    fontSize:13,fontWeight:600,
-                    background: !brlMode ? "var(--surface3)" : "transparent",
-                    color: !brlMode ? "var(--text)" : "var(--text3)",
-                    boxShadow: !brlMode ? "0 1px 4px rgba(0,0,0,0.3)" : "none"
-                  }}>
-                  USDC / USDT
-                </button>
-                <button onClick={()=>{ setBrlMode(true); setAmount(""); setRecipientAmt(""); }}
-                  style={{flex:1,padding:"8px 0",borderRadius:8,border:"none",cursor:"pointer",transition:"all 0.2s",
-                    fontSize:13,fontWeight:700,
-                    background: brlMode ? "rgba(52,211,153,0.15)" : "transparent",
-                    color: brlMode ? "var(--green)" : "var(--text3)",
-                    boxShadow: brlMode ? "0 1px 4px rgba(0,0,0,0.3)" : "none"
-                  }}>
-                  R$ Real
-                </button>
-              </div>
-
               {useFixed && (
                 <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
                   {useFixed && (
@@ -917,6 +893,34 @@ export default function App() {
                     </div>
                   )}
 
+                </div>
+              )}
+
+              {/* BRL FIELD */}
+              {!useFixed && (
+                <div className="amount-box" style={{marginBottom:6}}>
+                  <div className="amount-label">{lang==="pt"?"Valor da conta (R$)":"Bill amount (R$)"}</div>
+                  <div className="amount-row">
+                    <input className="amount-input" type="number" placeholder="0,00"
+                      value={brlAmount}
+                      onChange={e=>{
+                        setBrlAmount(e.target.value);
+                        if(e.target.value) {
+                          const usdc = brlToToken(parseFloat(e.target.value)||0);
+                          setAmount(usdc.toFixed(2));
+                          setRecipientAmt("");
+                        } else {
+                          setAmount(""); setRecipientAmt("");
+                        }
+                      }}
+                      step="any" min="0"/>
+                    <div style={{padding:"8px 14px",borderRadius:20,background:"var(--surface3)",border:"1px solid var(--border2)",fontSize:14,fontWeight:600,color:"var(--green)",flexShrink:0}}>R$</div>
+                  </div>
+                  {brlAmount && brlRate && (
+                    <div className="amount-usd" style={{color:"var(--text3)"}}>
+                      {lang==="pt"?"≈":"≈"} {brlToToken(parseFloat(brlAmount)||0).toFixed(2)} {token}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -933,7 +937,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className="amount-box">
-                  <div className="amount-label">{brlMode ? (lang==="pt"?"Você envia (R$)":"You send (R$)") : t.amount}</div>
+                  <div className="amount-label">{t.amount}</div>
                   <div className="amount-row">
                     <input className="amount-input" type="number"
                       placeholder={brlMode ? "0,00" : "0"}
@@ -941,15 +945,11 @@ export default function App() {
                       onChange={e=>{ setAmount(e.target.value); if(e.target.value) setRecipientAmt(""); }}
                       step="any" min="0"/>
                     <div className="rel" ref={tokenRef}>
-                      {brlMode ? (
-                        <div style={{padding:"8px 14px",borderRadius:20,background:"var(--surface3)",border:"1px solid var(--border2)",fontSize:14,fontWeight:600,color:"var(--green)"}}>R$</div>
-                      ) : (
-                        <button className="token-select" onClick={()=>setShowTokens(s=>!s)}>
-                          <span style={{display:"flex",alignItems:"center",flexShrink:0}}>{TOKEN_ICONS[token]}</span>
-                          {token}
-                          <span className="token-chevron">▾</span>
-                        </button>
-                      )}
+                      <button className="token-select" onClick={()=>setShowTokens(s=>!s)}>
+                        <span style={{display:"flex",alignItems:"center",flexShrink:0}}>{TOKEN_ICONS[token]}</span>
+                        {token}
+                        <span className="token-chevron">▾</span>
+                      </button>
                       {showTokens && (
                         <div className="token-dropdown">
                           {["USDC","USDT",...Object.keys(TOKENS).filter(k=>k!=="USDC"&&k!=="USDT")].map(tk=>(
@@ -968,7 +968,7 @@ export default function App() {
 
               {/* RECIPIENT AMOUNT BOX */}
               <div className="amount-box" style={{marginBottom:6}}>
-                <div className="amount-label">{lang==="pt"?"Destinatário recebe":"Recipient gets"}{brlMode ? " (USDC)" : ""}</div>
+                <div className="amount-label">{lang==="pt"?"Destinatário recebe":"Recipient gets"}</div>
                 <div className="amount-row">
                   <input
                     className="amount-input"
