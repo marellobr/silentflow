@@ -916,19 +916,9 @@ export default function App() {
                 </div>
               ) : (
                 <div className="amount-box">
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-                    <span className="amount-label" style={{marginBottom:0}}>{t.amount}</span>
-                    <button onClick={()=>{ setBrlMode(b=>!b); setAmount(""); setRecipientAmt(""); }}
-                      style={{fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:20,border:"1px solid",cursor:"pointer",transition:"all 0.2s",
-                        background: brlMode ? "rgba(52,211,153,0.1)" : "transparent",
-                        borderColor: brlMode ? "rgba(52,211,153,0.3)" : "rgba(255,255,255,0.1)",
-                        color: brlMode ? "var(--green)" : "var(--text3)"
-                      }}>
-                      R$
-                    </button>
-                  </div>
+                  <div className="amount-label">{t.amount}</div>
                   <div className="amount-row">
-                    <input className="amount-input" type="number" placeholder="0" value={amount} onChange={e=>setAmount(e.target.value)} step="any" min="0"/>
+                    <input className="amount-input" type="number" placeholder={brlMode ? "0,00" : "0"} value={amount} onChange={e=>setAmount(e.target.value)} step="any" min="0"/>
                     <div className="rel" ref={tokenRef}>
                       <button className="token-select" onClick={()=>setShowTokens(s=>!s)}>
                         <span style={{display:"flex",alignItems:"center",flexShrink:0}}>{TOKEN_ICONS[token]}</span>
@@ -957,7 +947,7 @@ export default function App() {
                 <div className="amount-row">
                   <input
                     className="amount-input"
-                    type="number" placeholder="0"
+                    type="number" placeholder={brlMode ? "0,00" : "0"}
                     value={recipientAmt || (() => {
                       const v = useFixed ? (selDenom||0) : (parseFloat(amount)||0);
                       if (!v) return "";
