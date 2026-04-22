@@ -892,6 +892,28 @@ export default function App() {
                 ))}
               </div>
 
+              {/* CURRENCY TOGGLE */}
+              <div style={{display:"flex",background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:10,padding:3,marginBottom:12}}>
+                <button onClick={()=>{ setBrlMode(false); setAmount(""); setRecipientAmt(""); }}
+                  style={{flex:1,padding:"8px 0",borderRadius:8,border:"none",cursor:"pointer",transition:"all 0.2s",
+                    fontSize:13,fontWeight:600,
+                    background: !brlMode ? "var(--surface3)" : "transparent",
+                    color: !brlMode ? "var(--text)" : "var(--text3)",
+                    boxShadow: !brlMode ? "0 1px 4px rgba(0,0,0,0.3)" : "none"
+                  }}>
+                  USDC / USDT
+                </button>
+                <button onClick={()=>{ setBrlMode(true); setAmount(""); setRecipientAmt(""); }}
+                  style={{flex:1,padding:"8px 0",borderRadius:8,border:"none",cursor:"pointer",transition:"all 0.2s",
+                    fontSize:13,fontWeight:700,
+                    background: brlMode ? "rgba(52,211,153,0.15)" : "transparent",
+                    color: brlMode ? "var(--green)" : "var(--text3)",
+                    boxShadow: brlMode ? "0 1px 4px rgba(0,0,0,0.3)" : "none"
+                  }}>
+                  🇧🇷 R$ Real
+                </button>
+              </div>
+
               {useFixed && (
                 <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
                   {useFixed && (
