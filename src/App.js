@@ -438,6 +438,7 @@ export default function App() {
   const [useFixed, setUseFixed]     = useState(false);
   const [selDenom, setSelDenom]     = useState(null);
   const [recipientAmt, setRecipientAmt] = useState(""); // what recipient gets
+  const [brlMode, setBrlMode]           = useState(false); // input in BRL
   const [showTokens, setShowTokens] = useState(false);
   const [pipelineId, setPipelineId] = useState(null);
   const [pipeData, setPipeData]     = useState(null);
@@ -584,8 +585,10 @@ export default function App() {
     let val;
     if (recAmt > 0) {
       const usd = token==="ETH"||token==="BNB"||token==="POL" ? recAmt*2200 : recAmt;
-      const tier = getTierInfo(usd);
-      val = recAmt / (1 - tier.bps/10000);
+      const tier2 = getTierInfo(usd);
+      val = recAmt / (1 - tier2.bps/10000);
+    } else if (brlMode) {
+      val = brlToToken(parseFloat(amount)||0);
     } else {
       val = useFixed ? selDenom : parseFloat(amount);
     }
@@ -738,12 +741,29 @@ export default function App() {
     return "wait";
   }
 
-  const tier = getTier();
-  const hasAmount = useFixed ? !!selDenom : !!(parseFloat(amount)>0);
+  const getTierEffective = () => {
+    const v = effectiveAmount;
+    const usd = token==="ETH"||token==="BNB"||token==="POL" ? v*2200 : v;
+    return getTierInfo(usd);
+  };
+  const tier = getTierEffective();
+  const hasAmount = brlMode ? !!(parseFloat(amount)>0) : (useFixed ? !!selDenom : !!(parseFloat(amount)>0));
+  // Convert BRL input to token amount
+  const brlToToken = (brl) => {
+    if (!brl || !brlRate) return 0;
+    const usd = brl / brlRate;
+    return token==="ETH"||token==="BNB"||token==="POL" ? usd/2200 : usd;
+  };
+
+  const effectiveAmount = brlMode ? brlToToken(parseFloat(amount)||0) : (useFixed ? (selDenom||0) : (parseFloat(amount)||0));
+
   const usdVal = (() => {
-    const v = useFixed ? (selDenom||0) : (parseFloat(amount)||0);
+    const v = effectiveAmount;
     if (!v) return null;
     const usd = token==="ETH"||token==="BNB"||token==="POL" ? v*2200 : v;
+    if (brlMode) {
+      return "≈ " + v.toFixed(token==="ETH"||token==="BNB"||token==="POL"?5:2) + " " + token;
+    }
     const brl = brlRate ? (usd * brlRate).toFixed(2) : null;
     const brlStr = brl ? " · R$ " + Number(brl).toLocaleString("pt-BR",{minimumFractionDigits:2}) : "";
     return "≈ $" + usd.toFixed(2) + brlStr;
@@ -896,7 +916,17 @@ export default function App() {
                 </div>
               ) : (
                 <div className="amount-box">
-                  <div className="amount-label">{t.amount}</div>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                    <span className="amount-label" style={{marginBottom:0}}>{t.amount}</span>
+                    <button onClick={()=>{ setBrlMode(b=>!b); setAmount(""); setRecipientAmt(""); }}
+                      style={{fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:20,border:"1px solid",cursor:"pointer",transition:"all 0.2s",
+                        background: brlMode ? "rgba(52,211,153,0.1)" : "transparent",
+                        borderColor: brlMode ? "rgba(52,211,153,0.3)" : "rgba(255,255,255,0.1)",
+                        color: brlMode ? "var(--green)" : "var(--text3)"
+                      }}>
+                      R$
+                    </button>
+                  </div>
                   <div className="amount-row">
                     <input className="amount-input" type="number" placeholder="0" value={amount} onChange={e=>setAmount(e.target.value)} step="any" min="0"/>
                     <div className="rel" ref={tokenRef}>
@@ -949,6 +979,11 @@ export default function App() {
                   <div className="amount-usd">
                     {lang==="pt"?"→ Você envia ":"→ You send "}{senderCalc.val} {token}
                     {senderCalc.brl ? " (" + senderCalc.brl + ")" : ""}
+                  </div>
+                )}
+                {brlMode && effectiveAmount > 0 && !recipientAmt && (
+                  <div className="amount-usd" style={{color:"var(--green)"}}>
+                    {lang==="pt"?"→ Destinatário recebe ":"→ Recipient gets "}{(effectiveAmount*(1-tier.bps/10000)).toFixed(token==="ETH"||token==="BNB"||token==="POL"?5:2)} {token}
                   </div>
                 )}
               </div>
