@@ -970,11 +970,11 @@ export default function App() {
                     className="amount-input"
                     type="number" placeholder="0"
                     value={recipientAmt || (() => {
-                      const v = useFixed ? (selDenom||0) : (parseFloat(amount)||0);
+                      const v = effectiveAmount;
                       if (!v) return "";
                       const usd = token==="ETH"||token==="BNB"||token==="POL" ? v*2200 : v;
-                      const tier = getTierInfo(usd);
-                      return (v * (1 - tier.bps/10000)).toFixed(token==="ETH"||token==="BNB"||token==="POL"?5:2);
+                      const t2 = getTierInfo(usd);
+                      return (v * (1 - t2.bps/10000)).toFixed(token==="ETH"||token==="BNB"||token==="POL"?5:2);
                     })()}
                     onChange={e=>{
                       setRecipientAmt(e.target.value);
