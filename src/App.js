@@ -388,6 +388,22 @@ a{color:var(--accent);text-decoration:none}
   a[href*="silentflow-landing"]{display:none!important}
 }
 .spin{width:16px;height:16px;border:2px solid rgba(8,9,13,0.25);border-top-color:#08090d;border-radius:50%;animation:spinning 0.65s linear infinite;display:inline-block;flex-shrink:0}
+.comp-modal{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.7);backdrop-filter:blur(12px);padding:20px}
+.comp-card{background:var(--surface);border:1px solid rgba(52,211,153,0.3);border-radius:var(--r);padding:28px 24px;max-width:360px;width:100%;box-shadow:0 0 60px rgba(52,211,153,0.1);animation:fadeUp 0.3s ease both}
+.comp-icon{width:56px;height:56px;border-radius:50%;background:var(--green-dim);border:2px solid rgba(52,211,153,0.3);display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 16px}
+.comp-title{font-size:20px;font-weight:700;color:var(--text);text-align:center;margin-bottom:4px}
+.comp-sub{font-size:13px;color:var(--text2);text-align:center;margin-bottom:20px}
+.comp-amount{font-size:36px;font-weight:800;color:var(--green);text-align:center;margin-bottom:20px;font-family:var(--mono)}
+.comp-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)}
+.comp-row:last-of-type{border-bottom:none}
+.comp-label{font-size:12px;color:var(--text2)}
+.comp-val{font-size:12px;color:var(--text);font-family:var(--mono);text-align:right;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.comp-actions{display:flex;gap:8px;margin-top:20px}
+.comp-btn{flex:1;padding:11px;border-radius:var(--r4);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s}
+.comp-btn-primary{background:var(--green);color:#08090d;border:none}
+.comp-btn-primary:hover{opacity:0.9}
+.comp-btn-secondary{background:transparent;border:1px solid var(--border2);color:var(--text2)}
+.comp-btn-secondary:hover{border-color:var(--border3);color:var(--text)}
 .spin-blue{border-color:rgba(34,197,240,0.2);border-top-color:var(--accent)}
 @keyframes spinning{to{transform:rotate(360deg)}}
 @keyframes float1{0%,100%{transform:translate(0,0) scale(1)}25%{transform:translate(30px,-20px) scale(1.05)}50%{transform:translate(-15px,30px) scale(0.95)}75%{transform:translate(20px,15px) scale(1.02)}}
@@ -435,6 +451,7 @@ export default function App() {
   const [scanResults, setScanResults] = useState([]);
   const [scanning, setScanning]     = useState(false);
   const [withdrawingId, setWithdrawingId] = useState(null);
+  const [comprovante, setComprovante]   = useState(null);
   const [modal, setModal]           = useState(null);
   const [exportPwd, setExportPwd]   = useState("");
   const [importData, setImportData] = useState("");
@@ -622,8 +639,8 @@ export default function App() {
         await tx.wait(); txHash = tx.hash;
       }
       saveHistory({ hash:txHash, token, amount:val, to:recip, ts:Date.now(), status:"pending" });
-      showAlert(t.sent,"info");
-      setAmount(""); setSelDenom(null);
+      setComprovante({ hash:txHash, token, amount:val, to:recip, ts:Date.now(), network:network.name, explorer:network.explorer });
+      setAmount(""); setSelDenom(null); setRecipientAmt("");
       try {
         const ar = await fetch(BACKEND_URL + "/aguardar/" + ed.entradaAddress);
         const ad = await ar.json();
@@ -1189,6 +1206,64 @@ export default function App() {
                   <button className="btn-cancel" onClick={()=>setModal("receive")}>{t.cancel}</button>
                   <button className="btn-confirm" onClick={handleImport}>{t.confirm}</button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
+
+        {/* COMPROVANTE MODAL */}
+        {comprovante && (
+          <div className="comp-modal" onClick={()=>setComprovante(null)}>
+            <div className="comp-card" onClick={e=>e.stopPropagation()}>
+              <div className="comp-icon">✓</div>
+              <div className="comp-title">{lang==="pt"?"Envio realizado!":"Transfer complete!"}</div>
+              <div className="comp-sub">{lang==="pt"?"Seus fundos estão sendo processados":"Your funds are being processed"}</div>
+              <div className="comp-amount">{comprovante.amount} {comprovante.token}</div>
+              <div style={{background:"var(--surface2)",borderRadius:"var(--r4)",padding:"12px 16px",marginBottom:8}}>
+                <div className="comp-row">
+                  <span className="comp-label">{lang==="pt"?"Data":"Date"}</span>
+                  <span className="comp-val">{new Date(comprovante.ts).toLocaleString(lang==="pt"?"pt-BR":"en-US")}</span>
+                </div>
+                <div className="comp-row">
+                  <span className="comp-label">{lang==="pt"?"Rede":"Network"}</span>
+                  <span className="comp-val">{comprovante.network}</span>
+                </div>
+                <div className="comp-row">
+                  <span className="comp-label">{lang==="pt"?"Destinatário":"Recipient"}</span>
+                  <span className="comp-val">{comprovante.to?.slice(0,16)}...</span>
+                </div>
+                <div className="comp-row">
+                  <span className="comp-label">TX</span>
+                  <span className="comp-val">{comprovante.hash?.slice(0,18)}...</span>
+                </div>
+              </div>
+              <a href={comprovante.explorer + "/tx/" + comprovante.hash} target="_blank" rel="noreferrer"
+                style={{display:"block",textAlign:"center",fontSize:12,color:"var(--accent)",marginBottom:16}}>
+                {lang==="pt"?"Ver no explorer ↗":"View on explorer ↗"}
+              </a>
+              <div className="comp-actions">
+                <button className="comp-btn comp-btn-primary" onClick={()=>{
+                  const text = lang==="pt"
+                    ? `✓ Envio SilentFlow
+${comprovante.amount} ${comprovante.token}
+Rede: ${comprovante.network}
+Data: ${new Date(comprovante.ts).toLocaleString("pt-BR")}
+TX: ${comprovante.hash}`
+                    : `✓ SilentFlow Transfer
+${comprovante.amount} ${comprovante.token}
+Network: ${comprovante.network}
+Date: ${new Date(comprovante.ts).toLocaleString("en-US")}
+TX: ${comprovante.hash}`;
+                  navigator.clipboard.writeText(text);
+                  showAlert(lang==="pt"?"Comprovante copiado!":"Receipt copied!","ok");
+                }}>
+                  {lang==="pt"?"Copiar comprovante":"Copy receipt"}
+                </button>
+                <button className="comp-btn comp-btn-secondary" onClick={()=>setComprovante(null)}>
+                  {lang==="pt"?"Fechar":"Close"}
+                </button>
               </div>
             </div>
           </div>
