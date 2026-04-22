@@ -996,11 +996,7 @@ export default function App() {
                     {senderCalc.brl ? " (" + senderCalc.brl + ")" : ""}
                   </div>
                 )}
-                {brlMode && effectiveAmount > 0 && !recipientAmt && (
-                  <div className="amount-usd" style={{color:"var(--green)"}}>
-                    {lang==="pt"?"→ Destinatário recebe ":"→ Recipient gets "}{(effectiveAmount*(1-tier.bps/10000)).toFixed(token==="ETH"||token==="BNB"||token==="POL"?5:2)} {token}
-                  </div>
-                )}
+
               </div>
 
               <div className="arrow-divider">
