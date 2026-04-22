@@ -905,7 +905,7 @@ export default function App() {
                     color: brlMode ? "var(--green)" : "var(--text3)",
                     boxShadow: brlMode ? "0 1px 4px rgba(0,0,0,0.3)" : "none"
                   }}>
-                  🇧🇷 R$ Real
+                  R$ Real
                 </button>
               </div>
 
