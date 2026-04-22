@@ -438,7 +438,6 @@ export default function App() {
   const [useFixed, setUseFixed]     = useState(false);
   const [selDenom, setSelDenom]     = useState(null);
   const [recipientAmt, setRecipientAmt] = useState(""); // what recipient gets
-  const [brlAmount, setBrlAmount]       = useState(""); // BRL input field
   const [showTokens, setShowTokens] = useState(false);
   const [pipelineId, setPipelineId] = useState(null);
   const [pipeData, setPipeData]     = useState(null);
@@ -635,7 +634,7 @@ export default function App() {
       }
       saveHistory({ hash:txHash, token, amount:val, to:recip, ts:Date.now(), status:"pending" });
       setComprovante({ hash:txHash, token, amount:val, to:recip, ts:Date.now(), network:network.name, explorer:network.explorer });
-      setAmount(""); setSelDenom(null); setRecipientAmt(""); setBrlAmount("");
+      setAmount(""); setSelDenom(null); setRecipientAmt("");
       try {
         const ar = await fetch(BACKEND_URL + "/aguardar/" + ed.entradaAddress);
         const ad = await ar.json();
@@ -756,7 +755,7 @@ export default function App() {
     const usd = token==="ETH"||token==="BNB"||token==="POL" ? v*2200 : v;
     const brl = brlRate ? (usd * brlRate).toFixed(2) : null;
     const brlStr = brl ? " · R$ " + Number(brl).toLocaleString("pt-BR",{minimumFractionDigits:2}) : "";
-    return "≈ $" + usd.toFixed(2) + brlStr;
+    return usd.toFixed(2) + " " + token + (brlStr ? " ·" + brlStr : "");
   })();
 
   // Calculate sender amount from recipient amount
@@ -893,34 +892,6 @@ export default function App() {
                 </div>
               )}
 
-              {/* BRL FIELD */}
-              {!useFixed && (
-                <div className="amount-box" style={{marginBottom:6}}>
-                  <div className="amount-label">{lang==="pt"?"Valor da conta (R$)":"Bill amount (R$)"}</div>
-                  <div className="amount-row">
-                    <input className="amount-input" type="number" placeholder="0,00"
-                      value={brlAmount}
-                      onChange={e=>{
-                        setBrlAmount(e.target.value);
-                        if(e.target.value) {
-                          const usdc = brlToToken(parseFloat(e.target.value)||0);
-                          setAmount(usdc.toFixed(2));
-                          setRecipientAmt("");
-                        } else {
-                          setAmount(""); setRecipientAmt("");
-                        }
-                      }}
-                      step="any" min="0"/>
-                    <div style={{padding:"8px 14px",borderRadius:20,background:"var(--surface3)",border:"1px solid var(--border2)",fontSize:14,fontWeight:600,color:"var(--green)",flexShrink:0}}>R$</div>
-                  </div>
-                  {brlAmount && brlRate && (
-                    <div className="amount-usd" style={{color:"var(--text3)"}}>
-                      {lang==="pt"?"≈":"≈"} {brlToToken(parseFloat(brlAmount)||0).toFixed(2)} {token}
-                    </div>
-                  )}
-                </div>
-              )}
-
               {useFixed ? (
                 <div className="denom-box">
                   <div className="denom-label">{t.amount}</div>
@@ -990,7 +961,7 @@ export default function App() {
                 {senderCalc && (
                   <div className="amount-usd">
                     {lang==="pt"?"→ Você envia ":"→ You send "}{senderCalc.val} {token}
-                    {senderCalc.brl ? " (" + senderCalc.brl + ")" : ""}
+                    {brlRate ? " · R$ " + (parseFloat(senderCalc.val) * brlRate).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}) : ""}
                   </div>
                 )}
 
