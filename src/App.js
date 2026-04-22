@@ -933,7 +933,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className="amount-box">
-                  <div className="amount-label">{t.amount}</div>
+                  <div className="amount-label">{brlMode ? (lang==="pt"?"Você envia (R$)":"You send (R$)") : t.amount}</div>
                   <div className="amount-row">
                     <input className="amount-input" type="number"
                       placeholder={brlMode ? "0,00" : "0"}
@@ -941,11 +941,15 @@ export default function App() {
                       onChange={e=>{ setAmount(e.target.value); if(e.target.value) setRecipientAmt(""); }}
                       step="any" min="0"/>
                     <div className="rel" ref={tokenRef}>
-                      <button className="token-select" onClick={()=>setShowTokens(s=>!s)}>
-                        <span style={{display:"flex",alignItems:"center",flexShrink:0}}>{TOKEN_ICONS[token]}</span>
-                        {token}
-                        <span className="token-chevron">▾</span>
-                      </button>
+                      {brlMode ? (
+                        <div style={{padding:"8px 14px",borderRadius:20,background:"var(--surface3)",border:"1px solid var(--border2)",fontSize:14,fontWeight:600,color:"var(--green)"}}>R$</div>
+                      ) : (
+                        <button className="token-select" onClick={()=>setShowTokens(s=>!s)}>
+                          <span style={{display:"flex",alignItems:"center",flexShrink:0}}>{TOKEN_ICONS[token]}</span>
+                          {token}
+                          <span className="token-chevron">▾</span>
+                        </button>
+                      )}
                       {showTokens && (
                         <div className="token-dropdown">
                           {["USDC","USDT",...Object.keys(TOKENS).filter(k=>k!=="USDC"&&k!=="USDT")].map(tk=>(
@@ -964,7 +968,7 @@ export default function App() {
 
               {/* RECIPIENT AMOUNT BOX */}
               <div className="amount-box" style={{marginBottom:6}}>
-                <div className="amount-label">{lang==="pt"?"Destinatário recebe":"Recipient gets"}</div>
+                <div className="amount-label">{lang==="pt"?"Destinatário recebe":"Recipient gets"}{brlMode ? " (USDC)" : ""}</div>
                 <div className="amount-row">
                   <input
                     className="amount-input"
