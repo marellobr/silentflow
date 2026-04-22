@@ -1262,7 +1262,6 @@ export default function App() {
           </div>
         )}
 
-      </div>
 
         {/* COMPROVANTE MODAL */}
         {comprovante && (
@@ -1320,7 +1319,7 @@ TX: ${comprovante.hash}`;
           </div>
         )}
 
-      </div>
+      </div>{/* end app */}
     </>
   );
 }
