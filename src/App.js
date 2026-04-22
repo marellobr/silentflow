@@ -735,13 +735,6 @@ export default function App() {
     return "wait";
   }
 
-  const getTierEffective = () => {
-    const v = effectiveAmount;
-    const usd = token==="ETH"||token==="BNB"||token==="POL" ? v*2200 : v;
-    return getTierInfo(usd);
-  };
-  const tier = getTierEffective();
-  const hasAmount = brlMode ? !!(parseFloat(amount)>0) : (useFixed ? !!selDenom : !!(parseFloat(amount)>0));
   // Convert BRL input to token amount
   const brlToToken = (brl) => {
     if (!brl || !brlRate) return 0;
@@ -750,6 +743,14 @@ export default function App() {
   };
 
   const effectiveAmount = brlMode ? brlToToken(parseFloat(amount)||0) : (useFixed ? (selDenom||0) : (parseFloat(amount)||0));
+
+  const tier = (() => {
+    const v = effectiveAmount;
+    const usd = token==="ETH"||token==="BNB"||token==="POL" ? v*2200 : v;
+    return getTierInfo(usd);
+  })();
+
+  const hasAmount = brlMode ? !!(parseFloat(amount)>0) : (useFixed ? !!selDenom : !!(parseFloat(amount)>0));
 
   const usdVal = (() => {
     const v = effectiveAmount;
