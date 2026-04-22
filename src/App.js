@@ -754,9 +754,6 @@ export default function App() {
     const v = effectiveAmount;
     if (!v) return null;
     const usd = token==="ETH"||token==="BNB"||token==="POL" ? v*2200 : v;
-    if (brlMode) {
-      return "≈ " + v.toFixed(token==="ETH"||token==="BNB"||token==="POL"?5:2) + " " + token;
-    }
     const brl = brlRate ? (usd * brlRate).toFixed(2) : null;
     const brlStr = brl ? " · R$ " + Number(brl).toLocaleString("pt-BR",{minimumFractionDigits:2}) : "";
     return "≈ $" + usd.toFixed(2) + brlStr;
@@ -940,7 +937,7 @@ export default function App() {
                   <div className="amount-label">{t.amount}</div>
                   <div className="amount-row">
                     <input className="amount-input" type="number"
-                      placeholder={brlMode ? "0,00" : "0"}
+                      placeholder="0"
                       value={amount || (senderCalc ? senderCalc.val : "")}
                       onChange={e=>{ setAmount(e.target.value); if(e.target.value) setRecipientAmt(""); }}
                       step="any" min="0"/>
