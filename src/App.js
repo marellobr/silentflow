@@ -572,12 +572,6 @@ export default function App() {
     setLoading(false);
   }
 
-  function getTier() {
-    const v = useFixed ? (selDenom||0) : (parseFloat(amount)||0);
-    const usd = token==="ETH" ? v*2200 : v;
-    return getTierInfo(usd);
-  }
-
   async function send() {
     if (!account) return connect();
     // If recipient amount is set, calculate gross amount to send
