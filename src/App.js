@@ -587,7 +587,7 @@ export default function App() {
     if (!recipient.trim()) return showAlert(t.enterTo,"err");
 
     // Minimum value check
-    const minUsd = networkKey==="polygon" ? 10 : 25;
+    const minUsd = 2;
     const checkVal = recAmt > 0 ? recAmt : val;
     const valUsd = token==="ETH"||token==="BNB"||token==="POL" ? checkVal*2200 : checkVal;
     if (valUsd < minUsd) return showAlert(lang==="pt" ? "Valor minimo: $" + minUsd + " (R$ " + (minUsd*(brlRate||5.7)).toFixed(0) + ")" : "Minimum amount: $" + minUsd, "err");
