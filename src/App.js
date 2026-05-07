@@ -588,6 +588,18 @@ export default function App() {
 
   async function send() {
     if (!account) return connect();
+    // Check correct network
+    if (window.ethereum) {
+      const currentChainId = parseInt(await window.ethereum.request({ method: "eth_chainId" }), 16);
+      if (currentChainId !== network.chainId) {
+        try {
+          await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: network.chainHex }] });
+        } catch(e) {
+          showAlert(lang==="pt" ? "Mude para a rede " + network.name + " no MetaMask." : "Switch to " + network.name + " in MetaMask.", "err");
+          return;
+        }
+      }
+    }
     // If recipient amount is set, calculate gross amount to send
     const recAmt = parseFloat(recipientAmt)||0;
     let val;
