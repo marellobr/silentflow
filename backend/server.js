@@ -186,7 +186,7 @@ async function estimarCustoGasETH() { return (await getGasPrice()) * 21000n; }
 async function estimarCustoGasDeposit() { return (await getGasPrice()) * 120000n; }
 
 async function financiarGas(destino) {
-  const valor = (await estimarCustoGasETH()) * 4n;
+  const valor = (await estimarCustoGasETH()) * 20n;
   const tx = await masterWallet.sendTransaction({ to: destino, value: valor, gasLimit: 21000n });
   await tx.wait();
   return valor;
