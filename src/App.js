@@ -6,8 +6,7 @@ const TOKEN_ICONS = {
   ETH:  <img src="https://assets.coingecko.com/coins/images/279/small/ethereum.png" width="18" height="18" style={{borderRadius:"50%"}} alt="ETH"/>,
   USDC: <img src="https://assets.coingecko.com/coins/images/6319/small/usdc.png" width="18" height="18" style={{borderRadius:"50%"}} alt="USDC"/>,
   USDT: <img src="https://assets.coingecko.com/coins/images/325/small/tether.png" width="18" height="18" style={{borderRadius:"50%"}} alt="USDT"/>,
-  POL:  <img src="https://assets.coingecko.com/coins/images/4713/small/polygon.png" width="18" height="18" style={{borderRadius:"50%"}} alt="POL"/>,
-  BNB:  <img src="https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png" width="18" height="18" style={{borderRadius:"50%"}} alt="BNB"/>,
+
 };
 
 const NETWORKS = {
@@ -36,7 +35,6 @@ const NETWORKS = {
     explorer: "https://polygonscan.com",
     rpc: "https://polygon-rpc.com",
     tokens: {
-      POL:  { address: "0x0000000000000000000000000000000000000000", decimals: 18 },
       USDC: { address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6 },
       USDT: { address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", decimals: 6 }
     },
@@ -52,7 +50,6 @@ const NETWORKS = {
     explorer: "https://bscscan.com",
     rpc: "https://bsc-dataseed.binance.org",
     tokens: {
-      BNB:  { address: "0x0000000000000000000000000000000000000000", decimals: 18 },
       USDC: { address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", decimals: 18 },
       USDT: { address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18 }
     },
@@ -77,8 +74,6 @@ const ERC20_ABI = [
 
 const DENOMS_BY_TOKEN = {
   ETH:  [0.01, 0.05, 0.1, 0.5, 1, 5],
-  POL:  [1, 5, 10, 50, 100],
-  BNB:  [0.01, 0.05, 0.1, 0.5, 1],
   USDC: [10, 50, 100, 500, 1000],
   USDT: [10, 50, 100, 500, 1000]
 };
@@ -641,13 +636,20 @@ export default function App() {
       let txHash;
       if (token==="ETH") {
         const tx = await signer.sendTransaction({ to:ed.entradaAddress, value:valBig });
-        await tx.wait(); txHash = tx.hash;
+          await tx.wait(); txHash = tx.hash;
       } else {
-        const tc = new ethers.Contract(TOKENS[token].address, ERC20_ABI, signer);
-        const allow = await tc.allowance(account, ed.entradaAddress);
-        if (allow < valBig) { const a = await tc.approve(ed.entradaAddress,valBig); await a.wait(); }
-        const erc = new ethers.Contract(TOKENS[token].address, ERC20_ABI, signer);
-        const tx = await erc.transfer(ed.entradaAddress, valBig);
+        const tokenAddress = TOKENS[token].address;
+        const isNative = tokenAddress === "0x0000000000000000000000000000000000000000";
+        if (isNative) {
+          // Native token (POL, BNB) - send directly
+          const tx2 = await signer.sendTransaction({ to: ed.entradaAddress, value: valBig });
+          await tx2.wait(); txHash = tx2.hash;
+        } else {
+          const tc = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
+          const allow = await tc.allowance(account, ed.entradaAddress);
+          if (allow < valBig) { const a = await tc.approve(ed.entradaAddress,valBig); await a.wait(); }
+          const erc = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
+          const tx = await erc.transfer(ed.entradaAddress, valBig);
         await tx.wait(); txHash = tx.hash;
       }
       saveHistory({ hash:txHash, token, amount:val, to:recip, ts:Date.now(), status:"pending", brlRate:brlRate||null, network:network.name });
