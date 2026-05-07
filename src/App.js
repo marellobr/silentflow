@@ -727,7 +727,7 @@ export default function App() {
                 const c2 = new ethers.Contract(CONTRACT_ADDRESS, balAbi, provider);
                 const bal = await c2.balanceOf(res.stealthAddress, tAddr);
                 if (bal === 0n) continue; // already withdrawn
-              } catch {}
+              } catch(balErr) { continue; } // skip if balance check fails
               found.push({ stealthAddress:res.stealthAddress, stealthPrivKey:res.stealthPrivKey, token:sym, tokenAddr:tAddr, amount:ethers.formatUnits(amt,dec), timelocked:tl, unlockAt:Number(ua), txHash:ev.transactionHash });
             }
           }
@@ -735,7 +735,11 @@ export default function App() {
       }
       setScanResults(found);
       if (!found.length) showAlert(t.noFound,"info");
-    } catch(e) { showAlert(e.message,"err"); }
+    } catch(e) { 
+      if (!e.message.includes("allowance") && !e.message.includes("BAD_DATA")) {
+        showAlert(e.message,"err");
+      }
+    }
     setScanning(false);
   }
 
