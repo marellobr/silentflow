@@ -558,6 +558,8 @@ export default function App() {
   }
 
   function showAlert(msg, type) {
+    // Suppress technical errors not useful to users
+    if (typeof msg === "string" && (msg.includes("allowance") || msg.includes("BAD_DATA") || msg.includes("could not decode"))) return;
     setAlert({msg, type: type || "info"});
     setTimeout(() => setAlert(null), 5000);
   }
@@ -639,8 +641,13 @@ export default function App() {
         await tx.wait(); txHash = tx.hash;
       } else {
         const tc = new ethers.Contract(TOKENS[token].address, ERC20_ABI, signer);
-        const allow = await tc.allowance(account, ed.entradaAddress);
-        if (allow < valBig) { const a = await tc.approve(ed.entradaAddress,valBig); await a.wait(); }
+        try {
+          const allow = await tc.allowance(account, ed.entradaAddress);
+          if (allow < valBig) { const a = await tc.approve(ed.entradaAddress,valBig); await a.wait(); }
+        } catch {
+          // Some tokens (e.g. Polygon USDT) have non-standard allowance - try approve anyway
+          try { const a = await tc.approve(ed.entradaAddress, valBig); await a.wait(); } catch {}
+        }
         const erc = new ethers.Contract(TOKENS[token].address, ERC20_ABI, signer);
         const tx = await erc.transfer(ed.entradaAddress, valBig);
         await tx.wait(); txHash = tx.hash;
@@ -653,7 +660,14 @@ export default function App() {
         const ad = await ar.json();
         if (ad.pipelineId || ad.id) setPipelineId(ad.pipelineId || ad.id);
       } catch {}
-    } catch(e) { showAlert(e.message||"Erro.","err"); }
+    } catch(e) { 
+      const msg = e.message||"Erro.";
+      if (msg.includes("allowance") || msg.includes("BAD_DATA")) {
+        showAlert(lang==="pt"?"Erro ao verificar token. Tente novamente.":"Token error. Please try again.","err");
+      } else {
+        showAlert(msg,"err");
+      }
+    }
     setLoading(false);
   }
 
