@@ -636,20 +636,13 @@ export default function App() {
       let txHash;
       if (token==="ETH") {
         const tx = await signer.sendTransaction({ to:ed.entradaAddress, value:valBig });
-          await tx.wait(); txHash = tx.hash;
+        await tx.wait(); txHash = tx.hash;
       } else {
-        const tokenAddress = TOKENS[token].address;
-        const isNative = tokenAddress === "0x0000000000000000000000000000000000000000";
-        if (isNative) {
-          // Native token (POL, BNB) - send directly
-          const tx2 = await signer.sendTransaction({ to: ed.entradaAddress, value: valBig });
-          await tx2.wait(); txHash = tx2.hash;
-        } else {
-          const tc = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
-          const allow = await tc.allowance(account, ed.entradaAddress);
-          if (allow < valBig) { const a = await tc.approve(ed.entradaAddress,valBig); await a.wait(); }
-          const erc = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
-          const tx = await erc.transfer(ed.entradaAddress, valBig);
+        const tc = new ethers.Contract(TOKENS[token].address, ERC20_ABI, signer);
+        const allow = await tc.allowance(account, ed.entradaAddress);
+        if (allow < valBig) { const a = await tc.approve(ed.entradaAddress,valBig); await a.wait(); }
+        const erc = new ethers.Contract(TOKENS[token].address, ERC20_ABI, signer);
+        const tx = await erc.transfer(ed.entradaAddress, valBig);
         await tx.wait(); txHash = tx.hash;
       }
       saveHistory({ hash:txHash, token, amount:val, to:recip, ts:Date.now(), status:"pending", brlRate:brlRate||null, network:network.name });
