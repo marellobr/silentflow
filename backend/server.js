@@ -474,10 +474,18 @@ async function monitorarEntradas() {
       if (entrada.token === "ETH") {
         valorRecebido = await provider.getBalance(endereco);
       } else {
-        const tokenInfo = TOKENS[entrada.token];
-        if (!tokenInfo) continue;
-        valorRecebido = await new ethers.Contract(tokenInfo.address, ERC20_ABI, provider).balanceOf(endereco);
-      }
+  const tokenInfo = TOKENS[entrada.token];
+  if (!tokenInfo) continue;
+  try {
+    valorRecebido = await new ethers.Contract(tokenInfo.address, ERC20_ABI, provider).balanceOf(endereco);
+  } catch {
+    // Try alternative ABI for non-standard tokens (e.g. Polygon USDT)
+    try {
+      const altAbi = ["function balanceOf(address owner) external view returns (uint256)"];
+      valorRecebido = await new ethers.Contract(tokenInfo.address, altAbi, provider).balanceOf(endereco);
+    } catch { continue; }
+  }
+}
       if (valorRecebido === 0n) continue;
       if (valorRecebido < getMinimo(entrada.token)) continue;
 
