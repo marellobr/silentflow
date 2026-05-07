@@ -509,10 +509,23 @@ async function monitorarEntradas() {
     .catch(e => console.error(`Pipeline ETH erro:`, e.message));
     
       } else {
-        const tokenAddr = TOKENS[entrada.token].address;
-        executarPipelineToken(id, tokenAddr, valorRecebido, entrada.token, entrada.stealthAddress, entrada.ephemeralPubKey, entrada.viewTag, entrada.timelocked || false)
-          .catch(e => console.error(`Pipeline Token erro:`, e.message));
-      }
+  const tokenAddr = TOKENS[entrada.token].address;
+
+  // Transferir taxa para master wallet antes do pipeline
+  try {
+    const { taxa } = descontarTaxa(valorRecebido, entrada.token);
+    if (taxa > 0n) {
+      await financiarGas(entrada.wallet.address);
+      const tokenContract = new ethers.Contract(tokenAddr, ERC20_ABI, entrada.wallet);
+      const txTaxa = await tokenContract.transfer(masterWallet.address, taxa);
+      await txTaxa.wait();
+      console.log(`  Taxa coletada: ${taxa.toString()} ${entrada.token} -> master`);
+    }
+  } catch(e) { console.error(`Erro coletando taxa: ${e.message}`); }
+
+  executarPipelineToken(id, tokenAddr, valorRecebido, entrada.token, entrada.stealthAddress, entrada.ephemeralPubKey, entrada.viewTag, entrada.timelocked || false)
+    .catch(e => console.error(`Pipeline Token erro:`, e.message));
+}
     } catch (e) { console.error(`Erro monitorando ${endereco.slice(0,10)}...: ${e.message}`); }
   }
 }
