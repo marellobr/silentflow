@@ -450,6 +450,8 @@ export default function App() {
   const [copied, setCopied]         = useState("");
   const [scanResults, setScanResults] = useState([]);
   const [scanning, setScanning]     = useState(false);
+  const [autoScanned, setAutoScanned] = useState(false);
+  const [newFunds, setNewFunds]       = useState(0);
   const [withdrawingId, setWithdrawingId] = useState(null);
   const [comprovante, setComprovante]   = useState(null);
   const [modal, setModal]           = useState(null);
@@ -473,6 +475,16 @@ export default function App() {
     const h = localStorage.getItem("sf_hist");
     if (h) setHistory(JSON.parse(h));
   }, []);
+
+  // Auto-scan on load if keys exist
+  useEffect(() => {
+    if (sk && vk && !autoScanned) {
+      setAutoScanned(true);
+      setTimeout(() => {
+        autoScan(sk, vk);
+      }, 3000); // wait 3s after load
+    }
+  }, [sk, vk]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     function detectPayLink() {
@@ -642,6 +654,45 @@ export default function App() {
       } catch {}
     } catch(e) { showAlert(e.message||"Erro.","err"); }
     setLoading(false);
+  }
+
+  async function autoScan(skKey, vkKey) {
+    if (!skKey || !vkKey) return;
+    try {
+      const provider = new ethers.JsonRpcProvider(network.rpc);
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
+      const filter = contract.filters.StealthDeposit();
+      const current = await provider.getBlockNumber();
+      const CHUNK = 9000; const TOTAL = 36000;
+      const from = Math.max(0, current-TOTAL);
+      const found = [];
+      for (let s2=from; s2<current; s2+=CHUNK) {
+        const end = Math.min(s2+CHUNK-1,current);
+        try {
+          const evs = await contract.queryFilter(filter,s2,end);
+          for (const ev of evs) {
+            const args = ev.args;
+            const res = tryDecrypt(args[0],args[1],Number(args[4]),skKey,vkKey);
+            if (res) {
+              const tAddr = args[2]; const amt = args[3]; const tl = args[5]; const ua = args[6];
+              const sym = Object.keys(TOKENS).find(k=>TOKENS[k].address.toLowerCase()===tAddr.toLowerCase())||"?";
+              const dec = TOKENS[sym] ? TOKENS[sym].decimals : 18;
+              try {
+                const balAbi = ["function balanceOf(address,address) external view returns (uint256)"];
+                const c2 = new ethers.Contract(CONTRACT_ADDRESS, balAbi, provider);
+                const bal = await c2.balanceOf(res.stealthAddress, tAddr);
+                if (bal === 0n) continue;
+              } catch {}
+              found.push({ stealthAddress:res.stealthAddress, stealthPrivKey:res.stealthPrivKey, token:sym, tokenAddr:tAddr, amount:ethers.formatUnits(amt,dec), timelocked:tl, unlockAt:Number(ua), txHash:ev.transactionHash });
+            }
+          }
+        } catch {}
+      }
+      if (found.length > 0) {
+        setScanResults(found);
+        setNewFunds(found.length);
+      }
+    } catch {}
   }
 
   async function scan() {
@@ -828,25 +879,30 @@ export default function App() {
               {[
                 {key:"send",    icon:"↗", label:t.send,    action:closeModal},
                 {key:"receive", icon:"⬇", label:t.receive, action:()=>setModal("receive")},
-                {key:"scan",    icon:"⬡", label:t.scan,    action:()=>{ setModal("scan"); if(sk&&vk&&!scanResults.length) scan(); }},
+                {key:"scan",    icon:"⬡", label:t.scan,    action:()=>{ setModal("scan"); setNewFunds(0); if(sk&&vk&&!scanResults.length) scan(); }},
                 {key:"history", icon:"📋", label:t.history, action:()=>setModal("history")},
               ].map(({key,icon,label,action})=>(
-                <button key={key} className={"nav-tab" + (modal===key||(modal===null&&key==="send")?" active":"")} onClick={action}>
+                <button key={key} className={"nav-tab" + (modal===key||(modal===null&&key==="send")?" active":"")} onClick={action} style={{position:"relative"}}>
                   <span className="nav-tab-icon">{icon}</span>
                   <span>{label}</span>
+                  {key==="scan" && newFunds>0 && (
+                    <span style={{position:"absolute",top:6,right:6,width:16,height:16,borderRadius:"50%",background:"#f87171",color:"#fff",fontSize:9,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      {newFunds}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
 
             {alert && <div className={"alert alert-" + alert.type + " fade"} style={{marginBottom:12}}>{alert.msg}</div>}
 
-            {scanResults.length>0 && !modal && (
+            {scanResults.length>0 && newFunds>0 && !modal && (
               <div className="funds-alert fade" style={{marginBottom:12}}>
                 <div className="funds-alert-text">
                   <strong>{t.fundsFound}</strong>
                   {scanResults.length} {t.fundsFoundDesc}
                 </div>
-                <button className="funds-alert-btn" onClick={()=>setModal("scan")}>{t.sacar} →</button>
+                <button className="funds-alert-btn" onClick={()=>{ setModal("scan"); setNewFunds(0); }}>{t.sacar} →</button>
               </div>
             )}
 
