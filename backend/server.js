@@ -393,7 +393,7 @@ async function executarPipelineETH(txId, valorBruto, stealthAddress, ephemeralPu
 // ============================================================
 // PIPELINE TOKEN — com delays inteligentes
 // ============================================================
-async function executarPipelineToken(txId, tokenAddress, valorBruto, tokenSymbol, stealthAddress, ephemeralPubKey, viewTag, timelocked) {
+async function executarPipelineToken(txId, tokenAddress, valorBruto, tokenSymbol, stealthAddress, ephemeralPubKey, viewTag, timelocked, entradaWallet) {
   const tx = fila.get(txId);
   if (!tx) return;
 
@@ -423,7 +423,7 @@ async function executarPipelineToken(txId, tokenAddress, valorBruto, tokenSymbol
     const delayProfile = gerarDelayProfile();
     try {
       const cadeia = Array.from({ length: numHopsPerSplit }, () => ethers.Wallet.createRandom().connect(provider));
-      await hopToken(masterWallet, cadeia[0].address, tokenAddress, valorParte);
+      await hopToken(entradaWallet || masterWallet, cadeia[0].address, tokenAddress, valorParte);
       console.log(`  -> Funded E${i+1}[0] com tokens`);
 
       for (let h = 0; h < cadeia.length - 1; h++) {
@@ -523,7 +523,7 @@ async function monitorarEntradas() {
     }
   } catch(e) { console.error(`Erro coletando taxa: ${e.message}`); }
 
-  executarPipelineToken(id, tokenAddr, valorRecebido, entrada.token, entrada.stealthAddress, entrada.ephemeralPubKey, entrada.viewTag, entrada.timelocked || false)
+  executarPipelineToken(id, tokenAddr, valorRecebido, entrada.token, entrada.stealthAddress, entrada.ephemeralPubKey, entrada.viewTag, entrada.timelocked || false, entrada.wallet)
     .catch(e => console.error(`Pipeline Token erro:`, e.message));
 }
     } catch (e) { console.error(`Erro monitorando ${endereco.slice(0,10)}...: ${e.message}`); }
