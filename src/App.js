@@ -321,14 +321,20 @@ a{color:var(--accent);text-decoration:none}
 .modal-body{padding:20px}
 .hist-empty{text-align:center;padding:40px 20px;color:var(--text3);font-size:13px}
 .hist-empty-icon{font-size:36px;opacity:0.3;margin-bottom:10px}
-.hist-item{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--border)}
+.hist-item{display:flex;align-items:flex-start;gap:12px;padding:14px 0;border-bottom:1px solid var(--border)}
 .hist-item:last-child{border-bottom:none}
-.hist-ico{width:36px;height:36px;border-radius:50%;background:var(--accent-dim);border:1px solid rgba(34,197,240,0.15);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--accent);flex-shrink:0}
+.hist-ico{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0}
+.hist-ico.pending{background:var(--accent-dim);border:1px solid rgba(34,197,240,0.2);color:var(--accent)}
+.hist-ico.done{background:var(--green-dim);border:1px solid rgba(52,211,153,0.2);color:var(--green)}
 .hist-body{flex:1;min-width:0}
-.hist-amount{font-size:14px;font-weight:600;color:var(--text)}
-.hist-dest{font-size:11px;color:var(--text3);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
-.hist-link{font-size:11px;color:var(--accent);display:block;margin-top:2px}
-.hist-badge{font-size:10px;padding:3px 8px;border-radius:20px;flex-shrink:0}
+.hist-amount{font-size:15px;font-weight:700;color:var(--text);margin-bottom:2px}
+.hist-brl{font-size:12px;color:var(--text2);margin-bottom:3px}
+.hist-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:3px}
+.hist-date{font-size:11px;color:var(--text3)}
+.hist-net{font-size:10px;padding:2px 7px;border-radius:20px;background:var(--surface2);border:1px solid var(--border);color:var(--text3);font-family:var(--mono)}
+.hist-dest{font-size:11px;color:var(--text3);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hist-link{font-size:11px;color:var(--accent);display:block;margin-top:3px}
+.hist-badge{font-size:10px;padding:3px 8px;border-radius:20px;flex-shrink:0;white-space:nowrap}
 .badge-ok{background:var(--green-dim);color:var(--green);border:1px solid rgba(52,211,153,0.2)}
 .badge-pend{background:var(--accent-dim);color:var(--accent);border:1px solid rgba(34,197,240,0.2)}
 .receive-addr{background:var(--surface2);border:1px solid rgba(34,197,240,0.2);border-radius:var(--r2);padding:16px;margin-bottom:16px}
@@ -644,7 +650,7 @@ export default function App() {
         const tx = await erc.transfer(ed.entradaAddress, valBig);
         await tx.wait(); txHash = tx.hash;
       }
-      saveHistory({ hash:txHash, token, amount:val, to:recip, ts:Date.now(), status:"pending" });
+      saveHistory({ hash:txHash, token, amount:val, to:recip, ts:Date.now(), status:"pending", brlRate:brlRate||null, network:network.name });
       setComprovante({ hash:txHash, token, amount:val, to:recip, ts:Date.now(), network:network.name, explorer:network.explorer });
       setAmount(""); setSelDenom(null); setRecipientAmt("");
       try {
@@ -1087,19 +1093,32 @@ export default function App() {
                     <div style={{fontWeight:600,marginBottom:4}}>{t.noHistory}</div>
                     <div>{t.noHistoryDesc}</div>
                   </div>
-                ) : history.map((h,i)=>(
-                  <div key={i} className="hist-item">
-                    <div className="hist-ico">{h.token ? h.token.slice(0,1) : "E"}</div>
-                    <div className="hist-body">
-                      <div className="hist-amount">{h.amount} {h.token}</div>
-                      <div className="hist-dest">{h.to ? h.to.slice(0,30) : ""}...</div>
-                      <a className="hist-link" href={network.explorer + "/tx/" + h.hash} target="_blank" rel="noreferrer">{t.basescan} ↗</a>
+                ) : history.map((h,i)=>{
+                  const isDone = h.status==="done";
+                  const brlVal = h.brlRate && h.amount ? (parseFloat(h.amount) * h.brlRate).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}) : null;
+                  const dateStr = h.ts ? new Date(h.ts).toLocaleString(lang==="pt"?"pt-BR":"en-US",{day:"2-digit",month:"2-digit",year:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";
+                  const netExplorer = h.network==="Polygon" ? "https://polygonscan.com" : h.network==="BNB" ? "https://bscscan.com" : "https://basescan.org";
+                  return (
+                    <div key={i} className="hist-item">
+                      <div className={"hist-ico " + (isDone?"done":"pending")}>
+                        {isDone ? "✓" : "↗"}
+                      </div>
+                      <div className="hist-body">
+                        <div className="hist-amount">{h.amount} {h.token}</div>
+                        {brlVal && <div className="hist-brl">≈ R$ {brlVal}</div>}
+                        <div className="hist-meta">
+                          <span className="hist-date">{dateStr}</span>
+                          {h.network && <span className="hist-net">{h.network}</span>}
+                        </div>
+                        <div className="hist-dest">{h.to ? h.to.slice(0,28) : ""}...</div>
+                        <a className="hist-link" href={netExplorer + "/tx/" + h.hash} target="_blank" rel="noreferrer">{t.basescan} ↗</a>
+                      </div>
+                      <span className={"hist-badge " + (isDone?"badge-ok":"badge-pend")}>
+                        {isDone ? (lang==="pt"?"Concluído":"Done") : (lang==="pt"?"Processando":"Processing")}
+                      </span>
                     </div>
-                    <span className={"hist-badge " + (h.status==="done"?"badge-ok":"badge-pend")}>
-                      {h.status==="done"?"✓":"..."}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
