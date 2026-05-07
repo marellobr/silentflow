@@ -727,6 +727,6 @@ app.listen(PORT, () => {
   console.log(`SilentFlow backend v7 (Base Mainnet) — porta ${PORT}`);
   console.log(`Master wallet: ${masterWallet.address}`);
   console.log(`Contrato V7: ${CONTRACT_ADDRESS}`);
-  console.log(`Taxas: 0.20% (standard) / 0.15% (volume) / 0.10% (premium)`);
+  console.log(`Taxas: ${Number(TIER1_BPS)/100}% (standard) / ${Number(TIER2_BPS)/100}% (volume) / ${Number(TIER3_BPS)/100}% (premium)`);
   console.log(`Minimos: ${ethers.formatEther(MIN_ETH)} ETH / ${ethers.formatUnits(MIN_USDC,6)} USDC / ${ethers.formatUnits(MIN_USDT,6)} USDT`);
 });
