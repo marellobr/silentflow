@@ -497,6 +497,7 @@ async function monitorarEntradas() {
       } else {
         const tokenInfo = redeCfg.tokens[entrada.token];
         if (!tokenInfo) continue;
+        console.log(`  Checando saldo ${entrada.token} em ${endereco.slice(0,10)}... [${entrada.rede || "base"}]`);
         try {
           const raw = await redeProvider.call({
             to: tokenInfo.address,
