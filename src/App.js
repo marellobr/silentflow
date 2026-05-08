@@ -638,7 +638,7 @@ export default function App() {
         ephemeralPubKey = ethers.hexlify(ethers.randomBytes(33));
         viewTag = 0;
       }
-      const params = new URLSearchParams({ token, stealthAddress, ephemeralPubKey, viewTag:String(viewTag), timelocked:String(useLock), rede:networkKey });
+      const params = new URLSearchParams({ token, stealthAddress, ephemeralPubKey, viewTag:String(viewTag), timelocked:"false", rede:networkKey });
       const er = await fetch(BACKEND_URL + "/entrada?" + params);
       const ed = await er.json();
       if (ed.erro) throw new Error(ed.erro);
