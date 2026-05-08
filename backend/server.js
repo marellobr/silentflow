@@ -482,8 +482,10 @@ async function monitorarEntradas() {
   try {
     const altAbi = ["function balanceOf(address owner) external view returns (uint256)"];
     valorRecebido = await new ethers.Contract(tokenInfo.address, altAbi, provider).balanceOf(endereco);
-  } catch { continue; }
-}
+  } catch(e2) { 
+    console.error(`balanceOf falhou: ${e2.message}`);
+    continue; 
+  }
 }
       if (valorRecebido === 0n) continue;
       if (valorRecebido < getMinimo(entrada.token)) continue;
