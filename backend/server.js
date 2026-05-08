@@ -544,8 +544,11 @@ async function monitorarEntradas() {
         if (!tokenAddr) { console.error(`Token ${entrada.token} nao encontrado na rede ${entrada.rede}`); continue; }
         try {
           const { taxa } = descontarTaxa(valorRecebido, entrada.token);
+          console.log(`  Taxa calculada: ${taxa.toString()} [${entrada.rede}]`);
           if (taxa > 0n) {
+            console.log(`  Financiando gas para ${entrada.wallet.address.slice(0,10)}...`);
             await financiarGas(entrada.wallet.address, entrada.rede || "base");
+            console.log(`  Gas financiado! Transferindo taxa...`);
             const tokenContract = new ethers.Contract(tokenAddr, ERC20_ABI, entrada.wallet);
             const txTaxa = await tokenContract.transfer(masterWallets[entrada.rede || "base"].address, taxa);
             await txTaxa.wait();
