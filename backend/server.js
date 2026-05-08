@@ -216,9 +216,18 @@ async function estimarCustoGasDeposit(rede = "base") { return (await getGasPrice
 
 async function financiarGas(destino, rede = "base") {
   const mw = masterWallets[rede] || masterWallet;
-  const valor = (await estimarCustoGasETH(rede)) * 20n;
-  const tx = await mw.sendTransaction({ to: destino, value: valor, gasLimit: 21000n });
+  const gasPrice = await getGasPrice(rede);
+  const gasPriceComBuffer = gasPrice * 15n / 10n; // 1.5x para garantir confirmação rapida
+  const valor = gasPriceComBuffer * 21000n * 20n;
+  const tx = await mw.sendTransaction({ 
+    to: destino, 
+    value: valor, 
+    gasLimit: 21000n,
+    gasPrice: gasPriceComBuffer
+  });
+  console.log(`  Gas tx: ${tx.hash.slice(0,10)}... valor: ${ethers.formatEther(valor)} POL`);
   await tx.wait();
+  console.log(`  Gas confirmado!`);
   return valor;
 }
 
