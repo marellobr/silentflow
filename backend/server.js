@@ -26,18 +26,11 @@ const TOKENS = {
   USDT: { address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6 },
 };
 
-// ============================================================
-// TAXA POR TIER (basis points)
-// Tier 1: ate $500 equiv  -> 0.20% (20 bps)
-// Tier 2: $500-$5000      -> 0.15% (15 bps)
-// Tier 3: acima de $5000  -> 0.10% (10 bps)
-// Para testnet usamos thresholds em ETH como proxy
-// ============================================================
-const TIER1_BPS = 50n; // 0.50%
-const TIER2_BPS = 35n; // 0.35%
-const TIER3_BPS = 20n; // 0.20%
-const TIER2_THRESHOLD_ETH = ethers.parseEther("0.15");  // ~$500
-const TIER3_THRESHOLD_ETH = ethers.parseEther("1.5");    // ~$5000
+const TIER1_BPS = 50n;
+const TIER2_BPS = 35n;
+const TIER3_BPS = 20n;
+const TIER2_THRESHOLD_ETH = ethers.parseEther("0.15");
+const TIER3_THRESHOLD_ETH = ethers.parseEther("1.5");
 const TIER2_THRESHOLD_USDC = ethers.parseUnits("500", 6);
 const TIER3_THRESHOLD_USDC = ethers.parseUnits("5000", 6);
 const TIER2_THRESHOLD_USDT = ethers.parseUnits("500", 6);
@@ -60,9 +53,9 @@ function descontarTaxa(valorBruto, token) {
   return { valorLiquido: valorBruto - taxa, taxa, bps };
 }
 
-const MIN_ETH  = ethers.parseEther(process.env.MIN_ETH  || "0.05");
-const MIN_USDC = ethers.parseUnits(process.env.MIN_USDC || "5", 6);
-const MIN_USDT = ethers.parseUnits(process.env.MIN_USDT || "5", 6);
+const MIN_ETH  = ethers.parseEther(process.env.MIN_ETH  || "0.001");
+const MIN_USDC = ethers.parseUnits(process.env.MIN_USDC || "2", 6);
+const MIN_USDT = ethers.parseUnits(process.env.MIN_USDT || "2", 6);
 
 function getMinimo(token) {
   if (token === "ETH")  return MIN_ETH;
@@ -76,9 +69,6 @@ const entradasPendentes = new Map();
 const fila = new Map();
 let pipelineAtivo = false;
 
-// ============================================================
-// ANALYTICS — contadores em memoria (reseta no redeploy)
-// ============================================================
 const stats = {
   totalTxs: 0,
   totalTxsConcluidas: 0,
@@ -96,28 +86,22 @@ const ADMIN_KEY = process.env.ADMIN_KEY || "sf_admin_2026";
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
-// ============================================================
-// DELAYS INTELIGENTES — cada split tem range diferente
-// Variacoes maiores tornam correlacao temporal muito mais dificil
-// ============================================================
 function gerarDelayProfile() {
-  // Cada split recebe um "perfil" de delay diferente
   const profiles = [
-    { min: 20, max: 90 },   // rapido
-    { min: 45, max: 150 },  // medio
-    { min: 60, max: 180 },  // lento
-    { min: 30, max: 120 },  // padrao
-    { min: 80, max: 200 },  // muito lento
+    { min: 20, max: 90 },
+    { min: 45, max: 150 },
+    { min: 60, max: 180 },
+    { min: 30, max: 120 },
+    { min: 80, max: 200 },
   ];
   return profiles[Math.floor(Math.random() * profiles.length)];
 }
 
 function delayAleatorio(profile) {
   const { min, max } = profile || { min: 30, max: 120 };
-  // Distribuicao nao-uniforme: mais provavel perto do meio
   const r1 = Math.random();
   const r2 = Math.random();
-  const avg = (r1 + r2) / 2; // triangular-ish distribution
+  const avg = (r1 + r2) / 2;
   return (min + avg * (max - min)) * 1000;
 }
 
@@ -135,7 +119,6 @@ function splitAleatorio(total, partes) {
   return vals.sort(() => Math.random() - 0.5);
 }
 
-// Denominacoes fixas ETH (em wei) — devem bater com o contrato V7
 const ETH_DENOMS = [
   ethers.parseEther("5"),
   ethers.parseEther("1"),
@@ -143,24 +126,21 @@ const ETH_DENOMS = [
   ethers.parseEther("0.1"),
   ethers.parseEther("0.05"),
   ethers.parseEther("0.01"),
-]; // ordem decrescente
+];
 
-// Denominacoes fixas USDC/USDT (em units com 6 decimais)
 const STABLE_DENOMS = [
   ethers.parseUnits("1000", 6),
   ethers.parseUnits("500", 6),
   ethers.parseUnits("100", 6),
   ethers.parseUnits("50", 6),
   ethers.parseUnits("10", 6),
-]; // ordem decrescente
+];
 
 function getDenoms(token) {
   if (token === "ETH") return ETH_DENOMS;
   return STABLE_DENOMS;
 }
 
-// Quebra valor em denominacoes fixas validas (greedy)
-// Ex: 0.35 ETH -> [0.1, 0.1, 0.1, 0.05]
 function splitEmDenominacoes(total, token) {
   const denoms = getDenoms(token);
   const result = [];
@@ -171,13 +151,7 @@ function splitEmDenominacoes(total, token) {
       restante -= d;
     }
   }
-  // Se sobrou resto que nao cabe em nenhuma denominacao,
-  // adiciona a menor denominacao e o pipeline absorve a diferenca como gas
-  if (result.length === 0 && total > 0n) {
-    // Valor menor que menor denominacao — usa split aleatorio como fallback
-    return null;
-  }
-  // Embaralhar ordem
+  if (result.length === 0 && total > 0n) return null;
   return result.sort(() => Math.random() - 0.5);
 }
 
@@ -195,8 +169,8 @@ async function financiarGas(destino) {
 async function hopETH(deWallet, paraEndereco) {
   const gasPrice = await getGasPrice();
   const saldo = await provider.getBalance(deWallet.address);
-  const gasFixed = ethers.parseUnits("0.1", "gwei") * 21000n; // gas fixo conservador
-const enviar = saldo - gasFixed;
+  const gasFixed = ethers.parseUnits("0.1", "gwei") * 21000n;
+  const enviar = saldo - gasFixed;
   if (enviar <= 0n) return false;
   try {
     const tx = await deWallet.sendTransaction({ to: paraEndereco, value: enviar, gasLimit: 21000n, gasPrice });
@@ -218,7 +192,7 @@ async function depositarETHNoContrato(wallet, valorFixo, stealthAddress, ephemer
       tx = await contrato.depositETH(stealthAddress, ephemeralPubKey, viewTag, { value: valorFixo, gasLimit, gasPrice });
     }
     await tx.wait();
-    console.log(`  depositETH${timelocked?"Timelocked":""}: ${ethers.formatEther(valorFixo)} ETH -> stealth ${stealthAddress.slice(0,10)}...`);
+    console.log(`  depositETH: ${ethers.formatEther(valorFixo)} ETH -> stealth ${stealthAddress.slice(0,10)}...`);
     return tx.hash;
   } catch (e) { console.error(`  depositETH falhou: ${e.message}`); return null; }
 }
@@ -252,48 +226,14 @@ async function depositarTokenNoContrato(wallet, tokenAddress, valor, stealthAddr
   } catch (e) { console.error(`  depositToken falhou: ${e.message}`); return null; }
 }
 
-// ============================================================
-// DUMMY TRANSACTIONS — mais inteligentes
-// - Valores variados (nao sempre 0.00001)
-// - Probabilidade maior (70% vs 50%)
-// - Pode enviar 1-2 dummies de cada vez
-// - Dummies antes e depois dos hops tambem
-// ============================================================
 async function enviarDummy() {
-  return; // PAUSADO — reativar no lancamento
-  if (pipelineAtivo) return;
-  if (Math.random() > 0.7) return; // 70% chance de enviar (era 50%)
-  try {
-    // Numero de dummies: 1 ou 2
-    const numDummies = Math.random() > 0.7 ? 2 : 1;
-    for (let i = 0; i < numDummies; i++) {
-      const efemero = ethers.Wallet.createRandom();
-      const gasPrice = await getGasPrice();
-      // Valor variado entre 0.000005 e 0.00005 ETH
-      const baseVal = 5 + Math.floor(Math.random() * 45); // 5-50
-      const valor = ethers.parseUnits(baseVal.toString(), 12); // 0.000005 - 0.00005 ETH
-      await masterWallet.sendTransaction({ to: efemero.address, value: valor, gasLimit: 21000n, gasPrice });
-      stats.dummiesEnviados++;
-      console.log(`  ~ dummy #${stats.dummiesEnviados} -> ${efemero.address.slice(0,10)}... (${ethers.formatEther(valor)} ETH)`);
-      if (numDummies === 2 && i === 0) {
-        // Pequeno delay entre dummies
-        await sleep(3000 + Math.random() * 8000);
-      }
-    }
-  } catch {}
+  return; // PAUSADO
 }
 
-// Dummy periodico mesmo sem pipeline ativo — cria ruido de fundo
 async function dummyPeriodico() {
   return; // PAUSADO
-  if (pipelineAtivo) return;
-  if (Math.random() > 0.3) return; // 30% chance a cada ciclo
-  await enviarDummy();
 }
 
-// ============================================================
-// PIPELINE ETH — com delays inteligentes e dummies melhorados
-// ============================================================
 async function executarPipelineETH(txId, valorBruto, stealthAddress, ephemeralPubKey, viewTag, timelocked) {
   const tx = fila.get(txId);
   if (!tx) return;
@@ -301,11 +241,9 @@ async function executarPipelineETH(txId, valorBruto, stealthAddress, ephemeralPu
   const { valorLiquido, taxa, bps } = descontarTaxa(valorBruto, "ETH");
   console.log(`  Taxa: ${ethers.formatEther(taxa)} ETH (${Number(bps)/100}%) | Liquido: ${ethers.formatEther(valorLiquido)} ETH`);
 
-  // Analytics
   stats.volumeETH += valorBruto;
   stats.receitaETH += taxa;
 
-  // Tenta quebrar em denominacoes fixas; fallback para split aleatorio
   let partes = splitEmDenominacoes(valorLiquido, "ETH");
   const usandoDenoms = partes !== null;
   if (!partes) {
@@ -319,20 +257,16 @@ async function executarPipelineETH(txId, valorBruto, stealthAddress, ephemeralPu
   tx.splits = partes.length;
   tx.taxaBps = Number(bps);
 
-  console.log(`\n Pipeline ETH [${txId}]: ${partes.length} splits (denoms: ${usandoDenoms})${timelocked ? " [TIMELOCKED]" : ""}`);
+  console.log(`\n Pipeline ETH [${txId}]: ${partes.length} splits (denoms: ${usandoDenoms})`);
 
   const cadeias = partes.map(() =>
     Array.from({ length: numHopsPerSplit }, () => ethers.Wallet.createRandom().connect(provider))
   );
 
-  // FASE 1: Financia em serie
   pipelineAtivo = true;
-  const gasDeposit = await estimarCustoGasDeposit();
-  const gasHops = (await estimarCustoGasETH()) * BigInt(numHopsPerSplit);
-  const gasExtra = await estimarCustoGasETH();
 
   for (let i = 0; i < partes.length; i++) {
-    const GAS_BUFFER = ethers.parseEther("0.00002"); // buffer fixo generoso
+    const GAS_BUFFER = ethers.parseEther("0.00002");
     const valorComGas = partes[i] + GAS_BUFFER;
     const txFund = await masterWallet.sendTransaction({ to: cadeias[i][0].address, value: valorComGas, gasLimit: 21000n });
     await txFund.wait();
@@ -340,9 +274,6 @@ async function executarPipelineETH(txId, valorBruto, stealthAddress, ephemeralPu
   }
   pipelineAtivo = false;
 
-  await enviarDummy();
-
-  // FASE 2: Hops em paralelo com delays inteligentes
   const promessas = partes.map(async (valorParte, i) => {
     const cadeia = cadeias[i];
     const delayProfile = gerarDelayProfile();
@@ -351,15 +282,12 @@ async function executarPipelineETH(txId, valorBruto, stealthAddress, ephemeralPu
         const delay = delayAleatorio(delayProfile);
         console.log(`  Split ${i+1} hop ${h+1}: aguardando ${Math.round(delay/1000)}s...`);
         await sleep(delay);
-        await enviarDummy();
         const ok = await hopETH(cadeia[h], cadeia[h + 1].address);
         if (!ok) throw new Error(`Hop ${h} falhou`);
         tx.hopsFeitos++;
       }
       const delayFinal = delayAleatorio(delayProfile);
       await sleep(delayFinal);
-      await enviarDummy();
-      // Deposita o valor fixo da denominacao (nao o saldo todo da wallet)
       const depositHash = await depositarETHNoContrato(cadeia[cadeia.length - 1], valorParte, stealthAddress, ephemeralPubKey, viewTag, timelocked);
       tx.hopsFeitos++;
       if (!depositHash) throw new Error(`Deposito final falhou`);
@@ -380,19 +308,12 @@ async function executarPipelineETH(txId, valorBruto, stealthAddress, ephemeralPu
   });
 
   const resultados = await Promise.allSettled(promessas);
-
-  // Dummy pos-pipeline — ruido depois dos depositos
-  await enviarDummy();
-
   tx.concluido = true;
   tx.depositHashes = resultados.filter(r => r.status === 'fulfilled' && r.value).map(r => r.value);
   stats.totalTxsConcluidas++;
   console.log(`\n Pipeline ETH [${txId}] concluido — ${tx.depositHashes.length}/${partes.length} splits\n`);
 }
 
-// ============================================================
-// PIPELINE TOKEN — com delays inteligentes
-// ============================================================
 async function executarPipelineToken(txId, tokenAddress, valorBruto, tokenSymbol, stealthAddress, ephemeralPubKey, viewTag, timelocked, entradaWallet) {
   const tx = fila.get(txId);
   if (!tx) return;
@@ -403,7 +324,6 @@ async function executarPipelineToken(txId, tokenAddress, valorBruto, tokenSymbol
   if (tokenSymbol === "USDC") { stats.volumeUSDC += valorBruto; stats.receitaUSDC += taxa; }
   if (tokenSymbol === "USDT") { stats.volumeUSDT += valorBruto; stats.receitaUSDT += taxa; }
 
-  // Tenta denominacoes fixas; fallback para split aleatorio
   let partes = splitEmDenominacoes(valorLiquido, tokenSymbol);
   if (!partes) {
     partes = splitAleatorio(valorLiquido, 2);
@@ -415,7 +335,7 @@ async function executarPipelineToken(txId, tokenAddress, valorBruto, tokenSymbol
   tx.splits = partes.length;
   tx.taxaBps = Number(bps);
 
-  console.log(`\n Pipeline Token [${txId}]: ${partes.length} splits${timelocked ? " [TIMELOCKED]" : ""}`);
+  console.log(`\n Pipeline Token [${txId}]: ${partes.length} splits`);
 
   const depositHashes = [];
   for (let i = 0; i < partes.length; i++) {
@@ -423,14 +343,14 @@ async function executarPipelineToken(txId, tokenAddress, valorBruto, tokenSymbol
     const delayProfile = gerarDelayProfile();
     try {
       const cadeia = Array.from({ length: numHopsPerSplit }, () => ethers.Wallet.createRandom().connect(provider));
-      await hopToken(entradaWallet || masterWallet, cadeia[0].address, tokenAddress, valorParte);
+      const fonteWallet = entradaWallet || masterWallet;
+      await hopToken(fonteWallet, cadeia[0].address, tokenAddress, valorParte);
       console.log(`  -> Funded E${i+1}[0] com tokens`);
 
       for (let h = 0; h < cadeia.length - 1; h++) {
         const delay = delayAleatorio(delayProfile);
         console.log(`  Split ${i+1} hop ${h+1}: aguardando ${Math.round(delay/1000)}s...`);
         await sleep(delay);
-        await enviarDummy();
         const saldo = await new ethers.Contract(tokenAddress, ERC20_ABI, provider).balanceOf(cadeia[h].address);
         const ok = await hopToken(cadeia[h], cadeia[h+1].address, tokenAddress, saldo);
         if (!ok) throw new Error(`Token hop ${h} falhou`);
@@ -439,7 +359,6 @@ async function executarPipelineToken(txId, tokenAddress, valorBruto, tokenSymbol
 
       const delayFinal = delayAleatorio(delayProfile);
       await sleep(delayFinal);
-      await enviarDummy();
       const hash = await depositarTokenNoContrato(cadeia[cadeia.length-1], tokenAddress, valorParte, stealthAddress, ephemeralPubKey, viewTag, timelocked);
       tx.hopsFeitos++;
       if (hash) depositHashes.push(hash);
@@ -474,19 +393,20 @@ async function monitorarEntradas() {
       if (entrada.token === "ETH") {
         valorRecebido = await provider.getBalance(endereco);
       } else {
-  const tokenInfo = TOKENS[entrada.token];
-  if (!tokenInfo) continue;
-  try {
-  valorRecebido = await new ethers.Contract(tokenInfo.address, ERC20_ABI, provider).balanceOf(endereco);
-} catch {
-  try {
-    const altAbi = ["function balanceOf(address owner) external view returns (uint256)"];
-    valorRecebido = await new ethers.Contract(tokenInfo.address, altAbi, provider).balanceOf(endereco);
-  } catch(e2) { 
-    console.error(`balanceOf falhou: ${e2.message}`);
-    continue; 
-  }
-}
+        const tokenInfo = TOKENS[entrada.token];
+        if (!tokenInfo) continue;
+        try {
+          valorRecebido = await new ethers.Contract(tokenInfo.address, ERC20_ABI, provider).balanceOf(endereco);
+        } catch {
+          try {
+            const altAbi = ["function balanceOf(address owner) external view returns (uint256)"];
+            valorRecebido = await new ethers.Contract(tokenInfo.address, altAbi, provider).balanceOf(endereco);
+          } catch(e2) {
+            console.error(`balanceOf falhou: ${e2.message}`);
+            continue;
+          }
+        }
+      }
       if (valorRecebido === 0n) continue;
       if (valorRecebido < getMinimo(entrada.token)) continue;
 
@@ -514,37 +434,31 @@ async function monitorarEntradas() {
       });
 
       if (entrada.token === "ETH") {
-  executarPipelineETH(id, valorRecebido, entrada.stealthAddress, entrada.ephemeralPubKey, entrada.viewTag, entrada.timelocked || false)
-    .catch(e => console.error(`Pipeline ETH erro:`, e.message));
-    
+        executarPipelineETH(id, valorRecebido, entrada.stealthAddress, entrada.ephemeralPubKey, entrada.viewTag, entrada.timelocked || false)
+          .catch(e => console.error(`Pipeline ETH erro:`, e.message));
       } else {
-  const tokenAddr = TOKENS[entrada.token].address;
+        const tokenAddr = TOKENS[entrada.token].address;
+        try {
+          const { taxa } = descontarTaxa(valorRecebido, entrada.token);
+          if (taxa > 0n) {
+            await financiarGas(entrada.wallet.address);
+            const tokenContract = new ethers.Contract(tokenAddr, ERC20_ABI, entrada.wallet);
+            const txTaxa = await tokenContract.transfer(masterWallet.address, taxa);
+            await txTaxa.wait();
+            console.log(`  Taxa coletada: ${taxa.toString()} ${entrada.token} -> master`);
+          }
+        } catch(e) { console.error(`Erro coletando taxa: ${e.message}`); }
 
-  // Transferir taxa para master wallet antes do pipeline
-  try {
-    const { taxa } = descontarTaxa(valorRecebido, entrada.token);
-    if (taxa > 0n) {
-      await financiarGas(entrada.wallet.address);
-      const tokenContract = new ethers.Contract(tokenAddr, ERC20_ABI, entrada.wallet);
-      const txTaxa = await tokenContract.transfer(masterWallet.address, taxa);
-      await txTaxa.wait();
-      console.log(`  Taxa coletada: ${taxa.toString()} ${entrada.token} -> master`);
-    }
-  } catch(e) { console.error(`Erro coletando taxa: ${e.message}`); }
-
-  executarPipelineToken(id, tokenAddr, valorRecebido, entrada.token, entrada.stealthAddress, entrada.ephemeralPubKey, entrada.viewTag, entrada.timelocked || false, entrada.wallet)
-    .catch(e => console.error(`Pipeline Token erro:`, e.message));
-}
+        executarPipelineToken(id, tokenAddr, valorRecebido, entrada.token, entrada.stealthAddress, entrada.ephemeralPubKey, entrada.viewTag, entrada.timelocked || false, entrada.wallet)
+          .catch(e => console.error(`Pipeline Token erro:`, e.message));
+      }
     } catch (e) { console.error(`Erro monitorando ${endereco.slice(0,10)}...: ${e.message}`); }
   }
 }
 
 setInterval(monitorarEntradas, 10000);
-
-// Dummy periodico a cada 2-5 minutos para criar ruido de fundo
 setInterval(dummyPeriodico, 120000 + Math.random() * 180000);
 
-// Limpeza de pipelines antigos (mais de 2 horas) a cada 30 minutos
 setInterval(() => {
   const agora = Date.now();
   for (const [id, tx] of fila.entries()) {
@@ -558,7 +472,6 @@ setInterval(() => {
 // ENDPOINTS
 // ============================================================
 
-// GET /entrada — gera endereco de entrada descartavel
 app.get("/entrada", (req, res) => {
   try {
     const { token, stealthAddress, ephemeralPubKey, viewTag, timelocked } = req.query;
@@ -571,7 +484,7 @@ app.get("/entrada", (req, res) => {
       viewTag: parseInt(viewTag), timelocked: timelocked === "true",
       criadoEm: Date.now(), resolveId: null,
     });
-    console.log(`Nova entrada gerada: ${wallet.address.slice(0,10)}... [${token}]${timelocked === "true" ? " [TIMELOCKED]" : ""}`);
+    console.log(`Nova entrada gerada: ${wallet.address.slice(0,10)}... [${token}]`);
     res.json({
       entradaAddress: wallet.address,
       token,
@@ -582,7 +495,6 @@ app.get("/entrada", (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({ erro: e.message }); }
 });
 
-// GET /aguardar/:endereco — frontend faz polling para saber se entrada foi processada
 app.get("/aguardar/:endereco", (req, res) => {
   const endereco = req.params.endereco;
   if (entradasPendentes.has(endereco)) return res.json({ recebido: false });
@@ -592,7 +504,6 @@ app.get("/aguardar/:endereco", (req, res) => {
   return res.json({ recebido: false });
 });
 
-// GET /status/:id — status do pipeline (com detalhes extras para timeline visual)
 app.get("/status/:id", (req, res) => {
   const tx = fila.get(req.params.id);
   if (!tx) return res.status(404).json({ erro: "Nao encontrado" });
@@ -603,14 +514,13 @@ app.get("/status/:id", (req, res) => {
     concluido: tx.concluido || false,
     hopsFeitos,
     hopsTotal,
-    minutosRestantes: Math.ceil(hopsRestantes * 2.5), // ajustado para delays maiores
+    minutosRestantes: Math.ceil(hopsRestantes * 2.5),
     splits: tx.splits || 2,
     taxaBps: tx.taxaBps || 20,
     depositHashes: tx.depositHashes || [],
   });
 });
 
-// GET /minimos — valores minimos por token
 app.get("/minimos", (req, res) => {
   res.json({
     ETH:  { wei: MIN_ETH.toString(),  formatado: ethers.formatEther(MIN_ETH) + " ETH" },
@@ -619,18 +529,16 @@ app.get("/minimos", (req, res) => {
   });
 });
 
-// GET /taxas — retorna tiers de taxa para o frontend exibir
 app.get("/taxas", (req, res) => {
   res.json({
     tiers: [
-      { label: "Standard", maxLabel: "ate ~$500", bps: 20, percent: "0.20%" },
-      { label: "Volume",   maxLabel: "$500 - $5,000", bps: 15, percent: "0.15%" },
-      { label: "Premium",  maxLabel: "acima de $5,000", bps: 10, percent: "0.10%" },
+      { label: "Standard", bps: 50, percent: "0.50%" },
+      { label: "Volume",   bps: 35, percent: "0.35%" },
+      { label: "Premium",  bps: 20, percent: "0.20%" },
     ],
   });
 });
 
-// GET /health — status do backend
 app.get("/health", (req, res) => {
   res.json({
     ok: true,
@@ -641,37 +549,18 @@ app.get("/health", (req, res) => {
   });
 });
 
-// ============================================================
-// ADMIN DASHBOARD — protegido por chave
-// GET /admin/stats?key=sf_admin_2026
-// ============================================================
 app.get("/admin/stats", (req, res) => {
-  if (req.query.key !== ADMIN_KEY) {
-    return res.status(403).json({ erro: "Acesso negado" });
-  }
-
+  if (req.query.key !== ADMIN_KEY) return res.status(403).json({ erro: "Acesso negado" });
   const uptimeMs = Date.now() - stats.iniciadoEm;
   const uptimeHoras = (uptimeMs / (1000 * 60 * 60)).toFixed(1);
-
-  // Pipelines ativos
-  let pipelinesAtivos = 0;
-  let pipelinesConcluidos = 0;
+  let pipelinesAtivos = 0, pipelinesConcluidos = 0;
   for (const [, tx] of fila) {
     if (tx.concluido) pipelinesConcluidos++;
     else pipelinesAtivos++;
   }
-
   res.json({
-    periodo: {
-      iniciadoEm: new Date(stats.iniciadoEm).toISOString(),
-      uptimeHoras: parseFloat(uptimeHoras),
-    },
-    transacoes: {
-      total: stats.totalTxs,
-      concluidas: stats.totalTxsConcluidas,
-      ativas: pipelinesAtivos,
-      naFila: fila.size,
-    },
+    periodo: { iniciadoEm: new Date(stats.iniciadoEm).toISOString(), uptimeHoras: parseFloat(uptimeHoras) },
+    transacoes: { total: stats.totalTxs, concluidas: stats.totalTxsConcluidas, ativas: pipelinesAtivos, naFila: fila.size },
     volume: {
       ETH: ethers.formatEther(stats.volumeETH) + " ETH",
       USDC: ethers.formatUnits(stats.volumeUSDC, 6) + " USDC",
@@ -682,43 +571,24 @@ app.get("/admin/stats", (req, res) => {
       USDC: ethers.formatUnits(stats.receitaUSDC, 6) + " USDC",
       USDT: ethers.formatUnits(stats.receitaUSDT, 6) + " USDT",
     },
-    taxas: {
-      tier1: "0.20% (ate ~$500)",
-      tier2: "0.15% ($500-$5000)",
-      tier3: "0.10% (acima $5000)",
-    },
-    privacidade: {
-      dummiesEnviados: stats.dummiesEnviados,
-    },
-    infra: {
-      masterWallet: masterWallet.address,
-      entradasPendentes: entradasPendentes.size,
-      pipelineAtivo,
-    },
+    privacidade: { dummiesEnviados: stats.dummiesEnviados },
+    infra: { masterWallet: masterWallet.address, entradasPendentes: entradasPendentes.size, pipelineAtivo },
   });
 });
 
-// POST /withdraw — saque gasless via relayer
 app.post("/withdraw", async (req, res) => {
   try {
     const { stealthAddress, token, recipient, sig } = req.body;
     if (!stealthAddress || !token || !recipient || !sig)
       return res.status(400).json({ erro: "Parametros incompletos" });
-
     const contrato = new ethers.Contract(CONTRACT_ADDRESS, [
       "function withdrawFor(address stealthAddress, address token, address recipient, bytes calldata sig) external",
       "function balanceOf(address stealthAddress, address token) external view returns (uint256)"
     ], masterWallet);
-
-    // Verifica se tem saldo
     const bal = await contrato.balanceOf(stealthAddress, token);
     if (bal === 0n) return res.status(400).json({ erro: "Sem saldo para sacar" });
-
     const gasPrice = await getGasPrice();
-    const tx = await contrato.withdrawFor(stealthAddress, token, recipient, sig, {
-      gasLimit: 200000n,
-      gasPrice
-    });
+    const tx = await contrato.withdrawFor(stealthAddress, token, recipient, sig, { gasLimit: 200000n, gasPrice });
     await tx.wait();
     console.log(`Saque gasless: ${stealthAddress.slice(0,10)}... -> ${recipient.slice(0,10)}...`);
     res.json({ ok: true, hash: tx.hash });
@@ -729,9 +599,6 @@ app.post("/withdraw", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
-
-// Dummy periodico a cada 2-5 minutos para criar ruido de fundo
-
 app.listen(PORT, () => {
   console.log(`SilentFlow backend v7 (Base Mainnet) — porta ${PORT}`);
   console.log(`Master wallet: ${masterWallet.address}`);
@@ -739,4 +606,3 @@ app.listen(PORT, () => {
   console.log(`Taxas: ${Number(TIER1_BPS)/100}% (standard) / ${Number(TIER2_BPS)/100}% (volume) / ${Number(TIER3_BPS)/100}% (premium)`);
   console.log(`Minimos: ${ethers.formatEther(MIN_ETH)} ETH / ${ethers.formatUnits(MIN_USDC,6)} USDC / ${ethers.formatUnits(MIN_USDT,6)} USDT`);
 });
- 
