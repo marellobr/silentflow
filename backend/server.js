@@ -499,12 +499,10 @@ async function monitorarEntradas() {
         if (!tokenInfo) continue;
         console.log(`  Checando saldo ${entrada.token} em ${endereco.slice(0,10)}... [${entrada.rede || "base"}]`);
         try {
-          const raw = await redeProvider.call({
-            to: tokenInfo.address,
-            data: "0x70a08231000000000000000000000000" + endereco.slice(2).padStart(64, "0")
-          });
-          if (!raw || raw === "0x" || raw === "0x0000000000000000000000000000000000000000000000000000000000000000") continue;
-          valorRecebido = BigInt(raw);
+          const tokenContract = new ethers.Contract(tokenInfo.address, ERC20_ABI, redeProvider);
+          const saldo = await tokenContract.balanceOf(endereco);
+          if (saldo === 0n) continue;
+          valorRecebido = saldo;
         } catch (e2) {
           console.error(`balanceOf falhou: ${e2.message}`);
           continue;
