@@ -10,17 +10,19 @@ app.use(express.json());
 // ============================================================
 // REDES
 // ============================================================
+const REDE_ATUAL = process.env.REDE || "base";
+
 const REDES = {
   base: {
-    provider: new ethers.JsonRpcProvider(process.env.ALCHEMY_URL_BASE),
-    contractAddress: process.env.CONTRACT_ADDRESS_BASE || "0x99f4a6Deb7643a1DDa10115BFE3c7a4D9C4Ef09B",
+    provider: new ethers.JsonRpcProvider(process.env.ALCHEMY_URL),
+    contractAddress: "0x99f4a6Deb7643a1DDa10115BFE3c7a4D9C4Ef09B",
     tokens: {
       USDC: { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 },
       USDT: { address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6 },
     },
   },
   polygon: {
-    provider: new ethers.JsonRpcProvider(process.env.ALCHEMY_URL_POLYGON),
+    provider: new ethers.JsonRpcProvider(process.env.ALCHEMY_URL),
     contractAddress: "0x074c000416A4725EDA5F53EE7b690f82f250847B",
     tokens: {
       USDC: { address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", decimals: 6 },
@@ -28,7 +30,7 @@ const REDES = {
     },
   },
   bsc: {
-    provider: new ethers.JsonRpcProvider("https://bsc-dataseed.binance.org/"),
+    provider: new ethers.JsonRpcProvider(process.env.ALCHEMY_URL),
     contractAddress: "0x3d2E4d11Be4B2c1747eb0ABDC7f3118CA33d59c6",
     tokens: {
       USDC: { address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", decimals: 18 },
@@ -51,9 +53,9 @@ const ERC20_ABI = [
 ];
 
 // Atalhos para compatibilidade (usa base como padrão)
-const provider = REDES.base.provider;
-const CONTRACT_ADDRESS = REDES.base.contractAddress;
-const TOKENS = REDES.base.tokens;
+const provider = REDES[REDE_ATUAL].provider;
+const CONTRACT_ADDRESS = REDES[REDE_ATUAL].contractAddress;
+const TOKENS = REDES[REDE_ATUAL].tokens;
 
 function getRedeConfig(rede) {
   return REDES[rede] || REDES.base;
@@ -102,7 +104,7 @@ function getMinimo(token) {
 
 const masterWallet = new ethers.Wallet(process.env.CARTEIRA_PRIVADA, provider);
 const masterWallets = {
-  base:    masterWallet,
+  base:    new ethers.Wallet(process.env.CARTEIRA_PRIVADA, REDES.base.provider),
   polygon: new ethers.Wallet(process.env.CARTEIRA_PRIVADA, REDES.polygon.provider),
   bsc:     new ethers.Wallet(process.env.CARTEIRA_PRIVADA, REDES.bsc.provider),
 };
