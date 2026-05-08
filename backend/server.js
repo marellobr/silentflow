@@ -438,6 +438,7 @@ async function executarPipelineToken(txId, tokenAddress, valorBruto, tokenSymbol
   const depositHashes = [];
   for (let i = 0; i < partes.length; i++) {
     const valorParte = partes[i];
+    console.log(`  Iniciando split token ${i+1}/${partes.length} - valor: ${valorParte.toString()} [${rede}]`);
     const delayProfile = gerarDelayProfile();
     try {
       const cadeia = Array.from({ length: numHopsPerSplit }, () => ethers.Wallet.createRandom().connect(redeProvider));
