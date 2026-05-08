@@ -715,6 +715,8 @@ const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`SilentFlow backend v7 (Base + Polygon + BSC) — porta ${PORT}`);
   console.log(`Master wallet: ${masterWallet.address}`);
+  console.log(`REDE: ${process.env.REDE || "NAO DEFINIDA"}`);
+  console.log(`ALCHEMY_URL: ${process.env.ALCHEMY_URL ? process.env.ALCHEMY_URL.slice(0,50) + "..." : "NAO DEFINIDA"}`);
   console.log(`Contratos: Base ${REDES.base.contractAddress.slice(0,10)}... | Polygon ${REDES.polygon.contractAddress.slice(0,10)}... | BSC ${REDES.bsc.contractAddress.slice(0,10)}...`);
   console.log(`Taxas: ${Number(TIER1_BPS)/100}% (standard) / ${Number(TIER2_BPS)/100}% (volume) / ${Number(TIER3_BPS)/100}% (premium)`);
   console.log(`Minimos: ${ethers.formatEther(MIN_ETH)} ETH / ${ethers.formatUnits(MIN_USDC,6)} USDC / ${ethers.formatUnits(MIN_USDT,6)} USDT`);
