@@ -478,14 +478,14 @@ export default function App() {
   }, []);
 
   // Auto-scan on load if keys exist
-  useEffect(() => {
-    if (sk && vk && !autoScanned) {
-      setAutoScanned(true);
+ // useEffect(() => {
+   // if (sk && vk && !autoScanned) {
+     // setAutoScanned(true);
       // setTimeout(() => {
        // autoScan(sk, vk);
       // }, 3000); // wait 3s after load
-    }
-  }, [sk, vk]); // eslint-disable-line react-hooks/exhaustive-deps
+ //    }
+  // }, [sk, vk]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     function detectPayLink() {
