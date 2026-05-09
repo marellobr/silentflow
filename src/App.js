@@ -676,7 +676,7 @@ export default function App() {
     } catch(e) { 
       const msg = e.message||"Erro.";
       if (msg.includes("allowance") || msg.includes("BAD_DATA")) {
-        showAlert(lang==="pt"?"Erro ao verificar token. Tente novamente.":"Token error. Please try again.","err");
+  // ignora erro de allowance, transacao continua
       } else {
         showAlert(msg,"err");
       }
