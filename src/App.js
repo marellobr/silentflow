@@ -711,7 +711,7 @@ export default function App() {
                 // const bal = await c2.balanceOf(res.stealthAddress, tAddr);
                 // if (bal === 0n) continue;
               } catch {}
-              found.push({ stealthAddress:res.stealthAddress, stealthPrivKey:res.stealthPrivKey, token:sym, tokenAddr:tAddr, amount:ethers.formatUnits(amt,dec), timelocked:tl, unlockAt:Number(ua), txHash:ev.transactionHash });
+              found.push({ stealthAddress:res.stealthAddress, stealthPrivKey:res.stealthPrivKey, token:sym, tokenAddr:tAddr, amount:ethers.formatUnits(amt,dec), timelocked:tl, unlockAt:Number(ua), txHash:ev.transactionHash, network: networkKey });
             }
           }
         } catch {}
@@ -769,12 +769,13 @@ export default function App() {
     setWithdrawingId(item.stealthAddress);
     try {
       const sw = new ethers.Wallet(item.stealthPrivKey);
-      const provider = new ethers.JsonRpcProvider(network.rpc);
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
+      const itemNetwork = NETWORKS[item.network || networkKey];
+      const provider = new ethers.JsonRpcProvider(itemNetwork.rpc);
+      const contract = new ethers.Contract(itemNetwork.contractAddress, ABI, provider);
       const nonce = await contract.withdrawNonces(item.stealthAddress);
-      const packed = ethers.keccak256(ethers.solidityPacked(["address","address","address","uint256","uint256"],[item.stealthAddress,item.tokenAddr,account,nonce,BigInt(network.chainId)]));
+      const packed = ethers.keccak256(ethers.solidityPacked(["address","address","address","uint256","uint256"],[item.stealthAddress,item.tokenAddr,account,nonce,BigInt(itemNetwork.chainId)]));
       const sig = await sw.signMessage(ethers.getBytes(packed));
-      const res = await fetch(network.backendUrl + "/withdraw",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({stealthAddress:item.stealthAddress,token:item.tokenAddr,recipient:account,sig})});
+      const res = await fetch(itemNetwork.backendUrl + "/withdraw",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({stealthAddress:item.stealthAddress,token:item.tokenAddr,recipient:account,sig,rede:item.network||networkKey})});
       const d = await res.json();
       if (d.ok) {
         showAlert(t.withdrawDone,"ok");
