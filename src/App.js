@@ -733,8 +733,8 @@ export default function App() {
       const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
       const filter = contract.filters.StealthDeposit();
       const current = await provider.getBlockNumber();
-      const CHUNK = 9000; const TOTAL = 400000;
-      const from = Math.max(0, current-TOTAL);
+      const CHUNK = 9000;
+      const from = Math.max(0, current - 500000);
       const found = [];
       for (let s2=from; s2<current; s2+=CHUNK) {
         const end = Math.min(s2+CHUNK-1,current);
@@ -752,16 +752,16 @@ export default function App() {
               const sym = Object.keys(TOKENS).find(k=>TOKENS[k].address.toLowerCase()===tAddr.toLowerCase())||"?";
               const dec = TOKENS[sym] ? TOKENS[sym].decimals : 18;
               found.push({ stealthAddress:res.stealthAddress, stealthPrivKey:res.stealthPrivKey, token:sym, tokenAddr:tAddr, amount:ethers.formatUnits(amt,dec), timelocked:tl, unlockAt:Number(ua), txHash:ev.transactionHash, network: networkKey });
-              setScanResults([...found]); // mostra progressivamente
+              setScanResults([...found]);
             }
           }
-        } catch {}
+        } catch(chunkErr) {
+          console.log("chunk falhou:", s2, chunkErr.message);
+        }
       }
       if (!found.length) showAlert(t.noFound,"info");
     } catch(e) { 
-      if (!e.message?.includes("allowance") && !e.message?.includes("BAD_DATA")) {
-        showAlert(e.message,"err");
-      }
+      showAlert(e.message,"err");
     }
     setScanning(false);
   }
