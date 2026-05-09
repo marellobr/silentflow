@@ -33,7 +33,7 @@ const NETWORKS = {
     contractAddress: "0x074c000416A4725EDA5F53EE7b690f82f250847B",
     backendUrl: "https://silentflow-production-4600.up.railway.app",
     explorer: "https://polygonscan.com",
-    rpc: "https://polygon-rpc.com",
+    rpc: "https://polygon-mainnet.g.alchemy.com/v2/LWFVsCaG86i-o_95KmNcQ",
     tokens: {
       USDC: { address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6 },
       USDT: { address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", decimals: 6 }
