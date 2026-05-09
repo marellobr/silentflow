@@ -708,7 +708,7 @@ export default function App() {
               try {
                 const balAbi = ["function balanceOf(address,address) external view returns (uint256)"];
                 const c2 = new ethers.Contract(CONTRACT_ADDRESS, balAbi, provider);
-                const bal = await c2.balanceOf(res.stealthAddress, tAddr);
+                // const bal = await c2.balanceOf(res.stealthAddress, tAddr);
                 // if (bal === 0n) continue;
               } catch {}
               found.push({ stealthAddress:res.stealthAddress, stealthPrivKey:res.stealthPrivKey, token:sym, tokenAddr:tAddr, amount:ethers.formatUnits(amt,dec), timelocked:tl, unlockAt:Number(ua), txHash:ev.transactionHash });
@@ -752,7 +752,7 @@ export default function App() {
               try {
                 const balAbi = ["function balanceOf(address,address) external view returns (uint256)"];
                 const c2 = new ethers.Contract(CONTRACT_ADDRESS, balAbi, provider);
-                const bal = await c2.balanceOf(res.stealthAddress, tAddr);
+                // const bal = await c2.balanceOf(res.stealthAddress, tAddr);
                 // if (bal === 0n) continue;
               } catch(balErr) { continue; }
               found.push({ stealthAddress:res.stealthAddress, stealthPrivKey:res.stealthPrivKey, token:sym, tokenAddr:tAddr, amount:ethers.formatUnits(amt,dec), timelocked:tl, unlockAt:Number(ua), txHash:ev.transactionHash });
@@ -1388,3 +1388,4 @@ TX: ${comprovante.hash}`;
     </>
   );
 }
+ 
