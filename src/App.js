@@ -658,7 +658,9 @@ export default function App() {
         try { const a = await tc.approve(ed.entradaAddress, valBig); await a.wait(); } catch {}
         const erc = new ethers.Contract(TOKENS[token].address, ERC20_ABI, signer);
         const tx = await erc.transfer(ed.entradaAddress, valBig);
-        await tx.wait(); txHash = tx.hash;
+        await tx.wait(); 
+        txHash = tx.hash;
+        console.log("txHash:", txHash);
       }
       saveHistory({ hash:txHash, token, amount:val, to:recip, ts:Date.now(), status:"pending", brlRate:brlRate||null, network:network.name });
       setComprovante({ hash:txHash, token, amount:val, to:recip, ts:Date.now(), network:network.name, explorer:network.explorer });
