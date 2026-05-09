@@ -690,7 +690,7 @@ export default function App() {
       const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
       const filter = contract.filters.StealthDeposit();
       const current = await provider.getBlockNumber();
-      const CHUNK = 9000; const TOTAL = 36000;
+      const CHUNK = 9000; const TOTAL = 400000;
       const from = Math.max(0, current-TOTAL);
       const found = [];
       for (let s2=from; s2<current; s2+=CHUNK) {
@@ -731,7 +731,7 @@ export default function App() {
       const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
       const filter = contract.filters.StealthDeposit();
       const current = await provider.getBlockNumber();
-      const CHUNK = 9000; const TOTAL = 36000;
+      const CHUNK = 9000; const TOTAL = 400000;
       const from = Math.max(0, current-TOTAL);
       const found = [];
       for (let s2=from; s2<current; s2+=CHUNK) {
