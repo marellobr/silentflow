@@ -611,7 +611,10 @@ app.get("/entrada", (req, res) => {
     });
 
     console.log(`Nova entrada gerada: ${wallet.address.slice(0,10)}... [${token}] [${rede}]${timelocked === "true" ? " [TIMELOCKED]" : ""}`);
-    res.json({
+console.log(`  stealthAddress: ${stealthAddress.slice(0,10)}...`);
+console.log(`  ephemeralPubKey: ${ephemeralPubKey.slice(0,10)}...`);
+console.log(`  viewTag: ${viewTag}`);
+res.json({
       entradaAddress: wallet.address,
       token,
       rede,
