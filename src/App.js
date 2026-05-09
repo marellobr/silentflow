@@ -707,7 +707,7 @@ export default function App() {
               const dec = TOKENS[sym] ? TOKENS[sym].decimals : 18;
               try {
                 const balAbi = ["function balanceOf(address,address) external view returns (uint256)"];
-                const c2 = new ethers.Contract(CONTRACT_ADDRESS, balAbi, provider);
+                // const c2 = new ethers.Contract(CONTRACT_ADDRESS, balAbi, provider);
                 // const bal = await c2.balanceOf(res.stealthAddress, tAddr);
                 // if (bal === 0n) continue;
               } catch {}
@@ -751,7 +751,7 @@ export default function App() {
               const dec = TOKENS[sym] ? TOKENS[sym].decimals : 18;
               try {
                 const balAbi = ["function balanceOf(address,address) external view returns (uint256)"];
-                const c2 = new ethers.Contract(CONTRACT_ADDRESS, balAbi, provider);
+                // const c2 = new ethers.Contract(CONTRACT_ADDRESS, balAbi, provider);
                 // const bal = await c2.balanceOf(res.stealthAddress, tAddr);
                 // if (bal === 0n) continue;
               } catch(balErr) { continue; }
