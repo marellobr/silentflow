@@ -481,9 +481,9 @@ export default function App() {
   useEffect(() => {
     if (sk && vk && !autoScanned) {
       setAutoScanned(true);
-      setTimeout(() => {
-        autoScan(sk, vk);
-      }, 3000); // wait 3s after load
+      // setTimeout(() => {
+       // autoScan(sk, vk);
+      // }, 3000); // wait 3s after load
     }
   }, [sk, vk]); // eslint-disable-line react-hooks/exhaustive-deps
 
