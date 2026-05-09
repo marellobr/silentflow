@@ -699,7 +699,8 @@ export default function App() {
           const evs = await contract.queryFilter(filter,s2,end);
           for (const ev of evs) {
             const args = ev.args;
-            const res = tryDecrypt(args[0],args[1],Number(args[4]),skKey,vkKey);
+            const ephPubHex = args[0].startsWith("0x") ? args[0] : "0x" + args[0];
+            const res = tryDecrypt(ephPubHex, args[1], Number(args[4]), skKey, vkKey);
             if (res) {
               const tAddr = args[2]; const amt = args[3]; const tl = args[5]; const ua = args[6];
               const sym = Object.keys(TOKENS).find(k=>TOKENS[k].address.toLowerCase()===tAddr.toLowerCase())||"?";
@@ -739,7 +740,8 @@ export default function App() {
           const evs = await contract.queryFilter(filter,s2,end);
           for (const ev of evs) {
             const args = ev.args;
-            const res = tryDecrypt(args[0],args[1],Number(args[4]),sk,vk);
+            const ephPubHex = args[0].startsWith("0x") ? args[0] : "0x" + args[0];
+            const res = tryDecrypt(ephPubHex, args[1], Number(args[4]), sk, vk);
             if (res) {
               const tAddr = args[2];
               const amt = args[3];
@@ -747,13 +749,12 @@ export default function App() {
               const ua = args[6];
               const sym = Object.keys(TOKENS).find(k=>TOKENS[k].address.toLowerCase()===tAddr.toLowerCase())||"?";
               const dec = TOKENS[sym] ? TOKENS[sym].decimals : 18;
-              // Verify balance still available
               try {
                 const balAbi = ["function balanceOf(address,address) external view returns (uint256)"];
                 const c2 = new ethers.Contract(CONTRACT_ADDRESS, balAbi, provider);
                 const bal = await c2.balanceOf(res.stealthAddress, tAddr);
-                if (bal === 0n) continue; // already withdrawn
-              } catch(balErr) { continue; } // skip if balance check fails
+                if (bal === 0n) continue;
+              } catch(balErr) { continue; }
               found.push({ stealthAddress:res.stealthAddress, stealthPrivKey:res.stealthPrivKey, token:sym, tokenAddr:tAddr, amount:ethers.formatUnits(amt,dec), timelocked:tl, unlockAt:Number(ua), txHash:ev.transactionHash });
             }
           }
