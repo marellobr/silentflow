@@ -451,7 +451,7 @@ export default function App() {
   const [copied, setCopied]         = useState("");
   const [scanResults, setScanResults] = useState([]);
   const [scanning, setScanning]     = useState(false);
-  const [autoScanned, setAutoScanned] = useState(false);
+  // const [autoScanned, setAutoScanned] = useState(false);
   const [newFunds, setNewFunds]       = useState(0);
   const [withdrawingId, setWithdrawingId] = useState(null);
   const [comprovante, setComprovante]   = useState(null);
@@ -683,6 +683,7 @@ export default function App() {
     setLoading(false);
   }
 
+  /*
   async function autoScan(skKey, vkKey) {
     if (!skKey || !vkKey) return;
     try {
@@ -722,6 +723,7 @@ export default function App() {
       }
     } catch {}
   }
+*/
 
   async function scan() {
     if (!sk||!vk) return showAlert(t.noKeysForScan,"warn");
