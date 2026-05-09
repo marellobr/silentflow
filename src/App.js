@@ -61,6 +61,7 @@ const NETWORKS = {
 const ABI = [
   "function withdrawFor(address stealthAddress, address token, address recipient, bytes calldata sig) external",
   "function withdrawNonces(address) external view returns (uint256)",
+  "function balanceOf(address stealthAddress, address token) external view returns (uint256)",
   "event StealthDeposit(bytes ephemeralPubKey, address indexed stealthAddress, address token, uint256 amount, uint8 viewTag, bool timelocked, uint256 unlockAt)"
 ];
 
@@ -752,6 +753,10 @@ export default function App() {
               const ua = args[6];
               const sym = Object.keys(TOKENS).find(k=>TOKENS[k].address.toLowerCase()===tAddr.toLowerCase())||"?";
               const dec = TOKENS[sym] ? TOKENS[sym].decimals : 18;
+              try {
+  const bal = await contract.balanceOf(res.stealthAddress, tAddr);
+  if (bal === 0n) continue;
+} catch {}
               found.push({ stealthAddress:res.stealthAddress, stealthPrivKey:res.stealthPrivKey, token:sym, tokenAddr:tAddr, amount:ethers.formatUnits(amt,dec), timelocked:tl, unlockAt:Number(ua), txHash:ev.transactionHash, network: networkKey });
               setScanResults([...found]);
             }
