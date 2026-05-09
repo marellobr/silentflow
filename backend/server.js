@@ -274,9 +274,23 @@ async function depositarETHNoContrato(wallet, valorFixo, stealthAddress, ephemer
 
 async function hopToken(deWallet, paraEndereco, tokenAddress, valor, rede = "base") {
   await financiarGas(deWallet.address, rede);
+  const redeProvider = getRedeConfig(rede).provider;
+  const feeData = await redeProvider.getFeeData();
   const token = new ethers.Contract(tokenAddress, ERC20_ABI, deWallet);
   try {
-    const tx = await token.transfer(paraEndereco, valor);
+    const nonce = await redeProvider.getTransactionCount(deWallet.address, "latest");
+    const network = await redeProvider.getNetwork();
+    const txRequest = await token.transfer.populateTransaction(paraEndereco, valor);
+    const signedTx = await deWallet.signTransaction({
+      ...txRequest,
+      gasLimit: 100000n,
+      maxFeePerGas: feeData.maxFeePerGas,
+      maxPriorityFeePerGas: feeData.maxPriorityFeePerGas,
+      nonce,
+      chainId: network.chainId,
+      type: 2,
+    });
+    const tx = await redeProvider.broadcastTransaction(signedTx);
     await tx.wait();
     return true;
   } catch (e) { console.error(`  hopToken falhou: ${e.message}`); return false; }
@@ -284,19 +298,43 @@ async function hopToken(deWallet, paraEndereco, tokenAddress, valor, rede = "bas
 
 async function depositarTokenNoContrato(wallet, tokenAddress, valor, stealthAddress, ephemeralPubKey, viewTag, timelocked, rede = "base") {
   const redeCfg = getRedeConfig(rede);
+  const redeProvider = redeCfg.provider;
   await financiarGas(wallet.address, rede);
+  const feeData = await redeProvider.getFeeData();
   const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, wallet);
   const contratoContract = new ethers.Contract(redeCfg.contractAddress, CONTRACT_ABI, wallet);
   try {
-    const approveTx = await tokenContract.approve(redeCfg.contractAddress, valor);
+    // Approve
+    const approveNonce = await redeProvider.getTransactionCount(wallet.address, "latest");
+    const network = await redeProvider.getNetwork();
+    const approveTxReq = await tokenContract.approve.populateTransaction(redeCfg.contractAddress, valor);
+    const signedApprove = await wallet.signTransaction({
+      ...approveTxReq,
+      gasLimit: 100000n,
+      maxFeePerGas: feeData.maxFeePerGas,
+      maxPriorityFeePerGas: feeData.maxPriorityFeePerGas,
+      nonce: approveNonce,
+      chainId: network.chainId,
+      type: 2,
+    });
+    const approveTx = await redeProvider.broadcastTransaction(signedApprove);
     await approveTx.wait();
-    const gasPrice = await getGasPrice(rede);
-    let tx;
-    if (timelocked) {
-      tx = await contratoContract.depositTokenTimelocked(tokenAddress, valor, stealthAddress, ephemeralPubKey, viewTag, { gasLimit: 180000n, gasPrice });
-    } else {
-      tx = await contratoContract.depositToken(tokenAddress, valor, stealthAddress, ephemeralPubKey, viewTag, { gasLimit: 180000n, gasPrice });
-    }
+
+    // Deposit
+    const depositNonce = approveNonce + 1;
+    const depositTxReq = timelocked
+      ? await contratoContract.depositTokenTimelocked.populateTransaction(tokenAddress, valor, stealthAddress, ephemeralPubKey, viewTag)
+      : await contratoContract.depositToken.populateTransaction(tokenAddress, valor, stealthAddress, ephemeralPubKey, viewTag);
+    const signedDeposit = await wallet.signTransaction({
+      ...depositTxReq,
+      gasLimit: 200000n,
+      maxFeePerGas: feeData.maxFeePerGas,
+      maxPriorityFeePerGas: feeData.maxPriorityFeePerGas,
+      nonce: depositNonce,
+      chainId: network.chainId,
+      type: 2,
+    });
+    const tx = await redeProvider.broadcastTransaction(signedDeposit);
     await tx.wait();
     return tx.hash;
   } catch (e) { console.error(`  depositToken falhou: ${e.message}`); return null; }
