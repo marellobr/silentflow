@@ -766,19 +766,19 @@ export default function App() {
     setScanning(false);
   }
 
-  async function doWithdraw(item) {
+ async function doWithdraw(item) {
     if (!account) return connect();
     setWithdrawingId(item.stealthAddress);
     try {
       const sw = new ethers.Wallet(item.stealthPrivKey);
-      const itemNetwork = NETWORKS[item.network || networkKey];
+      const itemNetwork = NETWORKS[networkKey];
       console.log("item.network:", item.network, "networkKey:", networkKey, "itemNetwork:", itemNetwork?.name);
       const provider = new ethers.JsonRpcProvider(itemNetwork.rpc);
       const contract = new ethers.Contract(itemNetwork.contractAddress, ABI, provider);
       const nonce = await contract.withdrawNonces(item.stealthAddress);
       const packed = ethers.keccak256(ethers.solidityPacked(["address","address","address","uint256","uint256"],[item.stealthAddress,item.tokenAddr,account,nonce,BigInt(itemNetwork.chainId)]));
       const sig = await sw.signMessage(ethers.getBytes(packed));
-      const res = await fetch(itemNetwork.backendUrl + "/withdraw",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({stealthAddress:item.stealthAddress,token:item.tokenAddr,recipient:account,sig,rede:item.network||networkKey})});
+      const res = await fetch(itemNetwork.backendUrl + "/withdraw",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({stealthAddress:item.stealthAddress,token:item.tokenAddr,recipient:account,sig,rede:networkKey})});
       const d = await res.json();
       if (d.ok) {
         showAlert(t.withdrawDone,"ok");
