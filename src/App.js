@@ -665,9 +665,10 @@ export default function App() {
           txHash = tx.hash;
           try { await tx.wait(); } catch {}
         } catch(e) {
-          // Tenta pegar o hash mesmo com erro
+          console.log("Transfer erro completo:", JSON.stringify(e, null, 2));
           if (e.transaction?.hash) txHash = e.transaction.hash;
           else if (e.receipt?.hash) txHash = e.receipt.hash;
+          else if (e.hash) txHash = e.hash;
           console.log("Transfer erro mas hash:", txHash);
         }
         console.log("txHash:", txHash);
