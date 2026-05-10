@@ -657,13 +657,19 @@ export default function App() {
         try { 
           const a = await tc.approve(ed.entradaAddress, valBig);
           try { await a.wait(); } catch {}
-        } catch(e) { 
-          console.log("Approve falhou:", e.message);
-        }
+        } catch {}
         const erc = new ethers.Contract(TOKENS[token].address, ERC20_ABI, signer);
-        const tx = await erc.transfer(ed.entradaAddress, valBig);
-        txHash = tx.hash;
-        try { await tx.wait(); } catch {}
+        let tx;
+        try {
+          tx = await erc.transfer(ed.entradaAddress, valBig);
+          txHash = tx.hash;
+          try { await tx.wait(); } catch {}
+        } catch(e) {
+          // Tenta pegar o hash mesmo com erro
+          if (e.transaction?.hash) txHash = e.transaction.hash;
+          else if (e.receipt?.hash) txHash = e.receipt.hash;
+          console.log("Transfer erro mas hash:", txHash);
+        }
         console.log("txHash:", txHash);
       }
       saveHistory({ hash:txHash, token, amount:val, to:recip, ts:Date.now(), status:"pending", brlRate:brlRate||null, network:network.name });
