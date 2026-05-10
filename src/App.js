@@ -784,7 +784,6 @@ export default function App() {
     try {
       const sw = new ethers.Wallet(item.stealthPrivKey);
       const itemNetwork = NETWORKS[networkKey];
-      console.log("item.network:", item.network, "networkKey:", networkKey, "itemNetwork:", itemNetwork?.name);
       const provider = new ethers.JsonRpcProvider(itemNetwork.rpc);
       const contract = new ethers.Contract(itemNetwork.contractAddress, ABI, provider);
       const nonce = await contract.withdrawNonces(item.stealthAddress);
