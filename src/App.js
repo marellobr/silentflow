@@ -1145,7 +1145,7 @@ export default function App() {
                           {h.network && <span className="hist-net">{h.network}</span>}
                         </div>
                         <div className="hist-dest">{h.to ? h.to.slice(0,28) : ""}...</div>
-                        <a className="hist-link" href={netExplorer + "/tx/" + h.hash} target="_blank" rel="noreferrer">{t.basescan} ↗</a>
+                        <a className="hist-link" href={netExplorer + "/tx/" + h.hash} target="_blank" rel="noreferrer">{lang==="pt"?"Ver no explorer":"View on explorer"} ↗</a>
                       </div>
                       <span className={"hist-badge " + (isDone?"badge-ok":"badge-pend")}>
                         {isDone ? (lang==="pt"?"Concluído":"Done") : (lang==="pt"?"Processando":"Processing")}
