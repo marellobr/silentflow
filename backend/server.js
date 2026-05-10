@@ -25,7 +25,7 @@ const REDES = {
     provider: new ethers.JsonRpcProvider(process.env.ALCHEMY_URL),
     contractAddress: "0x074c000416A4725EDA5F53EE7b690f82f250847B",
     tokens: {
-      USDC: { address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", decimals: 6 },
+      USDC: { address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6 },
       USDT: { address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", decimals: 6 },
     },
   },
