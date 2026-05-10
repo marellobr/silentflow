@@ -681,7 +681,6 @@ export default function App() {
       } catch {}
     } catch(e) { 
       const msg = e.message||"Erro.";
-      console.log("ERRO SEND:", msg);
       if (msg.includes("allowance") || msg.includes("BAD_DATA")) {
         // ignora
       } else {
@@ -1249,6 +1248,27 @@ export default function App() {
                   <div className="alert alert-warn">{t.noKeysForScan}</div>
                 ) : (
                   <>
+                    {/* SELETOR DE REDE */}
+                    <div style={{display:"flex",gap:6,marginBottom:16,background:"var(--surface2)",padding:4,borderRadius:12,border:"1px solid var(--border)"}}>
+                      {[
+                        {key:"base", label:"Base", color:"#22c5f0"},
+                        {key:"polygon", label:"Polygon", color:"#8247e5"},
+                        {key:"bnb", label:"BNB", color:"#F0B90B"},
+                      ].map(({key, label, color})=>(
+                        <button key={key}
+                          onClick={()=>{ setNetworkKey(key); setScanResults([]); }}
+                          style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,
+                            padding:"8px 10px",borderRadius:9,border:"none",cursor:"pointer",
+                            transition:"all 0.2s",fontWeight:600,fontSize:12,fontFamily:"var(--sans)",
+                            background: networkKey===key ? color : "transparent",
+                            color: networkKey===key ? (key==="base"?"#08090d":"#fff") : "var(--text2)",
+                            boxShadow: networkKey===key ? ("0 0 12px " + color + "55") : "none"
+                          }}>
+                          {label}
+                          {networkKey===key && <span style={{fontSize:9,opacity:0.7}}>✓</span>}
+                        </button>
+                      ))}
+                    </div>
                     <div className="scan-hero">
                       <div className="scan-icon">⬡</div>
                       <div className="scan-title">{t.scanTitle}</div>
@@ -1264,6 +1284,7 @@ export default function App() {
                         {scanResults.map((r,i)=>{
                           const isLocked = r.timelocked&&r.unlockAt>Date.now()/1000;
                           const isWd = withdrawingId===r.stealthAddress;
+                          const itemNet = NETWORKS[r.network || networkKey];
                           return (
                             <div key={i} className="scan-item">
                               <div className="scan-item-amount">{r.amount} {r.token}</div>
@@ -1271,7 +1292,7 @@ export default function App() {
                               <div style={{fontSize:11,marginTop:4,color:isLocked?"var(--amber)":"var(--green)"}}>
                                 {isLocked ? ("🔒 " + t.locked + ": " + new Date(r.unlockAt*1000).toLocaleString()) : ("✓ " + t.unlocked)}
                               </div>
-                              <a className="scan-item-link" href={network.explorer + "/tx/" + r.txHash} target="_blank" rel="noreferrer">Basescan ↗</a>
+                              <a className="scan-item-link" href={itemNet.explorer + "/tx/" + r.txHash} target="_blank" rel="noreferrer">{itemNet.name} ↗</a>
                               <button className="scan-withdraw-btn" onClick={()=>doWithdraw(r)} disabled={isWd||isLocked||!account}>
                                 {isWd ? <><span className="spin"/>{t.withdrawing}</> : ("→ " + t.withdrawBtn)}
                               </button>
