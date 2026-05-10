@@ -665,13 +665,11 @@ export default function App() {
           txHash = tx.hash;
           try { await tx.wait(); } catch {}
         } catch(e) {
-          console.log("Transfer erro completo:", JSON.stringify(e, null, 2));
           if (e.transaction?.hash) txHash = e.transaction.hash;
           else if (e.receipt?.hash) txHash = e.receipt.hash;
           else if (e.hash) txHash = e.hash;
-          console.log("Transfer erro mas hash:", txHash);
+          else if (e.info?.sendTransactionHash) txHash = e.info.sendTransactionHash;
         }
-        console.log("txHash:", txHash);
       }
       saveHistory({ hash:txHash, token, amount:val, to:recip, ts:Date.now(), status:"pending", brlRate:brlRate||null, network:network.name });
       setComprovante({ hash:txHash, token, amount:val, to:recip, ts:Date.now(), network:network.name, explorer:network.explorer });
