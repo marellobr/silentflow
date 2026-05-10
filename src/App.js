@@ -652,8 +652,8 @@ export default function App() {
       if (token==="ETH") {
         const tx = await signer.sendTransaction({ to:ed.entradaAddress, value:valBig });
         await tx.wait(); txHash = tx.hash;
-        } else {
-        // Sempre tenta approve antes do transfer
+      } else {
+        const tc = new ethers.Contract(TOKENS[token].address, ERC20_ABI, signer);
         try { 
           console.log("Fazendo approve...");
           const a = await tc.approve(ed.entradaAddress, valBig); 
