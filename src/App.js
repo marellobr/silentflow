@@ -652,7 +652,13 @@ export default function App() {
       if (token==="ETH") {
         const tx = await signer.sendTransaction({ to:ed.entradaAddress, value:valBig });
         await tx.wait(); txHash = tx.hash;
-      } else {
+     } else {
+        // Verifica saldo antes de chamar MetaMask
+        const tokenContract = new ethers.Contract(TOKENS[token].address, ["function balanceOf(address) view returns (uint256)"], signer);
+        const saldoAtual = await tokenContract.balanceOf(account);
+        if (saldoAtual < valBig) {
+          throw new Error(lang==="pt" ? "Saldo insuficiente de " + token : "Insufficient " + token + " balance");
+        }
         const tc = new ethers.Contract(TOKENS[token].address, ERC20_ABI, signer);
         try { 
           const a = await tc.approve(ed.entradaAddress, valBig);
