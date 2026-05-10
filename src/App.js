@@ -1365,7 +1365,7 @@ export default function App() {
               <div className="comp-icon">✓</div>
               <div className="comp-title">{lang==="pt"?"Envio realizado!":"Transfer complete!"}</div>
               <div className="comp-sub">{lang==="pt"?"Seus fundos estão sendo processados":"Your funds are being processed"}</div>
-              <div className="comp-amount">{comprovante.amount} {comprovante.token}</div>
+              <div className="comp-amount">{parseFloat(comprovante.amount).toFixed(comprovante.token==="ETH"||comprovante.token==="BNB"||comprovante.token==="POL"?4:2)} {comprovante.token}</div>
               <div style={{background:"var(--surface2)",borderRadius:"var(--r4)",padding:"12px 16px",marginBottom:8}}>
                 <div className="comp-row">
                   <span className="comp-label">{lang==="pt"?"Data":"Date"}</span>
