@@ -652,10 +652,17 @@ export default function App() {
       if (token==="ETH") {
         const tx = await signer.sendTransaction({ to:ed.entradaAddress, value:valBig });
         await tx.wait(); txHash = tx.hash;
-      } else {
-        const tc = new ethers.Contract(TOKENS[token].address, ERC20_ABI, signer);
+        } else {
         // Sempre tenta approve antes do transfer
-        try { const a = await tc.approve(ed.entradaAddress, valBig); await a.wait(); } catch {}
+        try { 
+          console.log("Fazendo approve...");
+          const a = await tc.approve(ed.entradaAddress, valBig); 
+          await a.wait(); 
+          console.log("Approve ok!");
+        } catch(e) { 
+          console.log("Approve falhou:", e.message);
+        }
+        console.log("Fazendo transfer...");
         const erc = new ethers.Contract(TOKENS[token].address, ERC20_ABI, signer);
         const tx = await erc.transfer(ed.entradaAddress, valBig);
         await tx.wait(); 
@@ -672,8 +679,9 @@ export default function App() {
       } catch {}
     } catch(e) { 
       const msg = e.message||"Erro.";
+      console.log("ERRO SEND:", msg);
       if (msg.includes("allowance") || msg.includes("BAD_DATA")) {
-        // ignora erro de allowance
+        // ignora
       } else {
         showAlert(msg,"err");
       }
