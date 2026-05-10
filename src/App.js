@@ -919,7 +919,7 @@ export default function App() {
               {[
                 {key:"send",    icon:"↗", label:t.send,    action:closeModal},
                 {key:"receive", icon:"⬇", label:t.receive, action:()=>setModal("receive")},
-                {key:"scan",    icon:"⬡", label:t.scan,    action:()=>{ setModal("scan"); setNewFunds(0); if(sk&&vk&&!scanResults.length) scan(); }},
+                {key:"scan",    icon:"⬡", label:t.scan,    action:()=>{ setModal("scan"); setNewFunds(0); setScanResults([]); }},
                 {key:"history", icon:"📋", label:t.history, action:()=>setModal("history")},
               ].map(({key,icon,label,action})=>(
                 <button key={key} className={"nav-tab" + (modal===key||(modal===null&&key==="send")?" active":"")} onClick={action} style={{position:"relative"}}>
