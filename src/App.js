@@ -780,7 +780,7 @@ export default function App() {
   if (bal === 0n) continue;
 } catch(balErr) {
   console.log("balanceOf contrato falhou:", balErr.message);
-  continue;
+  // não pula — mostra o depósito mesmo sem confirmar saldo
 }
               found.push({ stealthAddress:res.stealthAddress, stealthPrivKey:res.stealthPrivKey, token:sym, tokenAddr:tAddr, amount:ethers.formatUnits(amt,dec), timelocked:tl, unlockAt:Number(ua), txHash:ev.transactionHash, network: networkKey });
               setScanResults([...found]);
