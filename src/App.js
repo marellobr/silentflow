@@ -1099,21 +1099,37 @@ export default function App() {
               </button>
 
               {pipeData && (
-                <div className="pipeline fade">
-                  <div className="pipeline-title">Pipeline de privacidade</div>
-                  <div className="pipeline-steps">
-                    {pipeSteps.map((label,i)=>{
-                      const s = pipeStatus(i);
-                      return (
-                        <div key={i} className="pipe-step">
-                          <div className={"pipe-dot " + s}>{s==="done"?"✓":s==="now"?"◉":"○"}</div>
-                          <span className={"pipe-label" + (s==="now"?" now":"")}>{label}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+  <div className="pipeline fade">
+    <div style={{fontSize:12,fontWeight:600,color:"var(--text2)",letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:12}}>
+      {pipeData.concluido
+        ? (lang==="pt" ? "✓ Pagamento entregue!" : "✓ Payment delivered!")
+        : (lang==="pt" ? "Processando seu envio..." : "Processing your transfer...")}
+    </div>
+    {!pipeData.concluido && (
+      <>
+        <div style={{background:"var(--surface)",borderRadius:20,overflow:"hidden",height:8,marginBottom:8}}>
+          <div style={{
+            height:"100%",
+            borderRadius:20,
+            background:"linear-gradient(90deg, var(--accent), var(--accent2))",
+            width: (pipeData.hopsTotal > 0 ? Math.round((pipeData.hopsFeitos/pipeData.hopsTotal)*100) : 10) + "%",
+            transition:"width 1s ease",
+            minWidth:"10%"
+          }}/>
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"var(--text2)"}}>
+          <span>{lang==="pt" ? "Protegendo sua privacidade..." : "Protecting your privacy..."}</span>
+          <span>{pipeData.minutosRestantes > 0 ? `~${pipeData.minutosRestantes} min` : ""}</span>
+        </div>
+      </>
+    )}
+    {pipeData.concluido && pipeData.depositHashes?.length > 0 && (
+      <div style={{fontSize:11,color:"var(--green)",marginTop:6}}>
+        {lang==="pt" ? "Fundos disponíveis para saque na aba Recebidos." : "Funds available for withdrawal in the Received tab."}
+      </div>
+    )}
+  </div>
+)}
             </div>
 
           </div>
