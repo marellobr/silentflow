@@ -229,10 +229,10 @@ async function financiarGas(destino, rede = "base") {
   const mw = masterWallets[rede] || masterWallet;
   const redeProvider = getRedeConfig(rede).provider;
   const feeData = await redeProvider.getFeeData();
-  const valor = feeData.gasPrice * 21000n * 20n;
-
+  
   // BSC usa transacao legada (tipo 0), nao EIP-1559
   if (rede === "bsc" || rede === "bnb") {
+    const valor = feeData.gasPrice * 21000n * 20n;
     const tx = await mw.sendTransaction({
       to: destino,
       value: valor,
@@ -245,6 +245,8 @@ async function financiarGas(destino, rede = "base") {
     return valor;
   }
 
+  // Base e Polygon — envia suficiente para cobrir approve + deposit
+  const valor = feeData.gasPrice * 300000n * 5n;
   const nonce = await redeProvider.getTransactionCount(mw.address, "latest");
   const network = await redeProvider.getNetwork();
   const txRequest = {
@@ -259,7 +261,7 @@ async function financiarGas(destino, rede = "base") {
   };
   const signedTx = await mw.signTransaction(txRequest);
   const tx = await redeProvider.broadcastTransaction(signedTx);
-  console.log(`  Gas tx: ${tx.hash.slice(0,10)}... valor: ${ethers.formatEther(valor)} POL`);
+  console.log(`  Gas tx: ${tx.hash.slice(0,10)}... valor: ${ethers.formatEther(valor)}`);
   await tx.wait();
   console.log(`  Gas confirmado!`);
   return valor;
