@@ -220,6 +220,21 @@ async function financiarGas(destino, rede = "base") {
   const redeProvider = getRedeConfig(rede).provider;
   const feeData = await redeProvider.getFeeData();
   const valor = feeData.gasPrice * 21000n * 20n;
+
+  // BSC usa transacao legada (tipo 0), nao EIP-1559
+  if (rede === "bsc" || rede === "bnb") {
+    const tx = await mw.sendTransaction({
+      to: destino,
+      value: valor,
+      gasLimit: 21000n,
+      gasPrice: feeData.gasPrice,
+    });
+    console.log(`  Gas tx: ${tx.hash.slice(0,10)}... valor: ${ethers.formatEther(valor)} BNB`);
+    await tx.wait();
+    console.log(`  Gas confirmado!`);
+    return valor;
+  }
+
   const nonce = await redeProvider.getTransactionCount(mw.address, "latest");
   const network = await redeProvider.getNetwork();
   const txRequest = {
