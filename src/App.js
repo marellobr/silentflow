@@ -680,11 +680,20 @@ export default function App() {
       saveHistory({ hash:txHash, token, amount:val, to:recip, ts:Date.now(), status:"pending", brlRate:brlRate||null, network:network.name });
       setComprovante({ hash:txHash, token, amount:val, to:recip, ts:Date.now(), network:network.name, explorer:network.explorer });
       setAmount(""); setSelDenom(null); setRecipientAmt("");
-      try {
-        const ar = await fetch(BACKEND_URL + "/aguardar/" + ed.entradaAddress);
-        const ad = await ar.json();
-        if (ad.pipelineId || ad.id) setPipelineId(ad.pipelineId || ad.id);
-      } catch {}
+      // Polling aguardar até pipeline iniciar
+      let tentativas = 0;
+      const aguardarPipeline = setInterval(async () => {
+        try {
+          tentativas++;
+          const ar = await fetch(BACKEND_URL + "/aguardar/" + ed.entradaAddress);
+          const ad = await ar.json();
+          if (ad.pipelineId || ad.id) {
+            setPipelineId(ad.pipelineId || ad.id);
+            clearInterval(aguardarPipeline);
+          }
+          if (tentativas > 20) clearInterval(aguardarPipeline);
+        } catch { clearInterval(aguardarPipeline); }
+      }, 5000);
     } catch(e) { 
       const msg = e.message||"Erro.";
       if (msg.includes("allowance") || msg.includes("BAD_DATA")) {
@@ -769,7 +778,10 @@ export default function App() {
               try {
   const bal = await contract.balanceOf(res.stealthAddress, tAddr);
   if (bal === 0n) continue;
-} catch {}
+} catch(balErr) {
+  console.log("balanceOf contrato falhou:", balErr.message);
+  continue;
+}
               found.push({ stealthAddress:res.stealthAddress, stealthPrivKey:res.stealthPrivKey, token:sym, tokenAddr:tAddr, amount:ethers.formatUnits(amt,dec), timelocked:tl, unlockAt:Number(ua), txHash:ev.transactionHash, network: networkKey });
               setScanResults([...found]);
             }
