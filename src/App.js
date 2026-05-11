@@ -741,13 +741,14 @@ export default function App() {
     if (!sk||!vk) return showAlert(t.noKeysForScan,"warn");
     setScanning(true); setScanResults([]);
     try {
-      const scanRpc = networkKey === "polygon" ? "https://polygon-bor-rpc.publicnode.com" : networkKey === "bnb" ? "https://bsc-dataseed.binance.org" : network.rpc;
+      const scanRpc = networkKey === "polygon" ? "https://polygon-bor-rpc.publicnode.com" : networkKey === "bnb" ? "https://bsc-dataseed1.defibit.io" : network.rpc;
       const provider = new ethers.JsonRpcProvider(scanRpc);
       const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
       const filter = contract.filters.StealthDeposit();
       const current = await provider.getBlockNumber();
       const CHUNK = 9000;
-      const from = Math.max(0, current - 500000);
+      const TOTAL = networkKey === "bnb" ? 50000 : 500000;
+      const from = Math.max(0, current - TOTAL);
       const found = [];
       for (let s2=from; s2<current; s2+=CHUNK) {
         const end = Math.min(s2+CHUNK-1,current);
