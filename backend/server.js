@@ -179,7 +179,7 @@ const ETH_DENOMS = [
   ethers.parseEther("0.01"),
 ];
 
-const STABLE_DENOMS = [
+const STABLE_DENOMS_6 = [
   ethers.parseUnits("1000", 6),
   ethers.parseUnits("500", 6),
   ethers.parseUnits("100", 6),
@@ -187,13 +187,23 @@ const STABLE_DENOMS = [
   ethers.parseUnits("10", 6),
 ];
 
-function getDenoms(token) {
+const STABLE_DENOMS_18 = [
+  ethers.parseUnits("1000", 18),
+  ethers.parseUnits("500", 18),
+  ethers.parseUnits("100", 18),
+  ethers.parseUnits("50", 18),
+  ethers.parseUnits("10", 18),
+];
+
+function getDenoms(token, rede = "base") {
   if (token === "ETH") return ETH_DENOMS;
-  return STABLE_DENOMS;
+  const redeCfg = getRedeConfig(rede);
+  const decimals = redeCfg.tokens[token]?.decimals || 6;
+  return decimals === 18 ? STABLE_DENOMS_18 : STABLE_DENOMS_6;
 }
 
-function splitEmDenominacoes(total, token) {
-  const denoms = getDenoms(token);
+function splitEmDenominacoes(total, token, rede = "base") {
+  const denoms = getDenoms(token, rede);
   const result = [];
   let restante = total;
   for (const d of denoms) {
@@ -495,7 +505,7 @@ async function executarPipelineToken(txId, tokenAddress, valorBruto, tokenSymbol
   if (tokenSymbol === "USDC") { stats.volumeUSDC += valorBruto; stats.receitaUSDC += taxa; }
   if (tokenSymbol === "USDT") { stats.volumeUSDT += valorBruto; stats.receitaUSDT += taxa; }
 
-  let partes = splitEmDenominacoes(valorLiquido, tokenSymbol);
+  let partes = splitEmDenominacoes(valorLiquido, tokenSymbol, rede);
   if (!partes) partes = splitAleatorio(valorLiquido, 2);
 
   const numHopsPerSplit = 2;
