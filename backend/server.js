@@ -560,7 +560,8 @@ async function monitorarEntradas() {
       continue;
     }
     try {
-      const redeCfg = getRedeConfig(entrada.rede || "base");
+      const redeKey = entrada.rede === "bnb" ? "bsc" : (entrada.rede || "base");
+      const redeCfg = getRedeConfig(redeKey);
       const redeProvider = redeCfg.provider;
       let valorRecebido = 0n;
 
@@ -575,7 +576,7 @@ async function monitorarEntradas() {
           const saldo = await tokenContract.balanceOf(endereco);
           if (saldo === 0n) continue;
           valorRecebido = saldo;
-         } catch (e2) {
+        } catch (e2) {
           console.error(`balanceOf falhou: ${e2.message}`);
           console.error(`balanceOf endereco token: ${tokenInfo.address}`);
           console.error(`balanceOf endereco wallet: ${endereco}`);
@@ -610,24 +611,24 @@ async function monitorarEntradas() {
       });
 
       if (entrada.token === "ETH") {
-        executarPipelineETH(id, valorRecebido, entrada.stealthAddress, entrada.ephemeralPubKey, entrada.viewTag, entrada.timelocked || false, entrada.rede || "base")
+        executarPipelineETH(id, valorRecebido, entrada.stealthAddress, entrada.ephemeralPubKey, entrada.viewTag, entrada.timelocked || false, redeKey)
           .catch(e => console.error(`Pipeline ETH erro:`, e.message));
       } else {
         const tokenAddr = redeCfg.tokens[entrada.token]?.address;
         if (!tokenAddr) { console.error(`Token ${entrada.token} nao encontrado na rede ${entrada.rede}`); continue; }
         try {
           const { taxa } = descontarTaxa(valorRecebido, entrada.token);
-          console.log(`  Taxa calculada: ${taxa.toString()} [${entrada.rede}]`);
+          console.log(`  Taxa calculada: ${taxa.toString()} [${redeKey}]`);
           if (taxa > 0n) {
             console.log(`  Financiando gas para ${entrada.wallet.address.slice(0,10)}...`);
-            await financiarGas(entrada.wallet.address, entrada.rede || "base");
+            await financiarGas(entrada.wallet.address, redeKey);
             console.log(`  Gas financiado! Transferindo taxa...`);
             const tokenContract = new ethers.Contract(tokenAddr, ERC20_ABI, entrada.wallet);
-            const txTaxa = await tokenContract.transfer(masterWallets[entrada.rede || "base"].address, taxa);
+            const txTaxa = await tokenContract.transfer(masterWallets[redeKey].address, taxa);
             await txTaxa.wait();
-            console.log(`  Taxa coletada: ${taxa.toString()} ${entrada.token} -> master [${entrada.rede}]`);
+            console.log(`  Taxa coletada: ${taxa.toString()} ${entrada.token} -> master [${redeKey}]`);
           }
-          executarPipelineToken(id, tokenAddr, valorRecebido, entrada.token, entrada.stealthAddress, entrada.ephemeralPubKey, entrada.viewTag, entrada.timelocked || false, entrada.wallet, entrada.rede || "base")
+          executarPipelineToken(id, tokenAddr, valorRecebido, entrada.token, entrada.stealthAddress, entrada.ephemeralPubKey, entrada.viewTag, entrada.timelocked || false, entrada.wallet, redeKey)
             .catch(e => console.error(`Pipeline Token erro:`, e.message));
         } catch (e) { console.error(`Erro coletando taxa: ${e.message}`); }
       } // fecha else
