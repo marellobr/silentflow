@@ -58,6 +58,7 @@ const CONTRACT_ADDRESS = REDES[REDE_ATUAL].contractAddress;
 const TOKENS = REDES[REDE_ATUAL].tokens;
 
 function getRedeConfig(rede) {
+  if (rede === "bnb") rede = "bsc";
   return REDES[rede] || REDES.base;
 }
 
