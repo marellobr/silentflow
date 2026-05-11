@@ -559,8 +559,10 @@ async function monitorarEntradas() {
           const saldo = await tokenContract.balanceOf(endereco);
           if (saldo === 0n) continue;
           valorRecebido = saldo;
-        } catch (e2) {
+         } catch (e2) {
           console.error(`balanceOf falhou: ${e2.message}`);
+          console.error(`balanceOf endereco token: ${tokenInfo.address}`);
+          console.error(`balanceOf endereco wallet: ${endereco}`);
           continue;
         }
       } // fecha else token
