@@ -741,7 +741,7 @@ export default function App() {
     if (!sk||!vk) return showAlert(t.noKeysForScan,"warn");
     setScanning(true); setScanResults([]);
     try {
-      const scanRpc = networkKey === "polygon" ? "https://polygon-bor-rpc.publicnode.com" : networkKey === "bnb" ? "https://bsc-dataseed1.defibit.io" : network.rpc;
+      const scanRpc = networkKey === "polygon" ? "https://polygon-bor-rpc.publicnode.com" : networkKey === "bnb" ? "https://bsc-rpc.publicnode.com" : network.rpc;
       const provider = new ethers.JsonRpcProvider(scanRpc);
       const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
       const filter = contract.filters.StealthDeposit();
