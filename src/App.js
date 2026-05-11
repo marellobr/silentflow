@@ -829,6 +829,7 @@ export default function App() {
     } catch { showAlert(t.wrongPwd,"err"); }
   }
 
+  /*
   const pipeSteps = [t.pipe1,t.pipe2,t.pipe3,t.pipe4];
   const pipeOrder = ["recebido","splitting","hops","completo"];
   function pipeStatus(i) {
@@ -838,7 +839,7 @@ export default function App() {
     if (i===ci) return "now";
     return "wait";
   }
-
+*/
   // Convert BRL input to token amount
   const effectiveAmount = useFixed ? (selDenom||0) : (parseFloat(amount)||0);
 
