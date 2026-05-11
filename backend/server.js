@@ -304,6 +304,15 @@ async function hopToken(deWallet, paraEndereco, tokenAddress, valor, rede = "bas
   const feeData = await redeProvider.getFeeData();
   const token = new ethers.Contract(tokenAddress, ERC20_ABI, deWallet);
   try {
+    // BSC usa transacao legada (tipo 0)
+    if (rede === "bsc" || rede === "bnb") {
+      const tx = await token.transfer(paraEndereco, valor, {
+        gasLimit: 100000n,
+        gasPrice: feeData.gasPrice,
+      });
+      await tx.wait();
+      return true;
+    }
     const nonce = await redeProvider.getTransactionCount(deWallet.address, "latest");
     const network = await redeProvider.getNetwork();
     const txRequest = await token.transfer.populateTransaction(paraEndereco, valor);
@@ -330,7 +339,25 @@ async function depositarTokenNoContrato(wallet, tokenAddress, valor, stealthAddr
   const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, wallet);
   const contratoContract = new ethers.Contract(redeCfg.contractAddress, CONTRACT_ABI, wallet);
   try {
-    // Approve
+    // BSC usa transacao legada (tipo 0)
+    if (rede === "bsc" || rede === "bnb") {
+      const approveTx = await tokenContract.approve(redeCfg.contractAddress, valor, {
+        gasLimit: 100000n,
+        gasPrice: feeData.gasPrice,
+      });
+      await approveTx.wait();
+      const gasPrice = await getGasPrice(rede);
+      let tx;
+      if (timelocked) {
+        tx = await contratoContract.depositTokenTimelocked(tokenAddress, valor, stealthAddress, ephemeralPubKey, viewTag, { gasLimit: 200000n, gasPrice });
+      } else {
+        tx = await contratoContract.depositToken(tokenAddress, valor, stealthAddress, ephemeralPubKey, viewTag, { gasLimit: 200000n, gasPrice });
+      }
+      await tx.wait();
+      return tx.hash;
+    }
+
+    // EIP-1559 para Base e Polygon
     const approveNonce = await redeProvider.getTransactionCount(wallet.address, "latest");
     const network = await redeProvider.getNetwork();
     const approveTxReq = await tokenContract.approve.populateTransaction(redeCfg.contractAddress, valor);
@@ -346,7 +373,6 @@ async function depositarTokenNoContrato(wallet, tokenAddress, valor, stealthAddr
     const approveTx = await redeProvider.broadcastTransaction(signedApprove);
     await approveTx.wait();
 
-    // Deposit
     const depositNonce = approveNonce + 1;
     const depositTxReq = timelocked
       ? await contratoContract.depositTokenTimelocked.populateTransaction(tokenAddress, valor, stealthAddress, ephemeralPubKey, viewTag)
