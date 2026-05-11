@@ -746,8 +746,9 @@ export default function App() {
       const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
       const filter = contract.filters.StealthDeposit();
       const current = await provider.getBlockNumber();
-      const CHUNK = 9000;
+      const CHUNK = networkKey === "bnb" ? 2000 : 9000;
       const TOTAL = networkKey === "bnb" ? 50000 : 500000;
+      const chunkDelay = networkKey === "bnb" ? 500 : 0;
       const from = Math.max(0, current - TOTAL);
       const found = [];
       for (let s2=from; s2<current; s2+=CHUNK) {
@@ -773,9 +774,10 @@ export default function App() {
               setScanResults([...found]);
             }
           }
-        } catch(chunkErr) {
+          } catch(chunkErr) {
           console.log("chunk falhou:", s2, chunkErr.message);
         }
+        if (chunkDelay > 0) await new Promise(r => setTimeout(r, chunkDelay));
       }
       if (!found.length) showAlert(t.noFound,"info");
     } catch(e) { 
