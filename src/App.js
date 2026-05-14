@@ -776,10 +776,12 @@ export default function App() {
               const sym = Object.keys(TOKENS).find(k=>TOKENS[k].address.toLowerCase()===tAddr.toLowerCase())||"?";
               const dec = TOKENS[sym] ? TOKENS[sym].decimals : 18;
               try {
-  const bal = await contract.balanceOf(res.stealthAddress, tAddr);
-  if (bal === 0n) continue;
+  if (tAddr !== "0x0000000000000000000000000000000000000000") {
+    const bal = await contract.balanceOf(res.stealthAddress, tAddr);
+    if (bal === 0n) continue;
+  }
 } catch(balErr) {
-  // se falhar, mostra o deposito
+  continue;
 }
               found.push({ stealthAddress:res.stealthAddress, stealthPrivKey:res.stealthPrivKey, token:sym, tokenAddr:tAddr, amount:ethers.formatUnits(amt,dec), timelocked:tl, unlockAt:Number(ua), txHash:ev.transactionHash, network: networkKey });
               setScanResults([...found]);
