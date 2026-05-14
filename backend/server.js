@@ -243,7 +243,7 @@ async function financiarGas(destino, rede = "base") {
     return valor;
   }
  
-  const valor = feeData.gasPrice * 300000n * 10n;
+  const valor = rede === "polygon" ? feeData.gasPrice * 300000n * 3n : feeData.gasPrice * 300000n * 10n;
   const nonce = await redeProvider.getTransactionCount(mw.address, "latest");
   const network = await redeProvider.getNetwork();
   const txRequest = {
