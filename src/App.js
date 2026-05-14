@@ -779,8 +779,7 @@ export default function App() {
   const bal = await contract.balanceOf(res.stealthAddress, tAddr);
   if (bal === 0n) continue;
 } catch(balErr) {
-  console.log("balanceOf contrato falhou:", balErr.message);
-  continue;
+  // se falhar, mostra o deposito
 }
               found.push({ stealthAddress:res.stealthAddress, stealthPrivKey:res.stealthPrivKey, token:sym, tokenAddr:tAddr, amount:ethers.formatUnits(amt,dec), timelocked:tl, unlockAt:Number(ua), txHash:ev.transactionHash, network: networkKey });
               setScanResults([...found]);
