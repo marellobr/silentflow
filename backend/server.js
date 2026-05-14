@@ -2,16 +2,16 @@ require('dotenv').config();
 const express = require("express");
 const { ethers } = require("ethers");
 const cors = require("cors");
-
+ 
 const app = express();
 app.use(cors());
 app.use(express.json());
-
+ 
 // ============================================================
 // REDES
 // ============================================================
 const REDE_ATUAL = process.env.REDE || "base";
-
+ 
 const REDES = {
   base: {
     provider: new ethers.JsonRpcProvider(process.env.ALCHEMY_URL),
@@ -38,7 +38,7 @@ const REDES = {
     },
   },
 };
-
+ 
 const CONTRACT_ABI = [
   "function depositETH(address stealthAddress, bytes calldata ephemeralPubKey, uint8 viewTag) external payable",
   "function depositETHTimelocked(address stealthAddress, bytes calldata ephemeralPubKey, uint8 viewTag) external payable",
@@ -51,30 +51,29 @@ const ERC20_ABI = [
   "function balanceOf(address) view returns (uint256)",
   "function approve(address spender, uint256 amount) returns (bool)",
 ];
-
-// Atalhos para compatibilidade (usa base como padrão)
+ 
 const provider = REDES[REDE_ATUAL].provider;
 const CONTRACT_ADDRESS = REDES[REDE_ATUAL].contractAddress;
 const TOKENS = REDES[REDE_ATUAL].tokens;
-
+ 
 function getRedeConfig(rede) {
   if (rede === "bnb") rede = "bsc";
   return REDES[rede] || REDES.base;
 }
-
+ 
 // ============================================================
 // TAXA POR TIER (basis points)
 // ============================================================
-const TIER1_BPS = 50n; // 0.50%
-const TIER2_BPS = 35n; // 0.35%
-const TIER3_BPS = 20n; // 0.20%
+const TIER1_BPS = 50n;
+const TIER2_BPS = 35n;
+const TIER3_BPS = 20n;
 const TIER2_THRESHOLD_ETH  = ethers.parseEther("0.15");
 const TIER3_THRESHOLD_ETH  = ethers.parseEther("1.5");
 const TIER2_THRESHOLD_USDC = ethers.parseUnits("500", 6);
 const TIER3_THRESHOLD_USDC = ethers.parseUnits("5000", 6);
 const TIER2_THRESHOLD_USDT = ethers.parseUnits("500", 6);
 const TIER3_THRESHOLD_USDT = ethers.parseUnits("5000", 6);
-
+ 
 function getTaxaBps(token, valor) {
   let t2, t3;
   if (token === "ETH")       { t2 = TIER2_THRESHOLD_ETH;  t3 = TIER3_THRESHOLD_ETH; }
@@ -85,35 +84,35 @@ function getTaxaBps(token, valor) {
   if (valor >= t2) return TIER2_BPS;
   return TIER1_BPS;
 }
-
+ 
 function descontarTaxa(valorBruto, token) {
   const bps = getTaxaBps(token, valorBruto);
   const taxa = (valorBruto * bps) / 10000n;
   return { valorLiquido: valorBruto - taxa, taxa, bps };
 }
-
+ 
 const MIN_ETH  = ethers.parseEther(process.env.MIN_ETH  || "0.05");
 const MIN_USDC = ethers.parseUnits(process.env.MIN_USDC || "5", 6);
 const MIN_USDT = ethers.parseUnits(process.env.MIN_USDT || "5", 6);
-
+ 
 function getMinimo(token) {
   if (token === "ETH")  return MIN_ETH;
   if (token === "USDC") return MIN_USDC;
   if (token === "USDT") return MIN_USDT;
   return 0n;
 }
-
+ 
 const masterWallet = new ethers.Wallet(process.env.CARTEIRA_PRIVADA, provider);
 const masterWallets = {
   base:    new ethers.Wallet(process.env.CARTEIRA_PRIVADA, REDES.base.provider),
   polygon: new ethers.Wallet(process.env.CARTEIRA_PRIVADA, REDES.polygon.provider),
   bsc:     new ethers.Wallet(process.env.CARTEIRA_PRIVADA, REDES.bsc.provider),
 };
-
+ 
 const entradasPendentes = new Map();
 const fila = new Map();
 let pipelineAtivo = false;
-
+ 
 // ============================================================
 // ANALYTICS
 // ============================================================
@@ -129,11 +128,11 @@ const stats = {
   dummiesEnviados: 0,
   iniciadoEm: Date.now(),
 };
-
+ 
 const ADMIN_KEY = process.env.ADMIN_KEY || "sf_admin_2026";
-
+ 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
-
+ 
 // ============================================================
 // DELAYS INTELIGENTES
 // ============================================================
@@ -147,7 +146,7 @@ function gerarDelayProfile() {
   ];
   return profiles[Math.floor(Math.random() * profiles.length)];
 }
-
+ 
 function delayAleatorio(profile) {
   const { min, max } = profile || { min: 30, max: 120 };
   const r1 = Math.random();
@@ -155,7 +154,7 @@ function delayAleatorio(profile) {
   const avg = (r1 + r2) / 2;
   return (min + avg * (max - min)) * 1000;
 }
-
+ 
 function splitAleatorio(total, partes) {
   const vals = [];
   let restante = total;
@@ -169,7 +168,7 @@ function splitAleatorio(total, partes) {
   vals.push(restante);
   return vals.sort(() => Math.random() - 0.5);
 }
-
+ 
 const ETH_DENOMS = [
   ethers.parseEther("5"),
   ethers.parseEther("1"),
@@ -178,7 +177,7 @@ const ETH_DENOMS = [
   ethers.parseEther("0.05"),
   ethers.parseEther("0.01"),
 ];
-
+ 
 const STABLE_DENOMS_6 = [
   ethers.parseUnits("1000", 6),
   ethers.parseUnits("500", 6),
@@ -186,7 +185,7 @@ const STABLE_DENOMS_6 = [
   ethers.parseUnits("50", 6),
   ethers.parseUnits("10", 6),
 ];
-
+ 
 const STABLE_DENOMS_18 = [
   ethers.parseUnits("1000", 18),
   ethers.parseUnits("500", 18),
@@ -194,14 +193,14 @@ const STABLE_DENOMS_18 = [
   ethers.parseUnits("50", 18),
   ethers.parseUnits("10", 18),
 ];
-
+ 
 function getDenoms(token, rede = "base") {
   if (token === "ETH") return ETH_DENOMS;
   const redeCfg = getRedeConfig(rede);
   const decimals = redeCfg.tokens[token]?.decimals || 6;
   return decimals === 18 ? STABLE_DENOMS_18 : STABLE_DENOMS_6;
 }
-
+ 
 function splitEmDenominacoes(total, token, rede = "base") {
   const denoms = getDenoms(token, rede);
   const result = [];
@@ -215,22 +214,21 @@ function splitEmDenominacoes(total, token, rede = "base") {
   if (result.length === 0 && total > 0n) return null;
   return result.sort(() => Math.random() - 0.5);
 }
-
+ 
 // ============================================================
-// GAS — ciente da rede
+// GAS
 // ============================================================
 async function getGasPrice(rede = "base") {
   return (await getRedeConfig(rede).provider.getFeeData()).gasPrice;
 }
 async function estimarCustoGasETH(rede = "base") { return (await getGasPrice(rede)) * 21000n; }
 async function estimarCustoGasDeposit(rede = "base") { return (await getGasPrice(rede)) * 120000n; }
-
+ 
 async function financiarGas(destino, rede = "base") {
   const mw = masterWallets[rede] || masterWallet;
   const redeProvider = getRedeConfig(rede).provider;
   const feeData = await redeProvider.getFeeData();
-  
-  // BSC usa transacao legada (tipo 0), nao EIP-1559
+ 
   if (rede === "bsc" || rede === "bnb") {
     const valor = feeData.gasPrice * 21000n * 20n;
     const tx = await mw.sendTransaction({
@@ -244,8 +242,7 @@ async function financiarGas(destino, rede = "base") {
     console.log(`  Gas confirmado!`);
     return valor;
   }
-
-  // Base e Polygon — envia suficiente para cobrir approve + deposit
+ 
   const valor = feeData.gasPrice * 300000n * 5n;
   const nonce = await redeProvider.getTransactionCount(mw.address, "latest");
   const network = await redeProvider.getNetwork();
@@ -266,7 +263,7 @@ async function financiarGas(destino, rede = "base") {
   console.log(`  Gas confirmado!`);
   return valor;
 }
-
+ 
 async function hopETH(deWallet, paraEndereco, rede = "base") {
   const redeProvider = getRedeConfig(rede).provider;
   const gasPrice = await getGasPrice(rede);
@@ -281,7 +278,7 @@ async function hopETH(deWallet, paraEndereco, rede = "base") {
     return true;
   } catch (e) { console.error(`  hopETH falhou: ${e.message}`); return false; }
 }
-
+ 
 async function depositarETHNoContrato(wallet, valorFixo, stealthAddress, ephemeralPubKey, viewTag, timelocked, rede = "base") {
   const redeCfg = getRedeConfig(rede);
   const gasPrice = await getGasPrice(rede);
@@ -299,14 +296,13 @@ async function depositarETHNoContrato(wallet, valorFixo, stealthAddress, ephemer
     return tx.hash;
   } catch (e) { console.error(`  depositETH falhou: ${e.message}`); return null; }
 }
-
+ 
 async function hopToken(deWallet, paraEndereco, tokenAddress, valor, rede = "base") {
   await financiarGas(deWallet.address, rede);
   const redeProvider = getRedeConfig(rede).provider;
   const feeData = await redeProvider.getFeeData();
   const token = new ethers.Contract(tokenAddress, ERC20_ABI, deWallet);
   try {
-    // BSC usa transacao legada (tipo 0)
     if (rede === "bsc" || rede === "bnb") {
       const tx = await token.transfer(paraEndereco, valor, {
         gasLimit: 100000n,
@@ -332,7 +328,7 @@ async function hopToken(deWallet, paraEndereco, tokenAddress, valor, rede = "bas
     return true;
   } catch (e) { console.error(`  hopToken falhou: ${e.message}`); return false; }
 }
-
+ 
 async function depositarTokenNoContrato(wallet, tokenAddress, valor, stealthAddress, ephemeralPubKey, viewTag, timelocked, rede = "base") {
   const redeCfg = getRedeConfig(rede);
   const redeProvider = redeCfg.provider;
@@ -341,7 +337,6 @@ async function depositarTokenNoContrato(wallet, tokenAddress, valor, stealthAddr
   const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, wallet);
   const contratoContract = new ethers.Contract(redeCfg.contractAddress, CONTRACT_ABI, wallet);
   try {
-    // BSC usa transacao legada (tipo 0)
     if (rede === "bsc" || rede === "bnb") {
       const approveTx = await tokenContract.approve(redeCfg.contractAddress, valor, {
         gasLimit: 100000n,
@@ -358,8 +353,7 @@ async function depositarTokenNoContrato(wallet, tokenAddress, valor, stealthAddr
       await tx.wait();
       return tx.hash;
     }
-
-    // EIP-1559 para Base e Polygon
+ 
     const approveNonce = await redeProvider.getTransactionCount(wallet.address, "latest");
     const network = await redeProvider.getNetwork();
     const approveTxReq = await tokenContract.approve.populateTransaction(redeCfg.contractAddress, valor);
@@ -374,7 +368,7 @@ async function depositarTokenNoContrato(wallet, tokenAddress, valor, stealthAddr
     });
     const approveTx = await redeProvider.broadcastTransaction(signedApprove);
     await approveTx.wait();
-
+ 
     const depositNonce = approveNonce + 1;
     const depositTxReq = timelocked
       ? await contratoContract.depositTokenTimelocked.populateTransaction(tokenAddress, valor, stealthAddress, ephemeralPubKey, viewTag)
@@ -393,73 +387,49 @@ async function depositarTokenNoContrato(wallet, tokenAddress, valor, stealthAddr
     return tx.hash;
   } catch (e) { console.error(`  depositToken falhou: ${e.message}`); return null; }
 }
-
+ 
 // ============================================================
-// DUMMY TRANSACTIONS
+// DUMMY TRANSACTIONS (PAUSADO)
 // ============================================================
-async function enviarDummy() {
-  return; // PAUSADO — reativar no lancamento
-  if (pipelineAtivo) return;
-  if (Math.random() > 0.7) return;
-  try {
-    const numDummies = Math.random() > 0.7 ? 2 : 1;
-    for (let i = 0; i < numDummies; i++) {
-      const efemero = ethers.Wallet.createRandom();
-      const gasPrice = await getGasPrice();
-      const baseVal = 5 + Math.floor(Math.random() * 45);
-      const valor = ethers.parseUnits(baseVal.toString(), 12);
-      await masterWallet.sendTransaction({ to: efemero.address, value: valor, gasLimit: 21000n, gasPrice });
-      stats.dummiesEnviados++;
-      console.log(`  ~ dummy #${stats.dummiesEnviados} -> ${efemero.address.slice(0,10)}... (${ethers.formatEther(valor)} ETH)`);
-      if (numDummies === 2 && i === 0) await sleep(3000 + Math.random() * 8000);
-    }
-  } catch {}
-}
-
-async function dummyPeriodico() {
-  return; // PAUSADO
-  if (pipelineAtivo) return;
-  if (Math.random() > 0.3) return;
-  await enviarDummy();
-}
-
+async function enviarDummy() { return; }
+async function dummyPeriodico() { return; }
+ 
 // ============================================================
 // PIPELINE ETH
 // ============================================================
 async function executarPipelineETH(txId, valorBruto, stealthAddress, ephemeralPubKey, viewTag, timelocked, rede = "base") {
   const tx = fila.get(txId);
   if (!tx) return;
-
+ 
   const redeCfg = getRedeConfig(rede);
   const redeProvider = redeCfg.provider;
   const mw = masterWallets[rede] || masterWallet;
-
+ 
   const { valorLiquido, taxa, bps } = descontarTaxa(valorBruto, "ETH");
   console.log(`  Taxa: ${ethers.formatEther(taxa)} ETH (${Number(bps)/100}%) | Liquido: ${ethers.formatEther(valorLiquido)} ETH [${rede}]`);
-
+ 
   stats.volumeETH += valorBruto;
   stats.receitaETH += taxa;
-
+ 
   let partes = splitEmDenominacoes(valorLiquido, "ETH");
   const usandoDenoms = partes !== null;
   if (!partes) {
     const numSplits = 2 + Math.floor(Math.random() * 2);
     partes = splitAleatorio(valorLiquido, numSplits);
   }
-
+ 
   const numHopsPerSplit = 2;
   tx.hopsTotal = partes.length * numHopsPerSplit;
   tx.hopsFeitos = 0;
   tx.splits = partes.length;
   tx.taxaBps = Number(bps);
-
+ 
   console.log(`\n Pipeline ETH [${txId}] [${rede}]: ${partes.length} splits (denoms: ${usandoDenoms})${timelocked ? " [TIMELOCKED]" : ""}`);
-
+ 
   const cadeias = partes.map(() =>
     Array.from({ length: numHopsPerSplit }, () => ethers.Wallet.createRandom().connect(redeProvider))
   );
-
-  // FASE 1: Financia em serie
+ 
   pipelineAtivo = true;
   for (let i = 0; i < partes.length; i++) {
     const GAS_BUFFER = ethers.parseEther("0.00002");
@@ -469,10 +439,7 @@ async function executarPipelineETH(txId, valorBruto, stealthAddress, ephemeralPu
     console.log(`  -> Funded E${i+1}[0]: ${cadeias[i][0].address.slice(0,10)}... (${ethers.formatEther(partes[i])} ETH)`);
   }
   pipelineAtivo = false;
-
-  await enviarDummy();
-
-  // FASE 2: Hops em paralelo
+ 
   const promessas = partes.map(async (valorParte, i) => {
     const cadeia = cadeias[i];
     const delayProfile = gerarDelayProfile();
@@ -481,14 +448,12 @@ async function executarPipelineETH(txId, valorBruto, stealthAddress, ephemeralPu
         const delay = delayAleatorio(delayProfile);
         console.log(`  Split ${i+1} hop ${h+1}: aguardando ${Math.round(delay/1000)}s...`);
         await sleep(delay);
-        await enviarDummy();
         const ok = await hopETH(cadeia[h], cadeia[h + 1].address, rede);
         if (!ok) throw new Error(`Hop ${h} falhou`);
         tx.hopsFeitos++;
       }
       const delayFinal = delayAleatorio(delayProfile);
       await sleep(delayFinal);
-      await enviarDummy();
       const depositHash = await depositarETHNoContrato(cadeia[cadeia.length - 1], valorParte, stealthAddress, ephemeralPubKey, viewTag, timelocked, rede);
       tx.hopsFeitos++;
       if (!depositHash) throw new Error(`Deposito final falhou`);
@@ -507,43 +472,42 @@ async function executarPipelineETH(txId, valorBruto, stealthAddress, ephemeralPu
       } catch (e2) { console.error(`  Fallback falhou: ${e2.message}`); return null; }
     }
   });
-
+ 
   const resultados = await Promise.allSettled(promessas);
-  await enviarDummy();
-
+ 
   tx.concluido = true;
   tx.depositHashes = resultados.filter(r => r.status === 'fulfilled' && r.value).map(r => r.value);
   stats.totalTxsConcluidas++;
   console.log(`\n Pipeline ETH [${txId}] concluido — ${tx.depositHashes.length}/${partes.length} splits\n`);
 }
-
+ 
 // ============================================================
 // PIPELINE TOKEN
 // ============================================================
 async function executarPipelineToken(txId, tokenAddress, valorBruto, tokenSymbol, stealthAddress, ephemeralPubKey, viewTag, timelocked, entradaWallet, rede = "base") {
   const tx = fila.get(txId);
   if (!tx) return;
-
+ 
   const redeProvider = getRedeConfig(rede).provider;
   const mw = masterWallets[rede] || masterWallet;
-
+ 
   const { valorLiquido, taxa, bps } = descontarTaxa(valorBruto, tokenSymbol);
   console.log(`  Taxa coletada: ${taxa.toString()} units (${Number(bps)/100}%) [${rede}]`);
-
+ 
   if (tokenSymbol === "USDC") { stats.volumeUSDC += valorBruto; stats.receitaUSDC += taxa; }
   if (tokenSymbol === "USDT") { stats.volumeUSDT += valorBruto; stats.receitaUSDT += taxa; }
-
+ 
   let partes = splitEmDenominacoes(valorLiquido, tokenSymbol, rede);
   if (!partes) partes = splitAleatorio(valorLiquido, 2);
-
+ 
   const numHopsPerSplit = 2;
   tx.hopsTotal = partes.length * numHopsPerSplit;
   tx.hopsFeitos = 0;
   tx.splits = partes.length;
   tx.taxaBps = Number(bps);
-
+ 
   console.log(`\n Pipeline Token [${txId}] [${rede}]: ${partes.length} splits${timelocked ? " [TIMELOCKED]" : ""}`);
-
+ 
   const depositHashes = [];
   for (let i = 0; i < partes.length; i++) {
     const valorParte = partes[i];
@@ -553,21 +517,19 @@ async function executarPipelineToken(txId, tokenAddress, valorBruto, tokenSymbol
       const cadeia = Array.from({ length: numHopsPerSplit }, () => ethers.Wallet.createRandom().connect(redeProvider));
       await hopToken(entradaWallet || mw, cadeia[0].address, tokenAddress, valorParte, rede);
       console.log(`  -> Funded E${i+1}[0] com tokens`);
-
+ 
       for (let h = 0; h < cadeia.length - 1; h++) {
         const delay = delayAleatorio(delayProfile);
         console.log(`  Split ${i+1} hop ${h+1}: aguardando ${Math.round(delay/1000)}s...`);
         await sleep(delay);
-        await enviarDummy();
         const saldo = await new ethers.Contract(tokenAddress, ERC20_ABI, redeProvider).balanceOf(cadeia[h].address);
         const ok = await hopToken(cadeia[h], cadeia[h+1].address, tokenAddress, saldo, rede);
         if (!ok) throw new Error(`Token hop ${h} falhou`);
         tx.hopsFeitos++;
       }
-
+ 
       const delayFinal = delayAleatorio(delayProfile);
       await sleep(delayFinal);
-      await enviarDummy();
       const hash = await depositarTokenNoContrato(cadeia[cadeia.length-1], tokenAddress, valorParte, stealthAddress, ephemeralPubKey, viewTag, timelocked, rede);
       tx.hopsFeitos++;
       if (hash) depositHashes.push(hash);
@@ -580,13 +542,13 @@ async function executarPipelineToken(txId, tokenAddress, valorBruto, tokenSymbol
       } catch {}
     }
   }
-
+ 
   tx.concluido = true;
   tx.depositHashes = depositHashes;
   stats.totalTxsConcluidas++;
   console.log(`\n Pipeline Token [${txId}] concluido\n`);
 }
-
+ 
 // ============================================================
 // MONITORAR ENTRADAS — a cada 10s
 // ============================================================
@@ -602,7 +564,7 @@ async function monitorarEntradas() {
       const redeCfg = getRedeConfig(redeKey);
       const redeProvider = redeCfg.provider;
       let valorRecebido = 0n;
-
+ 
       if (entrada.token === "ETH") {
         valorRecebido = await redeProvider.getBalance(endereco);
       } else {
@@ -616,20 +578,18 @@ async function monitorarEntradas() {
           valorRecebido = saldo;
         } catch (e2) {
           console.error(`balanceOf falhou: ${e2.message}`);
-          console.error(`balanceOf endereco token: ${tokenInfo.address}`);
-          console.error(`balanceOf endereco wallet: ${endereco}`);
           continue;
         }
-      } // fecha else token
-
+      }
+ 
       if (valorRecebido === 0n) continue;
       if (valorRecebido < getMinimo(entrada.token)) continue;
-
+ 
       console.log(`\n Entrada detectada: ${endereco.slice(0,10)}... recebeu ${entrada.token === 'ETH' ? ethers.formatEther(valorRecebido) : valorRecebido.toString()} ${entrada.token} [${entrada.rede || "base"}]`);
       entradasPendentes.delete(endereco);
-
+ 
       stats.totalTxs++;
-
+ 
       const id = `sf_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
       fila.set(id, {
         id,
@@ -647,7 +607,7 @@ async function monitorarEntradas() {
         criadoEm: Date.now(),
         depositHashes: [],
       });
-
+ 
       if (entrada.token === "ETH") {
         executarPipelineETH(id, valorRecebido, entrada.stealthAddress, entrada.ephemeralPubKey, entrada.viewTag, entrada.timelocked || false, redeKey)
           .catch(e => console.error(`Pipeline ETH erro:`, e.message));
@@ -656,11 +616,8 @@ async function monitorarEntradas() {
         if (!tokenAddr) { console.error(`Token ${entrada.token} nao encontrado na rede ${entrada.rede}`); continue; }
         try {
           const { taxa } = descontarTaxa(valorRecebido, entrada.token);
-          console.log(`  Taxa calculada: ${taxa.toString()} [${redeKey}]`);
           if (taxa > 0n) {
-            console.log(`  Financiando gas para ${entrada.wallet.address.slice(0,10)}...`);
             await financiarGas(entrada.wallet.address, redeKey);
-            console.log(`  Gas financiado! Transferindo taxa...`);
             const tokenContract = new ethers.Contract(tokenAddr, ERC20_ABI, entrada.wallet);
             const txTaxa = await tokenContract.transfer(masterWallets[redeKey].address, taxa);
             await txTaxa.wait();
@@ -669,12 +626,12 @@ async function monitorarEntradas() {
           executarPipelineToken(id, tokenAddr, valorRecebido, entrada.token, entrada.stealthAddress, entrada.ephemeralPubKey, entrada.viewTag, entrada.timelocked || false, entrada.wallet, redeKey)
             .catch(e => console.error(`Pipeline Token erro:`, e.message));
         } catch (e) { console.error(`Erro coletando taxa: ${e.message}`); }
-      } // fecha else
-
+      }
+ 
     } catch (e) { console.error(`Erro monitorando ${endereco.slice(0,10)}...: ${e.message}`); }
-  } // fecha for
-} // fecha monitorarEntradas
-
+  }
+}
+ 
 setInterval(monitorarEntradas, 10000);
 setInterval(dummyPeriodico, 120000 + Math.random() * 180000);
 setInterval(() => {
@@ -683,33 +640,30 @@ setInterval(() => {
     if (tx.concluido && agora - tx.criadoEm > 2 * 60 * 60 * 1000) fila.delete(id);
   }
 }, 30 * 60 * 1000);
-
+ 
 // ============================================================
 // ENDPOINTS
 // ============================================================
-
+ 
 app.get("/entrada", (req, res) => {
   try {
     const { token, stealthAddress, ephemeralPubKey, viewTag, timelocked, rede = "base" } = req.query;
     if (!token || !stealthAddress || !ephemeralPubKey || viewTag === undefined)
       return res.status(400).json({ erro: "Parametros incompletos" });
-
+ 
     const redeCfg = getRedeConfig(rede);
     const minimo = getMinimo(token);
     const wallet = ethers.Wallet.createRandom().connect(redeCfg.provider);
-
+ 
     entradasPendentes.set(wallet.address, {
       wallet, token, stealthAddress, ephemeralPubKey,
       viewTag: parseInt(viewTag), timelocked: timelocked === "true",
       criadoEm: Date.now(), resolveId: null,
       rede,
     });
-
+ 
     console.log(`Nova entrada gerada: ${wallet.address.slice(0,10)}... [${token}] [${rede}]${timelocked === "true" ? " [TIMELOCKED]" : ""}`);
-console.log(`  stealthAddress: ${stealthAddress.slice(0,10)}...`);
-console.log(`  ephemeralPubKey: ${ephemeralPubKey.slice(0,10)}...`);
-console.log(`  viewTag: ${viewTag}`);
-res.json({
+    res.json({
       entradaAddress: wallet.address,
       token,
       rede,
@@ -719,7 +673,7 @@ res.json({
     });
   } catch (e) { console.error(e); res.status(500).json({ erro: e.message }); }
 });
-
+ 
 app.get("/aguardar/:endereco", (req, res) => {
   const endereco = req.params.endereco;
   if (entradasPendentes.has(endereco)) return res.json({ recebido: false });
@@ -728,7 +682,7 @@ app.get("/aguardar/:endereco", (req, res) => {
   }
   return res.json({ recebido: false });
 });
-
+ 
 app.get("/status/:id", (req, res) => {
   const tx = fila.get(req.params.id);
   if (!tx) return res.status(404).json({ erro: "Nao encontrado" });
@@ -745,7 +699,7 @@ app.get("/status/:id", (req, res) => {
     depositHashes: tx.depositHashes || [],
   });
 });
-
+ 
 app.get("/minimos", (req, res) => {
   res.json({
     ETH:  { wei: MIN_ETH.toString(),  formatado: ethers.formatEther(MIN_ETH) + " ETH" },
@@ -753,7 +707,7 @@ app.get("/minimos", (req, res) => {
     USDT: { wei: MIN_USDT.toString(), formatado: ethers.formatUnits(MIN_USDT, 6) + " USDT" },
   });
 });
-
+ 
 app.get("/taxas", (req, res) => {
   res.json({
     tiers: [
@@ -763,7 +717,7 @@ app.get("/taxas", (req, res) => {
     ],
   });
 });
-
+ 
 app.get("/health", (req, res) => {
   res.json({
     ok: true,
@@ -773,7 +727,7 @@ app.get("/health", (req, res) => {
     uptime: Math.floor((Date.now() - stats.iniciadoEm) / 1000),
   });
 });
-
+ 
 app.get("/admin/stats", (req, res) => {
   if (req.query.key !== ADMIN_KEY) return res.status(403).json({ erro: "Acesso negado" });
   const uptimeMs = Date.now() - stats.iniciadoEm;
@@ -801,23 +755,23 @@ app.get("/admin/stats", (req, res) => {
     infra: { masterWallet: masterWallet.address, entradasPendentes: entradasPendentes.size, pipelineAtivo },
   });
 });
-
+ 
 app.post("/withdraw", async (req, res) => {
   try {
     const { stealthAddress, token, recipient, sig, rede = "base" } = req.body;
     if (!stealthAddress || !token || !recipient || !sig)
       return res.status(400).json({ erro: "Parametros incompletos" });
-
+ 
     const redeCfg = getRedeConfig(rede);
     const mw = masterWallets[rede] || masterWallet;
     const contrato = new ethers.Contract(redeCfg.contractAddress, [
       "function withdrawFor(address stealthAddress, address token, address recipient, bytes calldata sig) external",
       "function balanceOf(address stealthAddress, address token) external view returns (uint256)"
     ], mw);
-
+ 
     const bal = await contrato.balanceOf(stealthAddress, token);
     if (bal === 0n) return res.status(400).json({ erro: "Sem saldo para sacar" });
-
+ 
     const gasPrice = await getGasPrice(rede);
     const tx = await contrato.withdrawFor(stealthAddress, token, recipient, sig, { gasLimit: 200000n, gasPrice });
     await tx.wait();
@@ -828,7 +782,7 @@ app.post("/withdraw", async (req, res) => {
     res.status(500).json({ erro: e.message });
   }
 });
-
+ 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`SilentFlow backend v7 (Base + Polygon + BSC) — porta ${PORT}`);
@@ -839,4 +793,3 @@ app.listen(PORT, () => {
   console.log(`Taxas: ${Number(TIER1_BPS)/100}% (standard) / ${Number(TIER2_BPS)/100}% (volume) / ${Number(TIER3_BPS)/100}% (premium)`);
   console.log(`Minimos: ${ethers.formatEther(MIN_ETH)} ETH / ${ethers.formatUnits(MIN_USDC,6)} USDC / ${ethers.formatUnits(MIN_USDT,6)} USDT`);
 });
- 
