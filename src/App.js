@@ -1139,7 +1139,7 @@ export default function App() {
     )}
     {pipeData.concluido && pipeData.depositHashes?.length > 0 && (
       <div style={{fontSize:11,color:"var(--green)",marginTop:6}}>
-        {lang==="pt" ? "Fundos disponíveis para saque na aba Recebidos." : "Funds available for withdrawal in the Received tab."}
+        {lang==="pt" ? "Fundos enviados, o recebedor poderá sacar em instantes." : "The recipient can withdraw shortly."}
       </div>
     )}
   </div>
