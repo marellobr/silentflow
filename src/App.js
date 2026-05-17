@@ -1397,7 +1397,7 @@ export default function App() {
         )}
 
 
-        {/* COMPROVANTE MODAL */}
+       {/* COMPROVANTE MODAL */}
         {comprovante && (
           <div className="comp-modal" onClick={()=>setComprovante(null)}>
             <div className="comp-card" onClick={e=>e.stopPropagation()}>
@@ -1419,27 +1419,18 @@ export default function App() {
                   <span className="comp-val">{comprovante.to?.slice(0,16)}...</span>
                 </div>
                 <div className="comp-row">
-                  <span className="comp-label">TX</span>
-                  <span className="comp-val">{comprovante.hash?.slice(0,18)}...</span>
+                  <span className="comp-label">{lang==="pt"?"Tempo estimado":"Est. time"}</span>
+                  <span className="comp-val">~10 {lang==="pt"?"minutos":"minutes"}</span>
                 </div>
               </div>
-              <a href={comprovante.explorer + "/tx/" + comprovante.hash} target="_blank" rel="noreferrer"
-                style={{display:"block",textAlign:"center",fontSize:12,color:"var(--accent)",marginBottom:16}}>
-                {lang==="pt"?"Ver no explorer ↗":"View on explorer ↗"}
-              </a>
+              <div style={{fontSize:11,color:"var(--amber)",textAlign:"center",marginBottom:16,padding:"8px 12px",background:"rgba(251,191,36,0.06)",border:"1px solid rgba(251,191,36,0.15)",borderRadius:"var(--r4)"}}>
+                ⚠️ {lang==="pt"?"Não compartilhe o ID da transação — pode expor sua carteira":"Do not share the transaction ID — it may expose your wallet"}
+              </div>
               <div className="comp-actions">
                 <button className="comp-btn comp-btn-primary" onClick={()=>{
                   const text = lang==="pt"
-                    ? `✓ Envio SilentFlow
-${comprovante.amount} ${comprovante.token}
-Rede: ${comprovante.network}
-Data: ${new Date(comprovante.ts).toLocaleString("pt-BR")}
-TX: ${comprovante.hash}`
-                    : `✓ SilentFlow Transfer
-${comprovante.amount} ${comprovante.token}
-Network: ${comprovante.network}
-Date: ${new Date(comprovante.ts).toLocaleString("en-US")}
-TX: ${comprovante.hash}`;
+                    ? `✓ Envio SilentFlow\n${parseFloat(comprovante.amount).toFixed(2)} ${comprovante.token}\nRede: ${comprovante.network}\nData: ${new Date(comprovante.ts).toLocaleString("pt-BR")}\nTempo estimado: ~10 minutos`
+                    : `✓ SilentFlow Transfer\n${parseFloat(comprovante.amount).toFixed(2)} ${comprovante.token}\nNetwork: ${comprovante.network}\nDate: ${new Date(comprovante.ts).toLocaleString("en-US")}\nEst. time: ~10 minutes`;
                   navigator.clipboard.writeText(text);
                   showAlert(lang==="pt"?"Comprovante copiado!":"Receipt copied!","ok");
                 }}>
