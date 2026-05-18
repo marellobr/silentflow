@@ -1429,8 +1429,10 @@ export default function App() {
               <div className="comp-actions">
                 <button className="comp-btn comp-btn-primary" onClick={()=>{
                   const text = lang==="pt"
+  const text = lang==="pt"
   ? `✓ Envio SilentFlow\n${parseFloat(comprovante.amount).toFixed(comprovante.token==="ETH"?4:2)} ${comprovante.token}\nRede: ${comprovante.network}\nData: ${new Date(comprovante.ts).toLocaleString("pt-BR")}\nTempo estimado: ~10 minutos`
   : `✓ SilentFlow Transfer\n${parseFloat(comprovante.amount).toFixed(comprovante.token==="ETH"?4:2)} ${comprovante.token}\nNetwork: ${comprovante.network}\nDate: ${new Date(comprovante.ts).toLocaleString("en-US")}\nEst. time: ~10 minutes`;
+                  navigator.clipboard.writeText(text);
                   showAlert(lang==="pt"?"Comprovante copiado!":"Receipt copied!","ok");
                 }}>
                   {lang==="pt"?"Copiar comprovante":"Copy receipt"}
