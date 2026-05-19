@@ -416,7 +416,6 @@ export default function App() {
   const [history, setHistory]       = useState([]);
   const [sk, setSk]                 = useState("");
   const [vk, setVk]                 = useState("");
-  const [meta, setMeta]             = useState("");
   const [payLink, setPayLink]       = useState("");
   const [copied, setCopied]         = useState("");
   const [scanResults, setScanResults] = useState([]);
@@ -485,7 +484,6 @@ export default function App() {
       const sp = ethers.SigningKey.computePublicKey(s, true);
       const vp = ethers.SigningKey.computePublicKey(v, true);
       const m  = "st:" + sp + ":" + vp;
-      setMeta(m);
       const base = window.location.origin === "http://localhost:3000" ? "https://silentflow.vercel.app" : window.location.origin;
       setPayLink(base + "/p/" + encodeURIComponent(m));
     } catch {}
