@@ -416,6 +416,7 @@ export default function App() {
   const [history, setHistory]       = useState([]);
   const [sk, setSk]                 = useState("");
   const [vk, setVk]                 = useState("");
+  const [meta, setMeta] = useState("");
   const [payLink, setPayLink]       = useState("");
   const [copied, setCopied]         = useState("");
   const [scanResults, setScanResults] = useState([]);
@@ -484,6 +485,7 @@ export default function App() {
       const sp = ethers.SigningKey.computePublicKey(s, true);
       const vp = ethers.SigningKey.computePublicKey(v, true);
       const m  = "st:" + sp + ":" + vp;
+      setMeta(m);
       const base = window.location.origin === "http://localhost:3000" ? "https://silentflow.vercel.app" : window.location.origin;
       setPayLink(base + "/p/" + encodeURIComponent(m));
     } catch {}
@@ -1088,8 +1090,8 @@ export default function App() {
                     <>
                     <div className="receive-addr">
                       <div className="receive-addr-label">{t.yourAddress}</div>
-                      <div className="receive-addr-val">{payLink}</div>
-                      <button className={"copy-btn" + (copied==="addr"?" ok":"")} onClick={()=>copyText(payLink,"addr")}>
+                      <div className="receive-addr-val">{meta}</div>
+                      <button className={"copy-btn" + (copied==="addr"?" ok":"")} onClick={()=>copyText(meta,"addr")}>
                         {copied==="addr" ? ("✓ " + t.copied) : t.copy}
                       </button>
                     </div>
