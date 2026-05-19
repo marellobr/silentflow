@@ -1085,29 +1085,17 @@ export default function App() {
                     <button className="main-btn ghost" onClick={()=>setModal("import")} style={{maxWidth:260,margin:"8px auto 0"}}>{t.importKeys}</button>
                   </div>
                 ) : (
-                  <>
-                    {/* ENDEREÇO COMPLETO */}
+                    <>
                     <div className="receive-addr">
                       <div className="receive-addr-label">{t.yourAddress}</div>
                       <div className="receive-addr-val">{payLink}</div>
-                      <button className={"copy-btn" + (copied==="link"?" ok":"")} onClick={()=>copyText(payLink,"link")}>
-                        {copied==="link" ? ("✓ " + t.copied) : t.copyLink}
+                      <button className={"copy-btn" + (copied==="addr"?" ok":"")} onClick={()=>copyText(payLink,"addr")}>
+                        {copied==="addr" ? ("✓ " + t.copied) : t.copy}
                       </button>
                     </div>
-                    <div className="paylink-box">
-                      <div className="paylink-label">🔗 QR Code</div>
-                      <div style={{display:"flex",justifyContent:"center",margin:"12px 0"}}>
-                        <img
-                          src={"https://api.qrserver.com/v1/create-qr-code/?size=160x160&bgcolor=111520&color=22c5f0&data=" + encodeURIComponent(payLink)}
-                          width="160" height="160"
-                          style={{borderRadius:12,border:"1px solid rgba(34,197,240,0.2)"}}
-                          alt="QR Code"
-                        />
-                      </div>
-                    </div>
-                    <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r4)",padding:"14px 16px",marginTop:12,marginBottom:12}}>
+                    <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r4)",padding:"14px 16px",marginBottom:12}}>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                        <span style={{fontSize:12,fontWeight:600,color:"var(--text2)"}}>🔐 {lang==="pt"?"Chave de privacidade":"Privacy key"}</span>
+                        <span style={{fontSize:12,fontWeight:600,color:"var(--text2)"}}>🔐 {lang==="pt"?"Sua chave de privacidade":"Your privacy key"}</span>
                         <span style={{fontSize:10,color:"var(--text3)"}}>{lang==="pt"?"passe o mouse para ver":"hover to reveal"}</span>
                       </div>
                       <div style={{fontFamily:"var(--mono)",fontSize:11,color:"var(--accent2)",filter:"blur(5px)",transition:"filter 0.2s",cursor:"pointer",lineHeight:1.6,wordBreak:"break-all"}}
@@ -1118,6 +1106,21 @@ export default function App() {
                       <div style={{marginTop:8,fontSize:11,color:"var(--text3)"}}>
                         {lang==="pt"?"⚠️ Necessária para sacar seus fundos. Nunca compartilhe.":"⚠️ Required to withdraw your funds. Never share."}
                       </div>
+                    </div>
+                    <div className="paylink-box">
+                      <div className="paylink-label">🔗 {t.paylink}</div>
+                      <div style={{display:"flex",justifyContent:"center",margin:"12px 0"}}>
+                        <img
+                          src={"https://api.qrserver.com/v1/create-qr-code/?size=160x160&bgcolor=111520&color=22c5f0&data=" + encodeURIComponent(payLink)}
+                          width="160" height="160"
+                          style={{borderRadius:12,border:"1px solid rgba(34,197,240,0.2)"}}
+                          alt="QR Code"
+                        />
+                      </div>
+                      <div className="paylink-url">{payLink}</div>
+                      <button className={"copy-btn" + (copied==="link"?" ok":"")} onClick={()=>copyText(payLink,"link")}>
+                        {copied==="link" ? ("✓ " + t.copied) : t.copyLink}
+                      </button>
                     </div>
                     <div className="action-row">
                       <button className="action-btn" onClick={()=>setModal("export")}>
