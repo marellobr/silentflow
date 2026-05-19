@@ -1086,14 +1086,16 @@ export default function App() {
                   </div>
                 ) : (
                   <>
-                    {/* INSTRUÇÃO RÁPIDA */}
-                    <div style={{background:"var(--accent-dim)",border:"1px solid rgba(34,197,240,0.15)",borderRadius:"var(--r4)",padding:"12px 14px",marginBottom:16,fontSize:12,color:"var(--accent2)"}}>
-                      {lang==="pt"
-                        ? "📋 Copie seu link abaixo e compartilhe com quem vai te enviar um pagamento."
-                        : "📋 Copy your link below and share it with anyone who wants to send you a payment."}
+                    {/* ENDEREÇO COMPLETO */}
+                    <div className="receive-addr">
+                      <div className="receive-addr-label">{t.yourAddress}</div>
+                      <div className="receive-addr-val">{payLink}</div>
+                      <button className={"copy-btn" + (copied==="link"?" ok":"")} onClick={()=>copyText(payLink,"link")}>
+                        {copied==="link" ? ("✓ " + t.copied) : t.copyLink}
+                      </button>
                     </div>
                     <div className="paylink-box">
-                      <div className="paylink-label">🔗 {t.paylink}</div>
+                      <div className="paylink-label">🔗 QR Code</div>
                       <div style={{display:"flex",justifyContent:"center",margin:"12px 0"}}>
                         <img
                           src={"https://api.qrserver.com/v1/create-qr-code/?size=160x160&bgcolor=111520&color=22c5f0&data=" + encodeURIComponent(payLink)}
@@ -1102,10 +1104,6 @@ export default function App() {
                           alt="QR Code"
                         />
                       </div>
-                      <div className="paylink-url">{payLink}</div>
-                      <button className={"copy-btn" + (copied==="link"?" ok":"")} onClick={()=>copyText(payLink,"link")}>
-                        {copied==="link" ? ("✓ " + t.copied) : t.copyLink}
-                      </button>
                     </div>
                     <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r4)",padding:"14px 16px",marginTop:12,marginBottom:12}}>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
