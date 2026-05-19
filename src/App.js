@@ -6,7 +6,6 @@ const TOKEN_ICONS = {
   ETH:  <img src="https://assets.coingecko.com/coins/images/279/small/ethereum.png" width="18" height="18" style={{borderRadius:"50%"}} alt="ETH"/>,
   USDC: <img src="https://assets.coingecko.com/coins/images/6319/small/usdc.png" width="18" height="18" style={{borderRadius:"50%"}} alt="USDC"/>,
   USDT: <img src="https://assets.coingecko.com/coins/images/325/small/tether.png" width="18" height="18" style={{borderRadius:"50%"}} alt="USDT"/>,
-
 };
 
 const NETWORKS = {
@@ -71,8 +70,6 @@ const ERC20_ABI = [
   "function transfer(address to, uint256 amount) returns (bool)"
 ];
 
-
-
 const DENOMS_BY_TOKEN = {
   ETH:  [0.01, 0.05, 0.1, 0.5, 1, 5],
   USDC: [10, 50, 100, 500, 1000],
@@ -126,24 +123,21 @@ const T = {
   pt: {
     send:"Enviar", receive:"Receber", history:"Historico", scan:"Recebidos",
     sendTitle:"Envio protegido", amount:"Voce envia", to:"Para",
-    toPlaceholder:"Endereco ou link de pagamento",
-    fixedDenom:"Valor fixo", timelock:"Atraso 6h",
+    toPlaceholder:"Cole o link de pagamento do destinatário",
+    fixedDenom:"Valor fixo",
     sendBtn:"Enviar sem expor sua carteira", sending:"Processando...",
     connectBtn:"Conectar carteira", connecting:"Conectando...",
-    wrongNet:"Mude para a rede Base no MetaMask.",
+    wrongNet:"Mude para a rede correta no MetaMask.",
     fee:"Taxa de privacidade",
     enterAmount:"Informe o valor.", enterTo:"Informe o destinatario.",
     sent:"Enviado! Processando...", txDone:"Transacao concluida!",
     noHistory:"Nenhum envio ainda", noHistoryDesc:"Seus envios privados aparecao aqui.",
-    basescan:"Ver no Basescan",
-    receiveTitle:"Receber pagamento", yourAddress:"Seu endereco de recebimento",
-    copy:"Copiar endereco", copied:"Copiado!",
-    spendKey:"Chave de acesso", viewKey:"Chave de visualizacao",
-    keysHint:"Passe o mouse para revelar. Nunca compartilhe.",
+    receiveTitle:"Seu link de recebimento", yourAddress:"Seu endereço de recebimento",
+    copy:"Copiar endereço", copied:"Copiado!",
     paylink:"Link de pagamento", paylinkDesc:"Compartilhe para receber pagamentos.",
     copyLink:"Copiar link", exportKeys:"Backup", newKeys:"Novo endereco",
-    noKeys:"Sem endereco de recebimento", noKeysDesc:"Crie um endereco para receber pagamentos privados.",
-    createKeys:"Criar endereco", importKeys:"Importar backup",
+    noKeys:"Crie seu link de recebimento", noKeysDesc:"Gere seu link e compartilhe para receber pagamentos privados.",
+    createKeys:"Gerar meu link", importKeys:"Importar backup",
     importDesc:"Restaure suas chaves a partir de um backup.",
     backupContent:"Conteudo do backup", backupPaste:"Cole o conteudo do arquivo .enc aqui",
     password:"Senha", confirm:"Confirmar", cancel:"Cancelar",
@@ -155,34 +149,29 @@ const T = {
     withdrawBtn:"Sacar agora", withdrawing:"Sacando...", withdrawDone:"Saque realizado!",
     fundsFound:"Voce tem fundos para sacar!", fundsFoundDesc:"pagamento(s) encontrado(s)",
     sacar:"Sacar",
-    pipe1:"Entrada recebida", pipe2:"Dividindo em partes",
-    pipe3:"Roteando com privacidade", pipe4:"Depositado no stealth address",
     importDone:"Chaves importadas!", wrongPwd:"Senha incorreta ou arquivo invalido.",
-    noKeysForScan:"Crie seu endereco de recebimento primeiro.",
+    noKeysForScan:"Crie seu link de recebimento primeiro.",
     gasless:"Saque sem gas - o protocolo cobre o custo.",
     or:"ou",
   },
   en: {
     send:"Send", receive:"Receive", history:"History", scan:"Received",
     sendTitle:"Protected transfer", amount:"You send", to:"To",
-    toPlaceholder:"Address or payment link",
-    fixedDenom:"Fixed amount", timelock:"6h delay",
+    toPlaceholder:"Paste recipient's payment link",
+    fixedDenom:"Fixed amount",
     sendBtn:"Send without exposing your wallet", sending:"Processing...",
     connectBtn:"Connect wallet", connecting:"Connecting...",
-    wrongNet:"Switch to Base network in MetaMask.",
+    wrongNet:"Switch to the correct network in MetaMask.",
     fee:"Privacy fee",
     enterAmount:"Enter an amount.", enterTo:"Enter a recipient.",
     sent:"Sent! Processing...", txDone:"Transaction complete!",
     noHistory:"No transfers yet", noHistoryDesc:"Your private transfers will appear here.",
-    basescan:"View on Basescan",
-    receiveTitle:"Receive payment", yourAddress:"Your receiving address",
+    receiveTitle:"Your payment link", yourAddress:"Your receiving address",
     copy:"Copy address", copied:"Copied!",
-    spendKey:"Spending key", viewKey:"Viewing key",
-    keysHint:"Hover to reveal. Never share.",
     paylink:"Payment link", paylinkDesc:"Share to receive direct payments.",
     copyLink:"Copy link", exportKeys:"Backup", newKeys:"New address",
-    noKeys:"No receiving address", noKeysDesc:"Create an address to receive private payments.",
-    createKeys:"Create address", importKeys:"Import backup",
+    noKeys:"Create your payment link", noKeysDesc:"Generate your link and share it to receive private payments.",
+    createKeys:"Generate my link", importKeys:"Import backup",
     importDesc:"Restore your keys from a backup file.",
     backupContent:"Backup content", backupPaste:"Paste .enc file content here",
     password:"Password", confirm:"Confirm", cancel:"Cancel",
@@ -194,10 +183,8 @@ const T = {
     withdrawBtn:"Withdraw now", withdrawing:"Withdrawing...", withdrawDone:"Withdrawal successful!",
     fundsFound:"You have funds to withdraw!", fundsFoundDesc:"payment(s) found",
     sacar:"Withdraw",
-    pipe1:"Entry received", pipe2:"Splitting into parts",
-    pipe3:"Routing privately", pipe4:"Deposited to stealth address",
     importDone:"Keys imported!", wrongPwd:"Wrong password or invalid file.",
-    noKeysForScan:"Create your receiving address first.",
+    noKeysForScan:"Create your payment link first.",
     gasless:"Gasless withdrawal - the protocol covers the cost.",
     or:"or",
   }
@@ -222,7 +209,6 @@ button{cursor:pointer;font-family:var(--sans);border:none;outline:none}
 input,textarea{font-family:var(--sans);outline:none;border:none}
 a{color:var(--accent);text-decoration:none}
 .app{min-height:100vh;display:flex;flex-direction:column}
-
 .nav{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:rgba(8,9,13,0.9);backdrop-filter:blur(24px);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
 .nav-brand{display:flex;align-items:center;gap:10px}
 .nav-logo{width:28px;height:28px;filter:drop-shadow(0 0 12px rgba(34,197,240,0.5))}
@@ -267,8 +253,8 @@ a{color:var(--accent);text-decoration:none}
 .recipient-box{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r2);padding:16px;margin-bottom:6px;transition:border-color 0.2s}
 .recipient-box:focus-within{border-color:rgba(34,197,240,0.3)}
 .recipient-label{font-size:12px;color:var(--text2);margin-bottom:8px;font-weight:500}
-.recipient-input{width:100%;background:transparent;color:var(--text);font-size:14px;font-family:var(--mono)}
-.recipient-input::placeholder{color:var(--text3);font-family:var(--sans)}
+.recipient-input{width:100%;background:transparent;color:var(--text);font-size:13px;font-family:var(--mono)}
+.recipient-input::placeholder{color:var(--text3);font-family:var(--sans);font-size:13px}
 .denom-box{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r2);padding:14px;margin-bottom:6px}
 .denom-label{font-size:12px;color:var(--text2);margin-bottom:10px;font-weight:500}
 .denom-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
@@ -283,16 +269,6 @@ a{color:var(--accent);text-decoration:none}
 .main-btn.ghost{background:transparent;border:1px solid var(--border2);color:var(--text2);box-shadow:none}
 .main-btn.ghost:hover:not(:disabled){border-color:var(--accent);color:var(--accent);box-shadow:none}
 .pipeline{background:var(--surface2);border:1px solid rgba(34,197,240,0.15);border-radius:var(--r2);padding:16px;margin-top:8px}
-.pipeline-title{font-size:11px;color:var(--text2);font-weight:600;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:12px}
-.pipeline-steps{display:flex;flex-direction:column;gap:8px}
-.pipe-step{display:flex;align-items:center;gap:10px;font-size:13px}
-.pipe-dot{width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px}
-.pipe-dot.done{background:var(--green-dim);color:var(--green);border:1px solid rgba(52,211,153,0.3)}
-.pipe-dot.now{background:var(--accent-dim);color:var(--accent);border:1px solid rgba(34,197,240,0.3);animation:ring 1.5s infinite}
-.pipe-dot.wait{background:var(--surface);color:var(--text3);border:1px solid var(--border)}
-.pipe-label{color:var(--text2)}
-.pipe-label.now{color:var(--text)}
-@keyframes ring{0%,100%{box-shadow:0 0 0 0 rgba(34,197,240,0.3)}50%{box-shadow:0 0 0 4px rgba(34,197,240,0)}}
 .funds-alert{background:linear-gradient(135deg,rgba(34,197,240,0.08),rgba(34,197,240,0.04));border:1px solid rgba(34,197,240,0.2);border-radius:var(--r2);padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:12px}
 .funds-alert-text{font-size:13px;color:var(--accent2)}
 .funds-alert-text strong{display:block;font-size:15px;font-weight:700;color:var(--text);margin-bottom:2px}
@@ -304,7 +280,6 @@ a{color:var(--accent);text-decoration:none}
 .nav-tab:hover{border-color:var(--border2);color:var(--text2)}
 .nav-tab.active{background:var(--accent-dim);border-color:rgba(34,197,240,0.25);color:var(--accent)}
 .nav-tab-icon{font-size:15px;line-height:1}
-.nav-tab-dot{display:none}
 .modal-bg{position:fixed;inset:0;z-index:50;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,0.6);backdrop-filter:blur(8px)}
 @media(min-width:600px){.modal-bg{align-items:center}.modal{border-radius:var(--r)!important;max-height:90vh!important}}
 .modal{width:100%;max-width:480px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--r) var(--r) 0 0;max-height:92vh;overflow-y:auto;animation:slide-up 0.3s cubic-bezier(0.34,1.56,0.64,1)}
@@ -324,7 +299,6 @@ a{color:var(--accent);text-decoration:none}
 .hist-ico.done{background:var(--green-dim);border:1px solid rgba(52,211,153,0.2);color:var(--green)}
 .hist-body{flex:1;min-width:0}
 .hist-amount{font-size:15px;font-weight:700;color:var(--text);margin-bottom:2px}
-.hist-brl{font-size:12px;color:var(--text2);margin-bottom:3px}
 .hist-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:3px}
 .hist-date{font-size:11px;color:var(--text3)}
 .hist-net{font-size:10px;padding:2px 7px;border-radius:20px;background:var(--surface2);border:1px solid var(--border);color:var(--text3);font-family:var(--mono)}
@@ -339,10 +313,6 @@ a{color:var(--accent);text-decoration:none}
 .copy-btn{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:10px;border-radius:var(--r4);border:1px solid rgba(34,197,240,0.3);background:var(--accent-dim);color:var(--accent);font-size:13px;font-weight:600;transition:all 0.2s;cursor:pointer}
 .copy-btn:hover{background:var(--accent);color:#08090d}
 .copy-btn.ok{background:var(--green-dim);border-color:rgba(52,211,153,0.3);color:var(--green)}
-.key-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 14px;border-radius:var(--r4);background:var(--surface2);border:1px solid var(--border);margin-bottom:8px}
-.key-label{font-size:12px;color:var(--text2);font-weight:500;white-space:nowrap}
-.key-val{font-family:var(--mono);font-size:11px;color:var(--text2);filter:blur(5px);transition:filter 0.2s;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;text-align:right}
-.key-val:hover{filter:none}
 .paylink-box{margin-top:4px;padding:14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r2)}
 .paylink-label{font-size:11px;color:var(--text2);font-weight:600;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:6px}
 .paylink-url{font-family:var(--mono);font-size:10px;color:var(--text3);word-break:break-all;line-height:1.5;margin-bottom:10px}
@@ -432,14 +402,13 @@ export default function App() {
   const TOKENS = network.tokens;
   const DENOMS = Object.fromEntries(Object.keys(network.tokens).map(k => [k, DENOMS_BY_TOKEN[k] || [10, 50, 100, 500, 1000]]));
   const [account, setAccount]       = useState("");
-  const [brlRate, setBrlRate]       = useState(null); // USD to BRL rate
   const [loading, setLoading]       = useState(false);
   const [token, setToken]           = useState("USDC");
   const [amount, setAmount]         = useState("");
   const [recipient, setRecipient]   = useState("");
   const [useFixed, setUseFixed]     = useState(false);
   const [selDenom, setSelDenom]     = useState(null);
-  const [recipientAmt, setRecipientAmt] = useState(""); // what recipient gets
+  const [recipientAmt, setRecipientAmt] = useState("");
   const [showTokens, setShowTokens] = useState(false);
   const [pipelineId, setPipelineId] = useState(null);
   const [pipeData, setPipeData]     = useState(null);
@@ -452,7 +421,6 @@ export default function App() {
   const [copied, setCopied]         = useState("");
   const [scanResults, setScanResults] = useState([]);
   const [scanning, setScanning]     = useState(false);
-  // const [autoScanned, setAutoScanned] = useState(false);
   const [newFunds, setNewFunds]       = useState(0);
   const [withdrawingId, setWithdrawingId] = useState(null);
   const [comprovante, setComprovante]   = useState(null);
@@ -463,30 +431,12 @@ export default function App() {
   const tokenRef = useRef(null);
 
   useEffect(() => {
-    // Fetch USD/BRL rate
-    fetch("https://economia.awesomeapi.com.br/json/last/USD-BRL")
-      .then(r => r.json())
-      .then(d => setBrlRate(parseFloat(d.USDBRL?.bid) || 5.7))
-      .catch(() => setBrlRate(5.7));
-  }, []);
-
-  useEffect(() => {
     const s = localStorage.getItem("sf_sk");
     const v = localStorage.getItem("sf_vk");
     if (s && v) { setSk(s); setVk(v); buildMeta(s,v); }
     const h = localStorage.getItem("sf_hist");
     if (h) setHistory(JSON.parse(h));
   }, []);
-
-  // Auto-scan on load if keys exist
- // useEffect(() => {
-   // if (sk && vk && !autoScanned) {
-     // setAutoScanned(true);
-      // setTimeout(() => {
-       // autoScan(sk, vk);
-      // }, 3000); // wait 3s after load
- //    }
-  // }, [sk, vk]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     function detectPayLink() {
@@ -495,7 +445,6 @@ export default function App() {
       if (m) setRecipient(m[1]);
     }
     detectPayLink();
-    // retry after render on mobile
     const t = setTimeout(detectPayLink, 300);
     return () => clearTimeout(t);
   }, []);
@@ -519,7 +468,6 @@ export default function App() {
           clearInterval(iv);
           setPipelineId(null);
           showAlert(t.txDone, "ok");
-          // Update history status to done
           setHistory(prev => {
             const updated = prev.map((h, i) => i === 0 ? {...h, status:"done"} : h);
             localStorage.setItem("sf_hist", JSON.stringify(updated));
@@ -559,7 +507,6 @@ export default function App() {
   }
 
   function showAlert(msg, type) {
-    // Suppress technical errors not useful to users
     if (typeof msg === "string" && (msg.includes("allowance") || msg.includes("BAD_DATA") || msg.includes("could not decode"))) return;
     setAlert({msg, type: type || "info"});
     setTimeout(() => setAlert(null), 5000);
@@ -589,7 +536,6 @@ export default function App() {
 
   async function send() {
     if (!account) return connect();
-    // Check correct network
     if (window.ethereum) {
       const currentChainId = parseInt(await window.ethereum.request({ method: "eth_chainId" }), 16);
       if (currentChainId !== network.chainId) {
@@ -601,7 +547,6 @@ export default function App() {
         }
       }
     }
-    // If recipient amount is set, calculate gross amount to send
     const recAmt = parseFloat(recipientAmt)||0;
     let val;
     if (recAmt > 0) {
@@ -614,11 +559,10 @@ export default function App() {
     if (!val||val<=0) return showAlert(t.enterAmount,"err");
     if (!recipient.trim()) return showAlert(t.enterTo,"err");
 
-    // Minimum value check
-    const minUsd = 1;
+    const minUsd = 0.5;
     const checkVal = recAmt > 0 ? recAmt : val;
     const valUsd = token==="ETH"||token==="BNB"||token==="POL" ? checkVal*2200 : checkVal;
-    if (valUsd < minUsd) return showAlert(lang==="pt" ? "Valor minimo: $" + minUsd + " (R$ " + (minUsd*(brlRate||5.7)).toFixed(0) + ")" : "Minimum amount: $" + minUsd, "err");
+    if (valUsd < minUsd) return showAlert(lang==="pt" ? "Valor mínimo: $" + minUsd : "Minimum amount: $" + minUsd, "err");
     setLoading(true); setPipeData(null);
     try {
       let stealthAddress, ephemeralPubKey, viewTag;
@@ -652,15 +596,14 @@ export default function App() {
       if (token==="ETH") {
         const tx = await signer.sendTransaction({ to:ed.entradaAddress, value:valBig });
         await tx.wait(); txHash = tx.hash;
-     } else {
-        // Verifica saldo antes de chamar MetaMask
+      } else {
         const tokenContract = new ethers.Contract(TOKENS[token].address, ["function balanceOf(address) view returns (uint256)"], signer);
         const saldoAtual = await tokenContract.balanceOf(account);
         if (saldoAtual < valBig) {
           throw new Error(lang==="pt" ? "Saldo insuficiente de " + token : "Insufficient " + token + " balance");
         }
         const tc = new ethers.Contract(TOKENS[token].address, ERC20_ABI, signer);
-        try { 
+        try {
           const a = await tc.approve(ed.entradaAddress, valBig);
           try { await a.wait(); } catch {}
         } catch {}
@@ -677,10 +620,9 @@ export default function App() {
           else if (e.info?.sendTransactionHash) txHash = e.info.sendTransactionHash;
         }
       }
-      saveHistory({ hash:txHash, token, amount:val, to:recip, ts:Date.now(), status:"pending", brlRate:brlRate||null, network:network.name });
+      saveHistory({ hash:txHash, token, amount:val, to:recip, ts:Date.now(), status:"pending", network:network.name });
       setComprovante({ hash:txHash, token, amount:val, to:recip, ts:Date.now(), network:network.name, explorer:network.explorer });
       setAmount(""); setSelDenom(null); setRecipientAmt("");
-      // Polling aguardar até pipeline iniciar
       let tentativas = 0;
       const aguardarPipeline = setInterval(async () => {
         try {
@@ -694,7 +636,7 @@ export default function App() {
           if (tentativas > 20) clearInterval(aguardarPipeline);
         } catch { clearInterval(aguardarPipeline); }
       }, 5000);
-    } catch(e) { 
+    } catch(e) {
       const msg = e.message||"Erro.";
       if (msg.includes("allowance") || msg.includes("BAD_DATA")) {
         // ignora
@@ -704,47 +646,6 @@ export default function App() {
     }
     setLoading(false);
   }
-  /*
-  async function autoScan(skKey, vkKey) {
-    if (!skKey || !vkKey) return;
-    try {
-      const provider = new ethers.JsonRpcProvider(network.rpc);
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
-      const filter = contract.filters.StealthDeposit();
-      const current = await provider.getBlockNumber();
-      const CHUNK = 9000; const TOTAL = 400000;
-      const from = Math.max(0, current-TOTAL);
-      const found = [];
-      for (let s2=from; s2<current; s2+=CHUNK) {
-        const end = Math.min(s2+CHUNK-1,current);
-        try {
-          const evs = await contract.queryFilter(filter,s2,end);
-          for (const ev of evs) {
-            const args = ev.args;
-            const ephPubHex = args[0].startsWith("0x") ? args[0] : "0x" + args[0];
-            const res = tryDecrypt(ephPubHex, args[1], Number(args[4]), skKey, vkKey);
-            if (res) {
-              const tAddr = args[2]; const amt = args[3]; const tl = args[5]; const ua = args[6];
-              const sym = Object.keys(TOKENS).find(k=>TOKENS[k].address.toLowerCase()===tAddr.toLowerCase())||"?";
-              const dec = TOKENS[sym] ? TOKENS[sym].decimals : 18;
-              try {
-                // const balAbi = ["function balanceOf(address,address) external view returns (uint256)"];
-                // const c2 = new ethers.Contract(CONTRACT_ADDRESS, balAbi, provider);
-                // const bal = await c2.balanceOf(res.stealthAddress, tAddr);
-                // if (bal === 0n) continue;
-              } catch {}
-              found.push({ stealthAddress:res.stealthAddress, stealthPrivKey:res.stealthPrivKey, token:sym, tokenAddr:tAddr, amount:ethers.formatUnits(amt,dec), timelocked:tl, unlockAt:Number(ua), txHash:ev.transactionHash, network: networkKey });
-            }
-          }
-        } catch {}
-      }
-      if (found.length > 0) {
-        setScanResults(found);
-        setNewFunds(found.length);
-      }
-    } catch {}
-  }
-*/
 
   async function scan() {
     if (!sk||!vk) return showAlert(t.noKeysForScan,"warn");
@@ -785,19 +686,19 @@ export default function App() {
               setScanResults([...found]);
             }
           }
-          } catch(chunkErr) {
+        } catch(chunkErr) {
           console.log("chunk falhou:", s2, chunkErr.message);
         }
         if (chunkDelay > 0) await new Promise(r => setTimeout(r, chunkDelay));
       }
       if (!found.length) showAlert(t.noFound,"info");
-    } catch(e) { 
+    } catch(e) {
       showAlert(e.message,"err");
     }
     setScanning(false);
   }
 
- async function doWithdraw(item) {
+  async function doWithdraw(item) {
     if (!account) return connect();
     setWithdrawingId(item.stealthAddress);
     try {
@@ -840,18 +741,6 @@ export default function App() {
     } catch { showAlert(t.wrongPwd,"err"); }
   }
 
-  /*
-  const pipeSteps = [t.pipe1,t.pipe2,t.pipe3,t.pipe4];
-  const pipeOrder = ["recebido","splitting","hops","completo"];
-  function pipeStatus(i) {
-    if (!pipeData) return "wait";
-    const ci = pipeOrder.indexOf(pipeData.status);
-    if (i<ci) return "done";
-    if (i===ci) return "now";
-    return "wait";
-  }
-*/
-  // Convert BRL input to token amount
   const effectiveAmount = useFixed ? (selDenom||0) : (parseFloat(amount)||0);
 
   const tier = (() => {
@@ -866,22 +755,17 @@ export default function App() {
     const v = effectiveAmount;
     if (!v) return null;
     const usd = token==="ETH"||token==="BNB"||token==="POL" ? v*2200 : v;
-    const brl = brlRate ? (usd * brlRate).toFixed(2) : null;
-    const brlStr = brl ? " · R$ " + Number(brl).toLocaleString("pt-BR",{minimumFractionDigits:2}) : "";
-    return usd.toFixed(2) + " " + token + (brlStr ? " ·" + brlStr : "");
+    return "≈ $" + usd.toFixed(2);
   })();
 
-  // Calculate sender amount from recipient amount
   const senderCalc = (() => {
     const v = parseFloat(recipientAmt)||0;
     if (!v) return null;
     const usd = token==="ETH"||token==="BNB"||token==="POL" ? v*2200 : v;
     const tier = getTierInfo(usd);
     const send = v / (1 - tier.bps/10000);
-    const sendBrl = brlRate ? (send * (token==="ETH"||token==="BNB"||token==="POL"?2200:1) * brlRate) : null;
     return {
       val: send.toFixed(token==="ETH"||token==="BNB"||token==="POL"?5:2),
-      brl: sendBrl ? "R$ " + sendBrl.toLocaleString("pt-BR",{minimumFractionDigits:2, maximumFractionDigits:2}) : null
     };
   })();
 
@@ -890,21 +774,13 @@ export default function App() {
   return (
     <>
       <style>{S}</style>
-      {/* ANIMATED BACKGROUND ORBS */}
       <div style={{position:"fixed",inset:0,zIndex:0,overflow:"hidden",pointerEvents:"none"}}>
-        {/* Main glow */}
         <div style={{position:"absolute",top:"-10%",left:"50%",transform:"translateX(-50%)",width:900,height:900,borderRadius:"50%",background:"radial-gradient(circle,rgba(34,197,240,0.08) 0%,transparent 65%)"}}/>
-        {/* Orb 1 - cyan large */}
         <div style={{position:"absolute",top:"5%",left:"3%",width:420,height:420,borderRadius:"50%",background:"radial-gradient(circle,rgba(34,197,240,0.18) 0%,rgba(34,197,240,0.04) 50%,transparent 70%)",animation:"float1 12s ease-in-out infinite",filter:"blur(2px)"}}/>
-        {/* Orb 2 - purple large */}
         <div style={{position:"absolute",top:"15%",right:"2%",width:360,height:360,borderRadius:"50%",background:"radial-gradient(circle,rgba(130,71,229,0.16) 0%,rgba(130,71,229,0.04) 50%,transparent 70%)",animation:"float2 15s ease-in-out infinite",filter:"blur(2px)"}}/>
-        {/* Orb 3 - amber */}
         <div style={{position:"absolute",bottom:"20%",left:"5%",width:300,height:300,borderRadius:"50%",background:"radial-gradient(circle,rgba(240,185,11,0.14) 0%,rgba(240,185,11,0.03) 50%,transparent 70%)",animation:"float3 18s ease-in-out infinite",filter:"blur(2px)"}}/>
-        {/* Orb 4 - cyan bottom right */}
         <div style={{position:"absolute",bottom:"10%",right:"5%",width:280,height:280,borderRadius:"50%",background:"radial-gradient(circle,rgba(34,197,240,0.12) 0%,transparent 70%)",animation:"float4 10s ease-in-out infinite",filter:"blur(1px)"}}/>
-        {/* Orb 5 - green mid */}
         <div style={{position:"absolute",top:"50%",left:"30%",width:200,height:200,borderRadius:"50%",background:"radial-gradient(circle,rgba(52,211,153,0.1) 0%,transparent 70%)",animation:"float5 20s ease-in-out infinite",filter:"blur(1px)"}}/>
-        {/* Orb 6 - purple small */}
         <div style={{position:"absolute",top:"65%",right:"20%",width:180,height:180,borderRadius:"50%",background:"radial-gradient(circle,rgba(130,71,229,0.12) 0%,transparent 70%)",animation:"float1 14s ease-in-out infinite reverse",filter:"blur(1px)"}}/>
       </div>
       <div className="app">
@@ -939,7 +815,7 @@ export default function App() {
             <div className="bottom-nav">
               {[
                 {key:"send",    icon:"↗", label:t.send,    action:closeModal},
-                {key:"receive", icon:"⬇", label:t.receive, action:()=>setModal("receive")},
+                {key:"receive", icon:"⬇", label:t.receive, action:()=>{ if(!sk){generateKeys();} setModal("receive"); }},
                 {key:"scan",    icon:"⬡", label:t.scan,    action:()=>{ setModal("scan"); setNewFunds(0); setScanResults([]); }},
                 {key:"history", icon:"📋", label:t.history, action:()=>setModal("history")},
               ].map(({key,icon,label,action})=>(
@@ -976,6 +852,7 @@ export default function App() {
                   </button>
                 </div>
               </div>
+
               {/* NETWORK SELECTOR */}
               <div style={{display:"flex",gap:6,marginBottom:16,background:"var(--surface2)",padding:4,borderRadius:12,border:"1px solid var(--border)"}}>
                 {[
@@ -1001,12 +878,9 @@ export default function App() {
 
               {useFixed && (
                 <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
-                  {useFixed && (
-                    <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:"var(--accent)",background:"var(--accent-dim)",border:"1px solid rgba(34,197,240,0.15)",padding:"4px 10px",borderRadius:20}}>
-                      ✓ {lang==="pt"?"Valor padronizado ativo — maior controle sobre seus dados financeiros":"Fixed amount active — greater control over your financial data"}
-                    </div>
-                  )}
-
+                  <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:"var(--accent)",background:"var(--accent-dim)",border:"1px solid rgba(34,197,240,0.15)",padding:"4px 10px",borderRadius:20}}>
+                    ✓ {lang==="pt"?"Valor padronizado ativo — maior privacidade":"Fixed amount active — greater privacy"}
+                  </div>
                 </div>
               )}
 
@@ -1079,10 +953,8 @@ export default function App() {
                 {senderCalc && (
                   <div className="amount-usd">
                     {lang==="pt"?"→ Você envia ":"→ You send "}{senderCalc.val} {token}
-                    {brlRate ? " · R$ " + (parseFloat(senderCalc.val) * brlRate).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}) : ""}
                   </div>
                 )}
-
               </div>
 
               <div className="arrow-divider">
@@ -1093,6 +965,15 @@ export default function App() {
                 <div className="recipient-label">{t.to}</div>
                 <input className="recipient-input" placeholder={t.toPlaceholder} value={recipient} onChange={e=>setRecipient(e.target.value)}/>
               </div>
+
+              {!recipient && (
+                <div style={{fontSize:11,color:"var(--text3)",marginBottom:6,paddingLeft:4}}>
+                  {lang==="pt"?"Não tem o link? Peça ao destinatário para gerar em ":"Don't have the link? Ask the recipient to generate it in "}
+                  <button onClick={()=>{ if(!sk){generateKeys();} setModal("receive"); }} style={{background:"none",border:"none",color:"var(--accent)",fontSize:11,cursor:"pointer",padding:0,fontFamily:"var(--sans)"}}>
+                    {lang==="pt"?"Receber":"Receive"}
+                  </button>
+                </div>
+              )}
 
               {hasAmount && (
                 <div className="fee-row" style={{marginTop:6}}>
@@ -1105,49 +986,43 @@ export default function App() {
                 style={{marginTop:8, background: network.color, boxShadow: "0 0 28px " + network.color + "44"}}>
                 {loading ? <><span className="spin"/>{t.sending}</> : ("→ " + t.sendBtn)}
               </button>
-              <button className="main-btn ghost" onClick={()=>{ if(!sk){generateKeys();} setModal("receive"); }}
-                style={{marginTop:8}}>
-                ⬇ {lang==="pt" ? "Gerar link para receber" : "Generate payment link"}
-              </button>
 
               {pipeData && (
-  <div className="pipeline fade">
-    <div style={{fontSize:12,fontWeight:600,color:"var(--text2)",letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:12}}>
-      {pipeData.concluido
-        ? (lang==="pt" ? "✓ Pagamento entregue!" : "✓ Payment delivered!")
-        : (lang==="pt" ? "Processando seu envio..." : "Processing your transfer...")}
-    </div>
-    {!pipeData.concluido && (
-      <>
-        <div style={{background:"var(--surface)",borderRadius:20,overflow:"hidden",height:8,marginBottom:8}}>
-          <div style={{
-            height:"100%",
-            borderRadius:20,
-            background:"linear-gradient(90deg, var(--accent), var(--accent2))",
-            width: (pipeData.hopsTotal > 0 ? Math.round((pipeData.hopsFeitos/pipeData.hopsTotal)*100) : 10) + "%",
-            transition:"width 1s ease",
-            minWidth:"10%"
-          }}/>
-        </div>
-        <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"var(--text2)"}}>
-          <span>{lang==="pt" ? "Protegendo sua privacidade..." : "Protecting your privacy..."}</span>
-          <span>{pipeData.minutosRestantes > 0 ? `~${pipeData.minutosRestantes} min` : ""}</span>
-        </div>
-      </>
-    )}
-    {pipeData.concluido && pipeData.depositHashes?.length > 0 && (
-      <div style={{fontSize:11,color:"var(--green)",marginTop:6}}>
-        {lang==="pt" ? "Fundos enviados, o recebedor poderá sacar em instantes." : "The recipient can withdraw shortly."}
-      </div>
-    )}
-  </div>
-)}
+                <div className="pipeline fade">
+                  <div style={{fontSize:12,fontWeight:600,color:"var(--text2)",letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:12}}>
+                    {pipeData.concluido
+                      ? (lang==="pt" ? "✓ Pagamento entregue!" : "✓ Payment delivered!")
+                      : (lang==="pt" ? "Processando seu envio..." : "Processing your transfer...")}
+                  </div>
+                  {!pipeData.concluido && (
+                    <>
+                      <div style={{background:"var(--surface)",borderRadius:20,overflow:"hidden",height:8,marginBottom:8}}>
+                        <div style={{
+                          height:"100%",
+                          borderRadius:20,
+                          background:"linear-gradient(90deg, var(--accent), var(--accent2))",
+                          width: (pipeData.hopsTotal > 0 ? Math.round((pipeData.hopsFeitos/pipeData.hopsTotal)*100) : 10) + "%",
+                          transition:"width 1s ease",
+                          minWidth:"10%"
+                        }}/>
+                      </div>
+                      <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"var(--text2)"}}>
+                        <span>{lang==="pt" ? "Protegendo sua privacidade..." : "Protecting your privacy..."}</span>
+                        <span>{pipeData.minutosRestantes > 0 ? `~${pipeData.minutosRestantes} min` : ""}</span>
+                      </div>
+                    </>
+                  )}
+                  {pipeData.concluido && pipeData.depositHashes?.length > 0 && (
+                    <div style={{fontSize:11,color:"var(--green)",marginTop:6}}>
+                      {lang==="pt" ? "Fundos enviados, o recebedor poderá sacar em instantes." : "The recipient can withdraw shortly."}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
           </div>
         </div>
-
-
 
         {modal==="history" && (
           <div className="modal-bg" onClick={closeModal}>
@@ -1166,7 +1041,6 @@ export default function App() {
                   </div>
                 ) : history.map((h,i)=>{
                   const isDone = h.status==="done";
-                  const brlVal = h.brlRate && h.amount ? (parseFloat(h.amount) * h.brlRate).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}) : null;
                   const dateStr = h.ts ? new Date(h.ts).toLocaleString(lang==="pt"?"pt-BR":"en-US",{day:"2-digit",month:"2-digit",year:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";
                   const netExplorer = h.network==="Polygon" ? "https://polygonscan.com" : h.network==="BNB" ? "https://bscscan.com" : "https://basescan.org";
                   return (
@@ -1175,8 +1049,7 @@ export default function App() {
                         {isDone ? "✓" : "↗"}
                       </div>
                       <div className="hist-body">
-                        <div className="hist-amount">{h.amount} {h.token}</div>
-                        {brlVal && <div className="hist-brl">≈ R$ {brlVal}</div>}
+                        <div className="hist-amount">{parseFloat(h.amount).toFixed(h.token==="ETH"?4:2)} {h.token}</div>
                         <div className="hist-meta">
                           <span className="hist-date">{dateStr}</span>
                           {h.network && <span className="hist-net">{h.network}</span>}
@@ -1215,30 +1088,14 @@ export default function App() {
                   </div>
                 ) : (
                   <>
-                    <div className="receive-addr">
-                      <div className="receive-addr-label">{t.yourAddress}</div>
-                      <div className="receive-addr-val">{meta}</div>
-                      <button className={"copy-btn" + (copied==="meta"?" ok":"")} onClick={()=>copyText(meta,"meta")}>
-                        {copied==="meta" ? ("✓ " + t.copied) : t.copy}
-                      </button>
-                    </div>
-                    <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r4)",padding:"14px 16px",marginBottom:12}}>
-                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                        <span style={{fontSize:12,fontWeight:600,color:"var(--text2)"}}>🔐 {lang==="pt"?"Sua chave de privacidade":"Your privacy key"}</span>
-                        <span style={{fontSize:10,color:"var(--text3)"}}>{lang==="pt"?"passe o mouse para ver":"hover to reveal"}</span>
-                      </div>
-                      <div style={{fontFamily:"var(--mono)",fontSize:11,color:"var(--accent2)",filter:"blur(5px)",transition:"filter 0.2s",cursor:"pointer",lineHeight:1.6,wordBreak:"break-all"}}
-                        onMouseEnter={e=>e.currentTarget.style.filter="none"}
-                        onMouseLeave={e=>e.currentTarget.style.filter="blur(5px)"}>
-                        {sk.slice(0,20)}...{sk.slice(-10)}
-                      </div>
-                      <div style={{marginTop:8,fontSize:11,color:"var(--text3)"}}>
-                        {lang==="pt"?"⚠️ Necessária para sacar seus fundos. Nunca compartilhe.":"⚠️ Required to withdraw your funds. Never share."}
-                      </div>
+                    {/* INSTRUÇÃO RÁPIDA */}
+                    <div style={{background:"var(--accent-dim)",border:"1px solid rgba(34,197,240,0.15)",borderRadius:"var(--r4)",padding:"12px 14px",marginBottom:16,fontSize:12,color:"var(--accent2)"}}>
+                      {lang==="pt"
+                        ? "📋 Copie seu link abaixo e compartilhe com quem vai te enviar um pagamento."
+                        : "📋 Copy your link below and share it with anyone who wants to send you a payment."}
                     </div>
                     <div className="paylink-box">
                       <div className="paylink-label">🔗 {t.paylink}</div>
-                      {/* QR Code */}
                       <div style={{display:"flex",justifyContent:"center",margin:"12px 0"}}>
                         <img
                           src={"https://api.qrserver.com/v1/create-qr-code/?size=160x160&bgcolor=111520&color=22c5f0&data=" + encodeURIComponent(payLink)}
@@ -1251,6 +1108,20 @@ export default function App() {
                       <button className={"copy-btn" + (copied==="link"?" ok":"")} onClick={()=>copyText(payLink,"link")}>
                         {copied==="link" ? ("✓ " + t.copied) : t.copyLink}
                       </button>
+                    </div>
+                    <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r4)",padding:"14px 16px",marginTop:12,marginBottom:12}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                        <span style={{fontSize:12,fontWeight:600,color:"var(--text2)"}}>🔐 {lang==="pt"?"Chave de privacidade":"Privacy key"}</span>
+                        <span style={{fontSize:10,color:"var(--text3)"}}>{lang==="pt"?"passe o mouse para ver":"hover to reveal"}</span>
+                      </div>
+                      <div style={{fontFamily:"var(--mono)",fontSize:11,color:"var(--accent2)",filter:"blur(5px)",transition:"filter 0.2s",cursor:"pointer",lineHeight:1.6,wordBreak:"break-all"}}
+                        onMouseEnter={e=>e.currentTarget.style.filter="none"}
+                        onMouseLeave={e=>e.currentTarget.style.filter="blur(5px)"}>
+                        {sk.slice(0,20)}...{sk.slice(-10)}
+                      </div>
+                      <div style={{marginTop:8,fontSize:11,color:"var(--text3)"}}>
+                        {lang==="pt"?"⚠️ Necessária para sacar seus fundos. Nunca compartilhe.":"⚠️ Required to withdraw your funds. Never share."}
+                      </div>
                     </div>
                     <div className="action-row">
                       <button className="action-btn" onClick={()=>setModal("export")}>
@@ -1394,8 +1265,7 @@ export default function App() {
           </div>
         )}
 
-
-       {/* COMPROVANTE MODAL */}
+        {/* COMPROVANTE MODAL */}
         {comprovante && (
           <div className="comp-modal" onClick={()=>setComprovante(null)}>
             <div className="comp-card" onClick={e=>e.stopPropagation()}>
@@ -1426,12 +1296,12 @@ export default function App() {
               </div>
               <div className="comp-actions">
                 <button className="comp-btn comp-btn-primary" onClick={()=>{
-  const text = lang==="pt"
-    ? `✓ Envio SilentFlow\n${parseFloat(comprovante.amount).toFixed(comprovante.token==="ETH"?4:2)} ${comprovante.token}\nRede: ${comprovante.network}\nData: ${new Date(comprovante.ts).toLocaleString("pt-BR")}\nTempo estimado: ~10 minutos`
-    : `✓ SilentFlow Transfer\n${parseFloat(comprovante.amount).toFixed(comprovante.token==="ETH"?4:2)} ${comprovante.token}\nNetwork: ${comprovante.network}\nDate: ${new Date(comprovante.ts).toLocaleString("en-US")}\nEst. time: ~10 minutes`;
-  navigator.clipboard.writeText(text);
-  showAlert(lang==="pt"?"Comprovante copiado!":"Receipt copied!","ok");
-}}>
+                  const text = lang==="pt"
+                    ? `✓ Envio SilentFlow\n${parseFloat(comprovante.amount).toFixed(comprovante.token==="ETH"?4:2)} ${comprovante.token}\nRede: ${comprovante.network}\nData: ${new Date(comprovante.ts).toLocaleString("pt-BR")}\nTempo estimado: ~10 minutos`
+                    : `✓ SilentFlow Transfer\n${parseFloat(comprovante.amount).toFixed(comprovante.token==="ETH"?4:2)} ${comprovante.token}\nNetwork: ${comprovante.network}\nDate: ${new Date(comprovante.ts).toLocaleString("en-US")}\nEst. time: ~10 minutes`;
+                  navigator.clipboard.writeText(text);
+                  showAlert(lang==="pt"?"Comprovante copiado!":"Receipt copied!","ok");
+                }}>
                   {lang==="pt"?"Copiar comprovante":"Copy receipt"}
                 </button>
                 <button className="comp-btn comp-btn-secondary" onClick={()=>setComprovante(null)}>
@@ -1442,8 +1312,7 @@ export default function App() {
           </div>
         )}
 
-      </div>{/* end app */}
+      </div>
     </>
   );
 }
- 
